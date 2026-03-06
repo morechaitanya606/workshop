@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { Search, SlidersHorizontal, X, Loader2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
@@ -29,7 +29,7 @@ const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
 const CITY_OPTIONS = ["", "Pune", "Mumbai", "Bangalore", "Delhi", "Hyderabad"];
 const PAGE_SIZE = 8;
 
-export default function ExplorePage() {
+function ExploreContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -215,9 +215,9 @@ export default function ExplorePage() {
                                 type="text"
                                 placeholder="Search workshops, artists, or locations..."
                                 value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
+                                onChange={(event) => setSearchQuery(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
                                         pushFilters({ page: 1 });
                                     }
                                 }}
@@ -245,8 +245,8 @@ export default function ExplorePage() {
 
                             <select
                                 value={sort}
-                                onChange={(e) => {
-                                    const value = e.target.value as SortOption;
+                                onChange={(event) => {
+                                    const value = event.target.value as SortOption;
                                     setSort(value);
                                     pushFilters({ sort: value, page: 1 });
                                 }}
@@ -277,7 +277,9 @@ export default function ExplorePage() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                                 <select
                                     value={selectedCategory}
-                                    onChange={(e) => setSelectedCategory(e.target.value)}
+                                    onChange={(event) =>
+                                        setSelectedCategory(event.target.value)
+                                    }
                                     className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
                                 >
                                     <option value="">All Categories</option>
@@ -290,7 +292,7 @@ export default function ExplorePage() {
 
                                 <select
                                     value={selectedCity}
-                                    onChange={(e) => setSelectedCity(e.target.value)}
+                                    onChange={(event) => setSelectedCity(event.target.value)}
                                     className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
                                 >
                                     {CITY_OPTIONS.map((city) => (
@@ -303,21 +305,21 @@ export default function ExplorePage() {
                                 <input
                                     type="date"
                                     value={dateFrom}
-                                    onChange={(e) => setDateFrom(e.target.value)}
+                                    onChange={(event) => setDateFrom(event.target.value)}
                                     className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
                                 />
 
                                 <input
                                     type="date"
                                     value={dateTo}
-                                    onChange={(e) => setDateTo(e.target.value)}
+                                    onChange={(event) => setDateTo(event.target.value)}
                                     className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
                                 />
 
                                 <input
                                     type="number"
                                     value={minPrice}
-                                    onChange={(e) => setMinPrice(e.target.value)}
+                                    onChange={(event) => setMinPrice(event.target.value)}
                                     placeholder="Min price"
                                     className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
                                 />
@@ -325,7 +327,7 @@ export default function ExplorePage() {
                                 <input
                                     type="number"
                                     value={maxPrice}
-                                    onChange={(e) => setMaxPrice(e.target.value)}
+                                    onChange={(event) => setMaxPrice(event.target.value)}
                                     placeholder="Max price"
                                     className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
                                 />
@@ -424,5 +426,19 @@ export default function ExplorePage() {
             <Footer />
             <MobileNav />
         </main>
+    );
+}
+
+export default function ExplorePage() {
+    return (
+        <Suspense
+            fallback={
+                <main className="min-h-screen flex items-center justify-center bg-cream">
+                    <Loader2 className="w-8 h-8 animate-spin text-terracotta" />
+                </main>
+            }
+        >
+            <ExploreContent />
+        </Suspense>
     );
 }

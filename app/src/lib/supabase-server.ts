@@ -1,12 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabasePublicKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-export const isSupabasePublicConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+export const isSupabasePublicConfigured = Boolean(supabaseUrl && supabasePublicKey);
 export const isSupabaseServiceConfigured = Boolean(
-    supabaseUrl && supabaseAnonKey && supabaseServiceRoleKey
+    supabaseUrl && supabaseServiceRoleKey
 );
 
 function missingEnvError(missing: string[]) {
@@ -16,14 +18,14 @@ function missingEnvError(missing: string[]) {
 }
 
 export function createSupabaseAnonServerClient() {
-    if (!supabaseUrl || !supabaseAnonKey) {
+    if (!supabaseUrl || !supabasePublicKey) {
         throw missingEnvError([
             "NEXT_PUBLIC_SUPABASE_URL",
-            "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+            "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY)",
         ]);
     }
 
-    return createClient(supabaseUrl, supabaseAnonKey, {
+    return createClient(supabaseUrl, supabasePublicKey, {
         auth: {
             autoRefreshToken: false,
             persistSession: false,

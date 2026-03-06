@@ -70,6 +70,23 @@ export const bookingCheckoutSchema = z.object({
     email: z.string().trim().email().max(320),
     phone: z.string().trim().max(32).optional().default(""),
     notes: z.string().trim().max(2000).optional().default(""),
+    razorpayOrderId: z.string().trim().min(1).max(80).optional(),
+    razorpayPaymentId: z.string().trim().min(1).max(80).optional(),
+    razorpaySignature: z.string().trim().min(1).max(256).optional(),
+}).superRefine((value, ctx) => {
+    const hasOrderId = Boolean(value.razorpayOrderId);
+    const hasPaymentId = Boolean(value.razorpayPaymentId);
+    const hasSignature = Boolean(value.razorpaySignature);
+    const providedCount = Number(hasOrderId) + Number(hasPaymentId) + Number(hasSignature);
+
+    if (providedCount !== 0 && providedCount !== 3) {
+        ctx.addIssue({
+            code: "custom",
+            message:
+                "Provide all Razorpay fields (razorpayOrderId, razorpayPaymentId, razorpaySignature) together.",
+            path: ["razorpayOrderId"],
+        });
+    }
 });
 
 export type BookingCheckoutInput = z.infer<typeof bookingCheckoutSchema>;

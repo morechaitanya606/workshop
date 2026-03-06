@@ -1,44 +1,71 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import type Stripe from "stripe";
 import { bookingCheckoutSchema } from "@/lib/validators";
-import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
+import {
+    createSupabaseServiceClient,
+    isSupabaseServiceConfigured,
+} from "@/lib/supabase-server";
 import { requireAuthenticatedUser } from "@/lib/api-auth";
-import { getStripeServerClient, isStripeConfigured } from "@/lib/stripe-server";
+import {
+    getRazorpayKeyId,
+    getRazorpayServerClient,
+    isRazorpayConfigured,
+    verifyRazorpayOrderSignature,
+} from "@/lib/razorpay-server";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 
 const SERVICE_FEE = 99;
+const PAYMENT_CURRENCY = "INR";
+const PAYMENT_PROVIDER = "razorpay";
 
-function createPaymentIntentForHold(params: {
-    amount: number;
-    currency: string;
-    userId: string;
-    workshopId: string;
-    holdId: string;
-}) {
-    const stripe = getStripeServerClient();
-    const autoConfirm = process.env.STRIPE_AUTOCONFIRM_TEST !== "false";
+type HoldWithWorkshop = {
+    id: string;
+    workshop_id: string;
+    user_id: string;
+    guests: number;
+    status: string;
+    expires_at: string;
+    workshop: {
+        id: string;
+        title: string;
+        price: number;
+        seats_remaining: number;
+    } | null;
+};
 
-    const payload: Stripe.PaymentIntentCreateParams = {
-        amount: params.amount * 100,
-        currency: params.currency,
-        metadata: {
-            user_id: params.userId,
-            workshop_id: params.workshopId,
-            hold_id: params.holdId,
-        },
-    };
+function toPaise(amountInRupees: number) {
+    return Math.round(amountInRupees * 100);
+}
 
-    if (autoConfirm) {
-        payload.payment_method =
-            process.env.STRIPE_TEST_PAYMENT_METHOD || "pm_card_visa";
-        payload.confirm = true;
-        payload.error_on_requires_action = true;
-    } else {
-        payload.automatic_payment_methods = { enabled: true };
-    }
+function isExpired(isoDate: string) {
+    return new Date(isoDate).getTime() < Date.now();
+}
 
-    return stripe.paymentIntents.create(payload);
+async function loadBookingById(serviceClient: ReturnType<typeof createSupabaseServiceClient>, bookingId: string) {
+    const { data: booking } = await serviceClient
+        .from("bookings")
+        .select(
+            `
+            id,
+            guests,
+            total,
+            status,
+            created_at,
+            workshop:workshops (
+                id,
+                title,
+                date,
+                time,
+                location,
+                city,
+                cover_image
+            )
+        `
+        )
+        .eq("id", bookingId)
+        .single();
+
+    return booking;
 }
 
 export async function POST(request: NextRequest) {
@@ -52,6 +79,16 @@ export async function POST(request: NextRequest) {
             {
                 error:
                     "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
+            },
+            { status: 500 }
+        );
+    }
+
+    if (!isRazorpayConfigured) {
+        return NextResponse.json(
+            {
+                error:
+                    "Razorpay is not configured. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.",
             },
             { status: 500 }
         );
@@ -75,23 +112,17 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    if (!isStripeConfigured) {
-        return NextResponse.json(
-            {
-                error:
-                    "Stripe is not configured. Add STRIPE_SECRET_KEY to enable payment intents.",
-            },
-            { status: 500 }
-        );
-    }
-
     const payload = parsed.data;
+    const isPaymentConfirmation =
+        Boolean(payload.razorpayOrderId) &&
+        Boolean(payload.razorpayPaymentId) &&
+        Boolean(payload.razorpaySignature);
 
     try {
         const serviceClient = createSupabaseServiceClient();
         await ensureWorkshopSeededFromMock(serviceClient, payload.workshopId);
 
-        const { data: hold, error: holdError } = await serviceClient
+        const { data: holdData, error: holdError } = await serviceClient
             .from("booking_holds")
             .select(
                 `
@@ -114,6 +145,8 @@ export async function POST(request: NextRequest) {
             .eq("user_id", auth.user.id)
             .single();
 
+        const hold = holdData as HoldWithWorkshop | null;
+
         if (holdError || !hold) {
             return NextResponse.json(
                 { error: "Seat hold not found for this user/workshop." },
@@ -128,7 +161,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        if (new Date(hold.expires_at).getTime() < Date.now()) {
+        if (isExpired(hold.expires_at)) {
             await serviceClient
                 .from("booking_holds")
                 .update({ status: "expired" })
@@ -139,34 +172,152 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const workshop = hold.workshop as unknown as {
-            id: string;
-            title: string;
-            price: number;
-        };
+        const workshop = hold.workshop;
+        if (!workshop) {
+            return NextResponse.json(
+                { error: "Workshop not found for this hold." },
+                { status: 404 }
+            );
+        }
 
         const subtotal = Number(workshop.price || 0) * Number(hold.guests || 0);
         const total = subtotal + SERVICE_FEE;
+        const totalPaise = toPaise(total);
 
-        const paymentIntent = await createPaymentIntentForHold({
-            amount: total,
-            currency: "inr",
-            userId: auth.user.id,
-            workshopId: payload.workshopId,
-            holdId: payload.holdId,
+        const razorpay = getRazorpayServerClient();
+
+        if (!isPaymentConfirmation) {
+            const order = await razorpay.orders.create({
+                amount: totalPaise,
+                currency: PAYMENT_CURRENCY,
+                receipt: payload.holdId,
+                notes: {
+                    holdId: payload.holdId,
+                    workshopId: payload.workshopId,
+                    userId: auth.user.id,
+                },
+            });
+
+            return NextResponse.json({
+                mode: "order_created",
+                order: {
+                    id: order.id,
+                    amount: Number(order.amount || totalPaise),
+                    currency: String(order.currency || PAYMENT_CURRENCY),
+                    keyId: getRazorpayKeyId(),
+                    name: "OnlyWorkshop",
+                    description: workshop.title,
+                    prefill: {
+                        name: `${payload.firstName} ${payload.lastName}`.trim(),
+                        email: payload.email,
+                        contact: payload.phone || undefined,
+                    },
+                },
+                hold: {
+                    id: hold.id,
+                    guests: hold.guests,
+                    expiresAt: hold.expires_at,
+                },
+            });
+        }
+
+        const signatureValid = verifyRazorpayOrderSignature({
+            orderId: payload.razorpayOrderId!,
+            paymentId: payload.razorpayPaymentId!,
+            signature: payload.razorpaySignature!,
         });
 
-        if (paymentIntent.status !== "succeeded") {
+        if (!signatureValid) {
+            return NextResponse.json(
+                { error: "Invalid Razorpay payment signature." },
+                { status: 400 }
+            );
+        }
+
+        const order = await razorpay.orders.fetch(payload.razorpayOrderId!);
+        if (!order || order.id !== payload.razorpayOrderId) {
+            return NextResponse.json(
+                { error: "Razorpay order not found." },
+                { status: 404 }
+            );
+        }
+
+        if (String(order.receipt || "") !== payload.holdId) {
+            return NextResponse.json(
+                { error: "Order does not match the current seat hold." },
+                { status: 400 }
+            );
+        }
+
+        if (
+            Number(order.amount || 0) !== totalPaise ||
+            String(order.currency || "").toUpperCase() !== PAYMENT_CURRENCY
+        ) {
+            return NextResponse.json(
+                { error: "Order amount mismatch for this booking." },
+                { status: 400 }
+            );
+        }
+
+        const payment = await razorpay.payments.fetch(payload.razorpayPaymentId!);
+        if (!payment || payment.id !== payload.razorpayPaymentId) {
+            return NextResponse.json(
+                { error: "Razorpay payment not found." },
+                { status: 404 }
+            );
+        }
+
+        if (payment.order_id !== payload.razorpayOrderId) {
+            return NextResponse.json(
+                { error: "Payment does not belong to this order." },
+                { status: 400 }
+            );
+        }
+
+        if (
+            Number(payment.amount || 0) !== totalPaise ||
+            String(payment.currency || "").toUpperCase() !== PAYMENT_CURRENCY
+        ) {
+            return NextResponse.json(
+                { error: "Payment amount mismatch for this booking." },
+                { status: 400 }
+            );
+        }
+
+        let paymentStatus = String(payment.status || "").toLowerCase();
+        if (paymentStatus === "authorized") {
+            const captured = await razorpay.payments.capture(
+                payload.razorpayPaymentId!,
+                totalPaise,
+                PAYMENT_CURRENCY
+            );
+            paymentStatus = String(captured.status || "").toLowerCase();
+        }
+
+        if (paymentStatus !== "captured") {
             return NextResponse.json(
                 {
-                    error:
-                        "Payment intent created but not completed. Integrate Stripe Elements to complete card collection.",
-                    paymentIntentId: paymentIntent.id,
-                    paymentStatus: paymentIntent.status,
-                    clientSecret: paymentIntent.client_secret,
+                    error: "Payment is not captured yet.",
+                    paymentStatus,
                 },
                 { status: 402 }
             );
+        }
+
+        const { data: existingBooking } = await serviceClient
+            .from("bookings")
+            .select("id")
+            .eq("payment_intent_id", payload.razorpayPaymentId!)
+            .maybeSingle();
+
+        if (existingBooking?.id) {
+            const booking = await loadBookingById(serviceClient, existingBooking.id);
+            return NextResponse.json({
+                mode: "already_confirmed",
+                booking,
+                paymentId: payload.razorpayPaymentId,
+                paymentStatus,
+            });
         }
 
         let bookingId: string | null = null;
@@ -176,8 +327,8 @@ export async function POST(request: NextRequest) {
                 p_hold_id: payload.holdId,
                 p_user_id: auth.user.id,
                 p_workshop_id: payload.workshopId,
-                p_payment_provider: "stripe",
-                p_payment_intent_id: paymentIntent.id,
+                p_payment_provider: PAYMENT_PROVIDER,
+                p_payment_intent_id: payload.razorpayPaymentId!,
                 p_first_name: payload.firstName,
                 p_last_name: payload.lastName,
                 p_email: payload.email,
@@ -198,7 +349,7 @@ export async function POST(request: NextRequest) {
                 .update({
                     seats_remaining: Math.max(
                         0,
-                        Number((hold.workshop as { seats_remaining?: number }).seats_remaining || 0) -
+                        Number(hold.workshop?.seats_remaining || 0) -
                             Number(hold.guests || 0)
                     ),
                 })
@@ -212,7 +363,7 @@ export async function POST(request: NextRequest) {
                     {
                         error:
                             "Payment succeeded, but seat reservation failed. Contact support immediately.",
-                        paymentIntentId: paymentIntent.id,
+                        paymentId: payload.razorpayPaymentId,
                         details: seatUpdateError?.message || rpcError?.message || null,
                     },
                     { status: 500 }
@@ -230,8 +381,8 @@ export async function POST(request: NextRequest) {
                     service_fee: SERVICE_FEE,
                     total,
                     status: "confirmed",
-                    payment_provider: "stripe",
-                    payment_intent_id: paymentIntent.id,
+                    payment_provider: PAYMENT_PROVIDER,
+                    payment_intent_id: payload.razorpayPaymentId!,
                     first_name: payload.firstName,
                     last_name: payload.lastName,
                     email: payload.email,
@@ -246,7 +397,7 @@ export async function POST(request: NextRequest) {
                     {
                         error:
                             "Payment succeeded, but booking write failed. Contact support immediately.",
-                        paymentIntentId: paymentIntent.id,
+                        paymentId: payload.razorpayPaymentId,
                         details: bookingError?.message || null,
                     },
                     { status: 500 }
@@ -261,33 +412,20 @@ export async function POST(request: NextRequest) {
             bookingId = insertedBooking.id;
         }
 
-        const { data: booking } = await serviceClient
-            .from("bookings")
-            .select(
-                `
-                id,
-                guests,
-                total,
-                status,
-                created_at,
-                workshop:workshops (
-                    id,
-                    title,
-                    date,
-                    time,
-                    location,
-                    city,
-                    cover_image
-                )
-            `
-            )
-            .eq("id", bookingId)
-            .single();
+        if (!bookingId) {
+            return NextResponse.json(
+                { error: "Booking confirmation failed after payment capture." },
+                { status: 500 }
+            );
+        }
+
+        const booking = await loadBookingById(serviceClient, bookingId);
 
         return NextResponse.json({
+            mode: "confirmed",
             booking,
-            paymentIntentId: paymentIntent.id,
-            paymentStatus: paymentIntent.status,
+            paymentId: payload.razorpayPaymentId,
+            paymentStatus,
         });
     } catch (error) {
         return NextResponse.json(

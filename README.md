@@ -46,7 +46,8 @@ The application is designed to be **production-ready, scalable, and visually pre
 | **Icons**          | [Lucide React](https://lucide.dev/)                  |
 | **Auth & Database**| [Supabase](https://supabase.com/) (PostgreSQL + Auth)|
 | **State**          | [Zustand](https://zustand-demo.pmnd.rs/) 5           |
-| **Payments**       | Stripe *(planned)*                                   |
+| **Payments**       | Razorpay                                             |
+| **Observability**  | Sentry + PostHog (env-gated)                         |
 | **Media Storage**  | Cloudflare R2 *(planned)*                            |
 | **Deployment**     | Vercel *(target)*                                    |
 
@@ -200,7 +201,20 @@ Create a `.env.local` file in the `app/` directory:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key-here
+# Optional fallback:
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+
+RAZORPAY_KEY_ID=your-razorpay-key-id
+RAZORPAY_KEY_SECRET=your-razorpay-key-secret
+RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
+
+# Optional observability
+# NEXT_PUBLIC_POSTHOG_KEY=...
+# NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
+# NEXT_PUBLIC_SENTRY_DSN=...
+# SENTRY_DSN=...
 ```
 
 > Get these from your Supabase project: **Settings → API → Project URL & anon/public key**
@@ -300,7 +314,7 @@ interface Workshop {
 - [x] Auth-guarded booking flow
 - [x] Admin dashboard and workshop creation form
 - [ ] Connect admin form to Supabase database
-- [ ] Stripe payment integration
+- [x] Razorpay payment integration
 - [ ] Cloudflare R2 media storage with image uploads
 - [ ] User reviews and ratings
 - [ ] Workshop search with filters (date, price, location)
