@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Creative Socialite - Checkout</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#EE5F5B",
+                        "primary-hover": "#D64541",
+                        "background-cream": "#FFF5EA",
+                        "surface": "#FFFFFF",
+                        "text-main": "#1F1F1F",
+                        "text-muted": "#8C847C",
+                        "accent": "#C76B4A",
+                        "summary-bg": "#F9EBE0",
+                    },
+                    fontFamily: {
+                        "display": ["Playfair Display", "serif"],
+                        "body": ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    backgroundImage: {
+                        'paper-texture': "url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjRkZGNUVBIi8+CjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiMwMDAwMDAiIG9wYWNpdHk9IjAuMDIiLz4KPC9zdmc+')",
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom Paper Texture Overlay */
+        .bg-texture {
+            background-color: #FFF5EA;
+            background-image: linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)), url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+        }
+
+        /* Floating Label Logic */
+        .floating-input:focus ~ label,
+        .floating-input:not(:placeholder-shown) ~ label {
+            transform: translateY(-1.25rem) scale(0.85);
+            color: #C76B4A; 
+        }
+
+        /* Custom Input Styles to match "Bottom Border Only" */
+        .input-minimal {
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid #E5E5E5;
+            padding: 0.75rem 0;
+            width: 100%;
+            transition: border-color 0.3s ease;
+            font-family: 'Inter', sans-serif;
+        }
+        .input-minimal:focus {
+            outline: none;
+            box-shadow: none;
+            border-bottom: 2px solid #C76B4A;
+        }
+
+        /* Shake Animation */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+            20%, 40%, 60%, 80% { transform: translateX(4px); }
+        }
+        .animate-shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+    </style>
+</head>
+<body class="bg-background-cream text-text-main font-body antialiased selection:bg-primary/20 selection:text-primary">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden bg-texture">
+<!-- Header -->
+<header class="flex items-center justify-between border-b border-[#EADFD6] bg-background-cream/80 backdrop-blur-md px-6 py-4 sticky top-0 z-50">
+<div class="flex items-center gap-3">
+<a class="flex items-center gap-2 group" href="#">
+<div class="size-8 text-primary transition-transform group-hover:-rotate-12">
+<span class="material-symbols-outlined text-3xl">palette</span>
+</div>
+<h2 class="font-display text-xl font-bold tracking-tight text-text-main">Creative Socialite</h2>
+</a>
+</div>
+<div class="flex items-center gap-4">
+<a class="hidden text-sm font-medium text-text-muted hover:text-primary sm:block" href="#">Explore Workshops</a>
+<div class="h-8 w-8 rounded-full bg-cover bg-center ring-2 ring-white" data-alt="User avatar of a young woman smiling" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBq3CW2YRqMi5YpykHmqPwvRGuTJTymjPlplLcFTnmpi7ByazRcrUbINaF-aYcupfCha_P0qTk8M_ow3G_rEZNS1iO34mwoihyiRXtHrEcop3RHwzytccLwSTZPivEm4hnaXGBsLuKgbYGhWA2Q7kDxdkBrJnZsfqG0Jm6BwYG-yQBmXmsM93YXIAa7OXOKzkAT38M26HJK7hl5U20B9H6DibDzjTd_RhnjjWx5xYjhc5wJukmVIt07jFHauhpaLAM--D9gizRumZM");'></div>
+</div>
+</header>
+<!-- Main Layout -->
+<div class="layout-container flex grow flex-col">
+<div class="flex flex-1 justify-center py-8 px-4 sm:px-6 lg:px-8">
+<div class="flex w-full max-w-6xl flex-col gap-10 lg:flex-row">
+<!-- Left Column: Booking Form -->
+<div class="flex flex-1 flex-col gap-8 lg:pr-8">
+<!-- Header & Steps -->
+<div class="space-y-4">
+<div class="flex items-center gap-2 text-sm font-semibold tracking-wider uppercase text-text-muted">
+<a class="flex items-center gap-1 text-primary hover:underline" href="#">
+<span class="material-symbols-outlined text-base">arrow_back</span>
+                                    Back to Workshop
+                                </a>
+</div>
+<h1 class="font-display text-4xl font-bold text-text-main">Complete your booking</h1>
+<!-- Steps Indicator -->
+<div class="mt-6 flex items-center gap-4 border-b border-[#EADFD6] pb-4">
+<div class="flex items-center gap-2 text-primary font-bold">
+<span class="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs text-white">1</span>
+<span>Details</span>
+</div>
+<span class="h-px w-8 bg-[#EADFD6]"></span>
+<div class="flex items-center gap-2 text-text-muted">
+<span class="flex h-6 w-6 items-center justify-center rounded-full border border-text-muted text-xs">2</span>
+<span>Payment</span>
+</div>
+</div>
+</div>
+<!-- Form Section 1: Guest Details -->
+<div class="space-y-6">
+<div class="flex items-center justify-between">
+<h3 class="font-display text-xl font-semibold text-text-main">Guest Information</h3>
+<span class="text-sm text-text-muted">Logged in as Sarah</span>
+</div>
+<div class="grid gap-6 md:grid-cols-2">
+<div class="relative pt-4">
+<input class="floating-input input-minimal peer" id="firstName" placeholder=" " type="text" value="Sarah"/>
+<label class="absolute left-0 top-4 text-text-muted transition-all duration-200 origin-[0] peer-focus:text-accent" for="firstName">First Name</label>
+</div>
+<div class="relative pt-4">
+<input class="floating-input input-minimal peer" id="lastName" placeholder=" " type="text"/>
+<label class="absolute left-0 top-4 text-text-muted transition-all duration-200 origin-[0] peer-focus:text-accent" for="lastName">Last Name</label>
+</div>
+</div>
+<div class="relative pt-4">
+<input class="floating-input input-minimal peer" id="email" placeholder=" " type="email" value="sarah.jenkins@example.com"/>
+<label class="absolute left-0 top-4 text-text-muted transition-all duration-200 origin-[0] peer-focus:text-accent" for="email">Email Address</label>
+</div>
+<div class="relative pt-4">
+<input class="floating-input input-minimal peer" id="phone" placeholder=" " type="tel"/>
+<label class="absolute left-0 top-4 text-text-muted transition-all duration-200 origin-[0] peer-focus:text-accent" for="phone">Phone Number</label>
+</div>
+<div class="flex items-start gap-3 pt-2">
+<div class="flex h-6 items-center">
+<input class="h-5 w-5 rounded border-accent text-primary focus:ring-primary/20 bg-transparent" id="updates" name="updates" type="checkbox"/>
+</div>
+<div class="text-sm leading-6">
+<label class="font-medium text-text-main" for="updates">Keep me posted</label>
+<p class="text-text-muted">Get emails about materials to bring and location updates.</p>
+</div>
+</div>
+</div>
+<!-- Form Section 2: Payment -->
+<div class="mt-8 space-y-6">
+<div class="flex items-center justify-between">
+<h3 class="font-display text-xl font-semibold text-text-main">Payment Method</h3>
+<div class="flex items-center gap-1 text-xs text-text-muted">
+<span class="material-symbols-outlined text-sm">lock</span>
+                                    Secure &amp; Encrypted
+                                </div>
+</div>
+<!-- Custom Stripe-like Element Container -->
+<div class="rounded-lg border border-[#EADFD6] bg-white p-6 shadow-sm ring-1 ring-black/5">
+<div class="mb-4 flex items-center gap-3">
+<div class="flex h-8 w-12 items-center justify-center rounded bg-gray-100 border border-gray-200">
+<img alt="Mastercard" class="h-5" data-alt="Mastercard logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBTOmBqabUPr678yOKyJJ-4DTAeEksyFOkCbZeMcyXkk8UQCzvPMjFjaWve7-SumrYXHNsvEx0J_jDu2AGtYYP0wov57jJFPKob235HVT3stuupa9jym5D14ZvSSpvaVY_n_7CBSX2UWsuIFquqgl4cEMzDNmRjOLVHSofYrN06q3uG2dlucxCmLfDHh3dUFpfRMj9b-wrzH17bir_NUuDfsWQGzxtMOqOoCVU5gk3XRVAExW2AW0RZtCUvAGjHJhoiAzk2fv60clk"/>
+</div>
+<div class="flex h-8 w-12 items-center justify-center rounded bg-gray-100 border border-gray-200">
+<img alt="Visa" class="h-3" data-alt="Visa logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDkooR97s-qoFFf_9HGErQOIts2VUJDqqxoUu7J_tp7XI7piFd1oUh_2ejdz46BluRJ7an_V2Lu2WE99MYMfn1vrsw7j4wvNsW37OhLBnhczhlDG9Jezmb5Idst9YqGKx3IXhhz9qqUbshf9lIiW6o2jdTuIysYgSRgjvtUc9XGyl67UjCg1Izr6UrFqnxDglFqYmCbfDIcG_of_6zwX5L1PHO_IwnijcnWYvpBeDNPTFKQbFS9IPUYbOPdcGzp2XFtAIIi_L-AF6E"/>
+</div>
+</div>
+<div class="space-y-5">
+<div class="relative">
+<label class="text-xs font-bold uppercase tracking-wider text-text-muted">Card Number</label>
+<div class="mt-1 flex items-center border-b border-[#E5E5E5] pb-2 focus-within:border-accent transition-colors">
+<span class="material-symbols-outlined mr-2 text-text-muted">credit_card</span>
+<input class="w-full border-none bg-transparent p-0 text-text-main placeholder-gray-300 focus:ring-0" placeholder="0000 0000 0000 0000" type="text"/>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-6">
+<div class="relative">
+<label class="text-xs font-bold uppercase tracking-wider text-text-muted">Expiration</label>
+<div class="mt-1 border-b border-[#E5E5E5] pb-2 focus-within:border-accent transition-colors">
+<input class="w-full border-none bg-transparent p-0 text-text-main placeholder-gray-300 focus:ring-0" placeholder="MM / YY" type="text"/>
+</div>
+</div>
+<div class="relative">
+<label class="text-xs font-bold uppercase tracking-wider text-text-muted">CVC</label>
+<div class="mt-1 flex items-center border-b border-[#E5E5E5] pb-2 focus-within:border-accent transition-colors">
+<input class="w-full border-none bg-transparent p-0 text-text-main placeholder-gray-300 focus:ring-0" placeholder="123" type="text"/>
+<span class="material-symbols-outlined text-text-muted text-sm cursor-help">help</span>
+</div>
+</div>
+</div>
+<div class="relative">
+<label class="text-xs font-bold uppercase tracking-wider text-text-muted">Zip Code</label>
+<div class="mt-1 border-b border-[#E5E5E5] pb-2 focus-within:border-accent transition-colors">
+<input class="w-full border-none bg-transparent p-0 text-text-main placeholder-gray-300 focus:ring-0" placeholder="10001" type="text"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Submit Button -->
+<div class="mt-4 pt-4">
+<button class="group relative w-full overflow-hidden rounded-full bg-primary py-4 text-white shadow-lg shadow-primary/25 transition-all hover:bg-primary-hover hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0">
+<span class="relative z-10 flex items-center justify-center gap-2 font-display text-lg font-semibold tracking-wide">
+                                    Confirm Booking &amp; Pay $175.00
+                                    <span class="material-symbols-outlined transition-transform group-hover:translate-x-1">arrow_forward</span>
+</span>
+</button>
+<p class="mt-4 text-center text-xs text-text-muted">
+                                By clicking confirm, you agree to our <a class="underline hover:text-accent" href="#">Terms of Service</a> and <a class="underline hover:text-accent" href="#">Cancellation Policy</a>.
+                            </p>
+</div>
+</div>
+<!-- Right Column: Order Summary (Sticky) -->
+<div class="w-full lg:w-[400px]">
+<div class="sticky top-24 rounded-2xl bg-summary-bg p-6 lg:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#EADFD6]/50">
+<h2 class="mb-6 font-display text-2xl font-bold text-text-main">Order Summary</h2>
+<!-- Workshop Card Mini -->
+<div class="mb-6 flex gap-4">
+<div class="h-24 w-24 shrink-0 overflow-hidden rounded-lg shadow-sm">
+<img alt="Hands shaping clay on a pottery wheel" class="h-full w-full object-cover" data-alt="Close up of hands working with clay on a pottery wheel" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD575_K3sXtWYDGnar9Dm8p6Wl61yVeJgFU3ZDH85ddwR586Kg43Rj-sa6RYeG8Q8tWmUehSI_mzbKzSrPr64eh8DtaJXvxuDmlXCAwAIs-oPQdcT-AEydPgsLsJyBn-eqEO1ly2ijqWE3OSGzMuTAy56XB4P8KUot8xaUwl2vZAhRcQTtoSllfchO4iatDg0aokIUT9HAZo3qjgKtw0vRmNZM0W6JYQULfAQjZhifClUbkYc3yLZe_nqZEgL68Uo3w7u3P0nM_Wvo"/>
+</div>
+<div class="flex flex-col justify-center">
+<h3 class="font-display text-lg font-bold leading-tight text-text-main">Wheel Throwing 101: Clay &amp; Coffee</h3>
+<div class="mt-2 flex items-center gap-1.5 text-xs font-medium text-text-muted">
+<span class="material-symbols-outlined text-sm">calendar_today</span>
+                                        Sat, Oct 14 • 10:00 AM
+                                    </div>
+<div class="mt-1 flex items-center gap-1.5 text-xs font-medium text-text-muted">
+<span class="material-symbols-outlined text-sm">location_on</span>
+                                        Brooklyn, NY
+                                    </div>
+</div>
+</div>
+<hr class="border-[#EADFD6] my-6"/>
+<!-- Cost Breakdown -->
+<div class="space-y-3 text-sm text-text-main">
+<div class="flex justify-between">
+<span class="text-text-muted">2 x General Admission</span>
+<span class="font-medium">$170.00</span>
+</div>
+<div class="flex justify-between">
+<span class="text-text-muted">Service Fee</span>
+<span class="font-medium">$5.00</span>
+</div>
+<div class="flex justify-between text-accent">
+<span>Early Bird Discount</span>
+<span class="font-medium">-$0.00</span>
+</div>
+</div>
+<hr class="border-[#EADFD6] my-6"/>
+<!-- Total -->
+<div class="flex items-end justify-between">
+<span class="font-display text-lg font-bold text-text-main">Total</span>
+<div class="flex flex-col items-end">
+<span class="font-display text-3xl font-bold text-primary tracking-tight">$175.00</span>
+<span class="text-xs text-text-muted">USD, Taxes included</span>
+</div>
+</div>
+<!-- Trust Badges -->
+<div class="mt-8 flex justify-center gap-4 opacity-50 grayscale transition-all hover:grayscale-0 hover:opacity-100">
+<span class="material-symbols-outlined text-3xl" title="Secure Payment">lock</span>
+<span class="material-symbols-outlined text-3xl" title="Verified Host">verified_user</span>
+<span class="material-symbols-outlined text-3xl" title="Money Back Guarantee">savings</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body></html>

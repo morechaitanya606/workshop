@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Weekend Explorer - Discovery Landing</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Playfair+Display:ital,wght@0,400..900;1,400..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#EE5F5B",
+                        "primary-hover": "#d94e4a",
+                        "background-light": "#FFF5EA", // Updated to match user request: Warm Cream
+                        "background-dark": "#211111",
+                        "surface": "#FFFFFF",
+                        "text-main": "#1F1F1F",
+                        "text-muted": "#8D8D8D",
+                        "accent": "#C76B4A",
+                        "border-color": "#EAD4C5",
+                    },
+                    fontFamily: {
+                        "display": ["Playfair Display", "serif"],
+                        "body": ["Inter", "sans-serif"],
+                    },
+                    boxShadow: {
+                        "hard": "4px 4px 0px #1F1F1F",
+                        "hard-hover": "6px 6px 0px #EE5F5B",
+                        "hard-sm": "2px 2px 0px #1F1F1F",
+                    },
+                    borderRadius: {
+                        "DEFAULT": "4px",
+                        "lg": "6px",
+                        "xl": "8px",
+                        "full": "9999px",
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Playfair Display', serif;
+        }
+        /* Custom scrollbar for horizontal scrolling areas */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-background-light text-text-main min-h-screen flex flex-col">
+<!-- Navigation -->
+<nav class="sticky top-0 z-50 w-full bg-surface border-b border-border-color px-4 py-3 md:px-8">
+<div class="max-w-[1200px] mx-auto flex items-center justify-between">
+<!-- Logo -->
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-3xl">explore</span>
+<span class="font-display font-bold text-xl md:text-2xl tracking-tight text-text-main">Weekend Explorer</span>
+</div>
+<!-- Desktop Search (Simplified) -->
+<div class="hidden md:flex flex-1 max-w-md mx-8">
+<div class="relative w-full group">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-text-muted text-xl">search</span>
+</div>
+<input class="block w-full pl-10 pr-3 py-2 border border-border-color rounded-full bg-background-light text-sm placeholder-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors" placeholder="Search experiences..." type="text"/>
+</div>
+</div>
+<!-- User Actions -->
+<div class="flex items-center gap-3">
+<button class="hidden md:block text-sm font-medium hover:text-primary transition-colors">Log In</button>
+<button class="flex items-center justify-center bg-primary hover:bg-primary-hover text-white text-sm font-bold py-2 px-4 rounded shadow-hard-sm active:translate-y-[1px] active:shadow-none transition-all">
+                    Sign Up
+                </button>
+</div>
+</div>
+</nav>
+<!-- Main Content -->
+<main class="flex-grow w-full">
+<!-- Hero Section -->
+<div class="relative w-full h-[500px] md:h-[500px] bg-gray-200">
+<!-- Hero Image -->
+<div class="absolute inset-0 w-full h-full overflow-hidden">
+<img alt="Group of friends laughing while doing pottery in a bright workshop" class="w-full h-full object-cover" data-alt="Group of friends laughing while doing pottery in a bright workshop" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDG45IixN5X-AiYfgNJb4BHY_ctV2QYkFD5sQ-UJfL-BGwHiPeKU4jHNozaWUcE4-BsEu1xWU1PFlsvlG-UYORI6crbfLsJi_74Q70xa-C0F2-qDbizs3edUselfK4LE8_tQdxxfl8Q3jpuvlPZ9l5WcIY0sq14DGeRvsFO_VtKay1P05TooMggSQv1YHKutPKTAdWiabyBdEdyQvjdRcD9PK1Bdlfd6XKEpaOE5bJtw1YIg3g1xzRn-b4RBZuVIuwllr7lfPAY0nI"/>
+<!-- Overlay Gradient -->
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
+</div>
+<!-- Hero Text -->
+<div class="relative z-10 h-full max-w-[1200px] mx-auto px-4 flex flex-col justify-center pb-20 md:pb-12">
+<h1 class="text-white text-4xl md:text-6xl font-bold max-w-2xl leading-tight drop-shadow-md">
+                    Don't Doom Scroll.<br/>Do Something.
+                </h1>
+<p class="text-white/90 text-lg md:text-xl mt-4 max-w-lg font-medium drop-shadow-sm">
+                    Book curated weekend experiences in seconds. No spiritual journey required.
+                </p>
+</div>
+</div>
+<!-- Floating Search Module & Filter Container -->
+<div class="relative z-20 max-w-[1200px] mx-auto px-4 -mt-16 mb-12">
+<!-- Search Module -->
+<div class="bg-surface p-4 md:p-6 rounded border border-border-color shadow-hard flex flex-col md:flex-row gap-4 items-end">
+<!-- Keyword Input -->
+<div class="flex-1 w-full">
+<label class="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1 ml-1">What</label>
+<div class="relative">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-primary">sprint</span>
+</div>
+<input class="w-full pl-10 pr-4 py-3 bg-background-light border border-border-color rounded focus:ring-primary focus:border-primary text-text-main placeholder-text-muted/70 font-medium" placeholder="Pottery, Jazz, Hiking..." type="text"/>
+</div>
+</div>
+<!-- Date Input -->
+<div class="w-full md:w-1/4">
+<label class="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1 ml-1">When</label>
+<div class="relative">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-primary">calendar_today</span>
+</div>
+<input class="w-full pl-10 pr-4 py-3 bg-background-light border border-border-color rounded focus:ring-primary focus:border-primary text-text-main font-medium" type="date"/>
+</div>
+</div>
+<!-- Location Input -->
+<div class="w-full md:w-1/4">
+<label class="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1 ml-1">Where</label>
+<div class="relative">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-primary">location_on</span>
+</div>
+<select class="w-full pl-10 pr-8 py-3 bg-background-light border border-border-color rounded focus:ring-primary focus:border-primary text-text-main font-medium appearance-none">
+<option>Brooklyn, NY</option>
+<option>Manhattan, NY</option>
+<option>Queens, NY</option>
+</select>
+<div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+<span class="material-symbols-outlined text-text-muted">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Search Button -->
+<div class="w-full md:w-auto">
+<button class="w-full md:w-auto h-[50px] bg-primary hover:bg-primary-hover text-white font-bold px-8 rounded flex items-center justify-center gap-2 shadow-hard hover:shadow-hard-hover hover:-translate-y-1 transition-all duration-200">
+<span>Find Fun</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Categories Pill Bar -->
+<div class="mt-10 overflow-x-auto hide-scrollbar pb-2">
+<div class="flex gap-3 min-w-max">
+<button class="flex items-center gap-2 px-5 py-2 rounded-full bg-accent text-white border border-accent shadow-sm font-medium transition-transform hover:scale-105">
+<span class="material-symbols-outlined text-lg">local_fire_department</span>
+                        Trending
+                    </button>
+<button class="flex items-center gap-2 px-5 py-2 rounded-full bg-surface border border-border-color text-text-main hover:border-accent hover:text-accent font-medium transition-colors">
+<span class="material-symbols-outlined text-lg">brush</span>
+                        Arts &amp; Crafts
+                    </button>
+<button class="flex items-center gap-2 px-5 py-2 rounded-full bg-surface border border-border-color text-text-main hover:border-accent hover:text-accent font-medium transition-colors">
+<span class="material-symbols-outlined text-lg">restaurant</span>
+                        Food &amp; Drink
+                    </button>
+<button class="flex items-center gap-2 px-5 py-2 rounded-full bg-surface border border-border-color text-text-main hover:border-accent hover:text-accent font-medium transition-colors">
+<span class="material-symbols-outlined text-lg">hiking</span>
+                        Outdoors
+                    </button>
+<button class="flex items-center gap-2 px-5 py-2 rounded-full bg-surface border border-border-color text-text-main hover:border-accent hover:text-accent font-medium transition-colors">
+<span class="material-symbols-outlined text-lg">headphones</span>
+                        Music
+                    </button>
+<button class="flex items-center gap-2 px-5 py-2 rounded-full bg-surface border border-border-color text-text-main hover:border-accent hover:text-accent font-medium transition-colors">
+<span class="material-symbols-outlined text-lg">spa</span>
+                        Wellness
+                    </button>
+<button class="flex items-center gap-2 px-5 py-2 rounded-full bg-surface border border-border-color text-text-main hover:border-accent hover:text-accent font-medium transition-colors">
+<span class="material-symbols-outlined text-lg">science</span>
+                        Tech
+                    </button>
+</div>
+</div>
+</div>
+<!-- Grid Section: Trending -->
+<section class="max-w-[1200px] mx-auto px-4 mb-16">
+<div class="flex items-center justify-between mb-6">
+<h2 class="text-3xl font-display font-bold text-text-main">Trending in Brooklyn</h2>
+<a class="text-primary font-bold text-sm hover:underline flex items-center gap-1" href="#">
+                    View all <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</a>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<!-- Card 1 -->
+<div class="group bg-surface rounded border border-border-color shadow-hard hover:shadow-hard-hover hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col overflow-hidden">
+<div class="relative aspect-[3/2] overflow-hidden">
+<div class="absolute top-3 left-3 z-10 bg-accent text-white text-xs font-bold uppercase tracking-wider py-1 px-3 rounded shadow-sm">
+                            Arts &amp; Crafts
+                        </div>
+<img alt="Hands shaping clay on a pottery wheel" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Hands shaping clay on a pottery wheel" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC_D-B6UwJKajkqLV4ee1uWWmSF8FnxaElTzh_rLtFymTjLpAua2HLKBpmEK8HHcYm0oZyKmJbeGPib9G2cUVGB0gam9G05QmKpPhPWhc72YJ--Z5747ySiLnvnUDV0j3LXH1bf3pzpbfWq2ZCamgRmcFifeFroGXBIF0XvoIEvYqwMAghhUu-BTH57QqBirmHVDqQ7qAnXjssPsdLMoI1TUfppklsZs7sE0n0QL3fa2tH90g1j-PscLSA__5leKWVIXseTvuOJfw0"/>
+</div>
+<div class="p-4 flex flex-col flex-1">
+<div class="flex items-center gap-2 text-text-muted text-xs font-medium mb-2">
+<span class="material-symbols-outlined text-sm">calendar_month</span> Sat, Oct 24 • 2:00 PM
+                        </div>
+<h3 class="font-display font-bold text-lg leading-tight mb-3 text-text-main line-clamp-2">Intro to Wheel Throwing: Make Your Own Mug</h3>
+<div class="mt-auto flex items-center justify-between pt-3 border-t border-border-color/50">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-yellow-500 text-sm filled">star</span>
+<span class="text-xs font-bold text-text-main">4.9</span>
+<span class="text-xs text-text-muted">(128)</span>
+</div>
+<span class="text-primary font-bold text-lg">$65</span>
+</div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="group bg-surface rounded border border-border-color shadow-hard hover:shadow-hard-hover hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col overflow-hidden">
+<div class="relative aspect-[3/2] overflow-hidden">
+<div class="absolute top-3 left-3 z-10 bg-accent text-white text-xs font-bold uppercase tracking-wider py-1 px-3 rounded shadow-sm">
+                            Food &amp; Drink
+                        </div>
+<img alt="Artisan sourdough bread on a wooden table" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Artisan sourdough bread on a wooden table" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC3rh0TJhF-Mp1QU_JQF4GdQdbl0XMLrkw2wynoD7HQ2Lko03_NK-6_4cBsoiR_-PFJg6FsmF2mub7qn8qSy2EpCsuKXaw6Bcy9jEoZHtzOXzgKtJoGsLM5Dlkoz9LyJoxDM9DlEAwTwi-tJ920h5fDEyY0Swi2Nw5G8lwB7_heZwTMjVU4isoMfoReQSCLGbYB9IfAQYdnW9TpaDYcirduW8Cs_R9LFf7OYQD184v5UQcblDG_C6d5ShEQUpEl1y7xH1Y88Un5X6g"/>
+</div>
+<div class="p-4 flex flex-col flex-1">
+<div class="flex items-center gap-2 text-text-muted text-xs font-medium mb-2">
+<span class="material-symbols-outlined text-sm">calendar_month</span> Sun, Oct 25 • 10:00 AM
+                        </div>
+<h3 class="font-display font-bold text-lg leading-tight mb-3 text-text-main line-clamp-2">Sourdough 101: From Starter to Loaf</h3>
+<div class="mt-auto flex items-center justify-between pt-3 border-t border-border-color/50">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-yellow-500 text-sm filled">star</span>
+<span class="text-xs font-bold text-text-main">5.0</span>
+<span class="text-xs text-text-muted">(42)</span>
+</div>
+<span class="text-primary font-bold text-lg">$45</span>
+</div>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="group bg-surface rounded border border-border-color shadow-hard hover:shadow-hard-hover hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col overflow-hidden">
+<div class="relative aspect-[3/2] overflow-hidden">
+<div class="absolute top-3 left-3 z-10 bg-accent text-white text-xs font-bold uppercase tracking-wider py-1 px-3 rounded shadow-sm">
+                            Nightlife
+                        </div>
+<img alt="Neon lit room with people painting canvases" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Neon lit room with people painting canvases" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDh2lavSzcoPXrPh7arPZxlHTw_qk232sDFR7u26EVL5gKb6Q4FnKl8SBOF81wua5V1Bk_U85bnyNkLzIaiubGb8A0wG5fFgdZH2oBHImpb_2OCcybTQgm2Ycx18BLLYu5d34poD-NyEYp2mVi5xHNhtSP2qjhq9lN1JzoZWbxuSgYVG81ERpr0HDiF-Dd8p_t8KmqS4DtVmUCdhOtZjIJrlWkDkWrhF9l3-o-Pk_kteIhOw7Hha-WI4c3CkCBrqL0mOxoLp7KaiZY"/>
+</div>
+<div class="p-4 flex flex-col flex-1">
+<div class="flex items-center gap-2 text-text-muted text-xs font-medium mb-2">
+<span class="material-symbols-outlined text-sm">calendar_month</span> Fri, Oct 23 • 8:00 PM
+                        </div>
+<h3 class="font-display font-bold text-lg leading-tight mb-3 text-text-main line-clamp-2">Neon Paint &amp; Sip: Glow in the Dark Art</h3>
+<div class="mt-auto flex items-center justify-between pt-3 border-t border-border-color/50">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-yellow-500 text-sm filled">star</span>
+<span class="text-xs font-bold text-text-main">4.8</span>
+<span class="text-xs text-text-muted">(89)</span>
+</div>
+<span class="text-primary font-bold text-lg">$55</span>
+</div>
+</div>
+</div>
+<!-- Card 4 -->
+<div class="group bg-surface rounded border border-border-color shadow-hard hover:shadow-hard-hover hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col overflow-hidden">
+<div class="relative aspect-[3/2] overflow-hidden">
+<div class="absolute top-3 left-3 z-10 bg-accent text-white text-xs font-bold uppercase tracking-wider py-1 px-3 rounded shadow-sm">
+                            Music
+                        </div>
+<img alt="Jazz musician playing saxophone in a dim club" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Jazz musician playing saxophone in a dim club" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBtOHNpe_Qc_B4guvICI3uGChFV9hLzBg_0gsHDWrh2Am0jfIBVZ7jcJBNgu0xVYMx68c-GcychNjyujpqPFKqcN4MoCfJWu_sicZvxaCL_hZTmQWpKfbOD9Uvln3g2lhvFOlIs9Rqxy3aEbsSGBtd_AECCUC8fjq1G7sKeV5ThzjyzbsjAIL-4nycu5h9EGuTcar-MmQH2Y9FD3hQnXQpJyMbX8IGqk3EGzkWAJ5uNFBP1Kx8CvX9HeKa-LMAwME4JP4cdkHMVpX4"/>
+</div>
+<div class="p-4 flex flex-col flex-1">
+<div class="flex items-center gap-2 text-text-muted text-xs font-medium mb-2">
+<span class="material-symbols-outlined text-sm">calendar_month</span> Sat, Oct 24 • 9:00 PM
+                        </div>
+<h3 class="font-display font-bold text-lg leading-tight mb-3 text-text-main line-clamp-2">Underground Jazz: The Blue Note Experience</h3>
+<div class="mt-auto flex items-center justify-between pt-3 border-t border-border-color/50">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-yellow-500 text-sm filled">star</span>
+<span class="text-xs font-bold text-text-main">4.7</span>
+<span class="text-xs text-text-muted">(210)</span>
+</div>
+<span class="text-primary font-bold text-lg">$35</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Grid Section: New & Noteworthy -->
+<section class="max-w-[1200px] mx-auto px-4 mb-24">
+<div class="flex items-center justify-between mb-6">
+<h2 class="text-3xl font-display font-bold text-text-main">New &amp; Noteworthy</h2>
+<a class="text-primary font-bold text-sm hover:underline flex items-center gap-1" href="#">
+                    View all <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</a>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<!-- Card 5 -->
+<div class="group bg-surface rounded border border-border-color shadow-hard hover:shadow-hard-hover hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col overflow-hidden">
+<div class="relative aspect-[3/2] overflow-hidden">
+<div class="absolute top-3 left-3 z-10 bg-accent text-white text-xs font-bold uppercase tracking-wider py-1 px-3 rounded shadow-sm">
+                            Food &amp; Drink
+                        </div>
+<img alt="Barista pouring latte art into a coffee cup" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Barista pouring latte art into a coffee cup" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCsEBX07xqaYl3C7Dhsl4zLzVbZ77bxrSqTX2PEOyaPq81Egxu--3wZRuYIZQZJEXysfF98ckmuw14_REeQkP1gYbDCm8sCX7Y3dd-CBcuhR0oOFGuQEFnYh8s-Bopw9YXHixRm6P4uTb9U8YoG9smYU8c0227pIaB__uBdELaVPEz44Z-oLjjcI7djmLQvTW7C_VvW4KEVNC-ZMrzdMhIziRpKNCgq1Pto9T1hW8cy7VxyLhD5kbMqfbtN3YV6U_emAmw38RXc0a0"/>
+</div>
+<div class="p-4 flex flex-col flex-1">
+<div class="flex items-center gap-2 text-text-muted text-xs font-medium mb-2">
+<span class="material-symbols-outlined text-sm">calendar_month</span> Sun, Oct 25 • 11:00 AM
+                        </div>
+<h3 class="font-display font-bold text-lg leading-tight mb-3 text-text-main line-clamp-2">Coffee Cupping &amp; Latte Art Workshop</h3>
+<div class="mt-auto flex items-center justify-between pt-3 border-t border-border-color/50">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-yellow-500 text-sm filled">star</span>
+<span class="text-xs font-bold text-text-main">NEW</span>
+</div>
+<span class="text-primary font-bold text-lg">$40</span>
+</div>
+</div>
+</div>
+<!-- Card 6 -->
+<div class="group bg-surface rounded border border-border-color shadow-hard hover:shadow-hard-hover hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col overflow-hidden">
+<div class="relative aspect-[3/2] overflow-hidden">
+<div class="absolute top-3 left-3 z-10 bg-accent text-white text-xs font-bold uppercase tracking-wider py-1 px-3 rounded shadow-sm">
+                            Outdoors
+                        </div>
+<img alt="Hands planting a small plant in a terracotta pot" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Hands planting a small plant in a terracotta pot" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDx8l_AoHDibdjDH21PjIiSYtIzRepVcOz6B2yCbkJtNmUp7Z2GlhnuA8zBIfqpDhYgKF5oNny-o2-shZfmFk-7eFXjqmUhTZmHxmNxmS-tNYF_1Cj1q2rYP9o_fq5f2UqNUcAjmgOCqaq2lh18Is9_tIWrVSamHs_mWjOD_xjFJx4WnmYonLt8VDdY3QipJkvintyeebREVRVRkHSYqpgYGh5qNzRLFJQs9BlyzJaZJFPnc6ByPPIiQcu_Qaz7bGldhrsbtBulGvw"/>
+</div>
+<div class="p-4 flex flex-col flex-1">
+<div class="flex items-center gap-2 text-text-muted text-xs font-medium mb-2">
+<span class="material-symbols-outlined text-sm">calendar_month</span> Sat, Oct 31 • 10:00 AM
+                        </div>
+<h3 class="font-display font-bold text-lg leading-tight mb-3 text-text-main line-clamp-2">Urban Gardening: Balcony Oasis Basics</h3>
+<div class="mt-auto flex items-center justify-between pt-3 border-t border-border-color/50">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-yellow-500 text-sm filled">star</span>
+<span class="text-xs font-bold text-text-main">NEW</span>
+</div>
+<span class="text-primary font-bold text-lg">$30</span>
+</div>
+</div>
+</div>
+<!-- Card 7 -->
+<div class="group bg-surface rounded border border-border-color shadow-hard hover:shadow-hard-hover hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col overflow-hidden">
+<div class="relative aspect-[3/2] overflow-hidden">
+<div class="absolute top-3 left-3 z-10 bg-accent text-white text-xs font-bold uppercase tracking-wider py-1 px-3 rounded shadow-sm">
+                            Entertainment
+                        </div>
+<img alt="Microphone on a stand in a spotlight" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Microphone on a stand in a spotlight" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB_L7b91H6u3uoGRzIa3occz7ya5lb7ndw8VqZTT1TpTPAZnHPKjtQpSR7X3D6Bpg5VvR6OyV8aai8ExRhtPCAk7C_JZzKqJiZbkY9sVDBorgeRc1o94CCyowiz4cvfqpe_GF1aHI9fjiI32dCBIUZfkzZbzWHMspDxnrzD5suR0-_54sP606rl6oDRBMSE4v0fBr1nk2L2tvxodWx5lDxcwZinQrkU2WJGeQyvScSEB3zALVu8CtxFujmNugb16xVWg7uc-EDMJe8"/>
+</div>
+<div class="p-4 flex flex-col flex-1">
+<div class="flex items-center gap-2 text-text-muted text-xs font-medium mb-2">
+<span class="material-symbols-outlined text-sm">calendar_month</span> Fri, Oct 30 • 7:30 PM
+                        </div>
+<h3 class="font-display font-bold text-lg leading-tight mb-3 text-text-main line-clamp-2">Underground Comedy Club: Local Talent Showcase</h3>
+<div class="mt-auto flex items-center justify-between pt-3 border-t border-border-color/50">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-yellow-500 text-sm filled">star</span>
+<span class="text-xs font-bold text-text-main">4.5</span>
+<span class="text-xs text-text-muted">(12)</span>
+</div>
+<span class="text-primary font-bold text-lg">$25</span>
+</div>
+</div>
+</div>
+<!-- Card 8 -->
+<div class="group bg-surface rounded border border-border-color shadow-hard hover:shadow-hard-hover hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col overflow-hidden">
+<div class="relative aspect-[3/2] overflow-hidden">
+<div class="absolute top-3 left-3 z-10 bg-accent text-white text-xs font-bold uppercase tracking-wider py-1 px-3 rounded shadow-sm">
+                            Dance
+                        </div>
+<img alt="Two people dancing salsa in a studio" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Two people dancing salsa in a studio" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB-RhSrng1GYlHyoD8VhP5sqR9N4deFk2kb22m-N0vKgWmDayfsLiCh1NA3WhBFIl7DcocrdXD3wrQabkmLW4hqHEBEM3EGML8_QDaX86o3ocDAVAtchqxHtVSfWWO89OYtrsBgRcTQLy6XxS8c0f6R9MVGGD0UZbCRzR8e5FmXCi_kyqgOdX2eL1ffVdwBYNAifdg8quvFvpss2ElqoQpw-c4wv4zolW_tlDkkbSCYzD2CTonS5ZVYGs1hfWHxrBZbH5cBI86lBh8"/>
+</div>
+<div class="p-4 flex flex-col flex-1">
+<div class="flex items-center gap-2 text-text-muted text-xs font-medium mb-2">
+<span class="material-symbols-outlined text-sm">calendar_month</span> Thu, Oct 29 • 6:30 PM
+                        </div>
+<h3 class="font-display font-bold text-lg leading-tight mb-3 text-text-main line-clamp-2">Salsa for Beginners: Rhythm &amp; Steps</h3>
+<div class="mt-auto flex items-center justify-between pt-3 border-t border-border-color/50">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-yellow-500 text-sm filled">star</span>
+<span class="text-xs font-bold text-text-main">NEW</span>
+</div>
+<span class="text-primary font-bold text-lg">$20</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Simple Footer -->
+<footer class="bg-surface border-t border-border-color py-12 px-4">
+<div class="max-w-[1200px] mx-auto grid grid-cols-1 md:grid-cols-4 gap-8">
+<div class="col-span-1 md:col-span-1">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-primary text-2xl">explore</span>
+<span class="font-display font-bold text-xl tracking-tight text-text-main">Weekend Explorer</span>
+</div>
+<p class="text-sm text-text-muted leading-relaxed">
+                    Curating the best weekend experiences so you can stop scrolling and start doing.
+                </p>
+</div>
+<div>
+<h4 class="font-bold text-text-main mb-4 uppercase text-xs tracking-wider">Company</h4>
+<ul class="space-y-2 text-sm text-text-muted">
+<li><a class="hover:text-primary transition-colors" href="#">About Us</a></li>
+<li><a class="hover:text-primary transition-colors" href="#">Careers</a></li>
+<li><a class="hover:text-primary transition-colors" href="#">Press</a></li>
+</ul>
+</div>
+<div>
+<h4 class="font-bold text-text-main mb-4 uppercase text-xs tracking-wider">Discover</h4>
+<ul class="space-y-2 text-sm text-text-muted">
+<li><a class="hover:text-primary transition-colors" href="#">Brooklyn</a></li>
+<li><a class="hover:text-primary transition-colors" href="#">Manhattan</a></li>
+<li><a class="hover:text-primary transition-colors" href="#">Queens</a></li>
+</ul>
+</div>
+<div>
+<h4 class="font-bold text-text-main mb-4 uppercase text-xs tracking-wider">Support</h4>
+<ul class="space-y-2 text-sm text-text-muted">
+<li><a class="hover:text-primary transition-colors" href="#">Help Center</a></li>
+<li><a class="hover:text-primary transition-colors" href="#">Cancellation Options</a></li>
+<li><a class="hover:text-primary transition-colors" href="#">Host an Experience</a></li>
+</ul>
+</div>
+</div>
+<div class="max-w-[1200px] mx-auto mt-12 pt-8 border-t border-border-color flex flex-col md:flex-row justify-between items-center text-xs text-text-muted">
+<p>© 2023 Weekend Explorer Inc.</p>
+<div class="flex gap-4 mt-4 md:mt-0">
+<a class="hover:text-primary transition-colors" href="#">Privacy</a>
+<a class="hover:text-primary transition-colors" href="#">Terms</a>
+<a class="hover:text-primary transition-colors" href="#">Sitemap</a>
+</div>
+</div>
+</footer>
+</body></html>

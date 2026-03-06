@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Weekend Explorer - Creator Admin Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Playfair+Display:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#EE5F5B",
+                        "primary-dark": "#D64541",
+                        "background-light": "#FFF5EA",
+                        "background-dark": "#211111",
+                        "surface": "#FFFFFF",
+                        "text-main": "#1F1F1F",
+                        "text-muted": "#8D8D8D",
+                        "accent": "#C76B4A",
+                        "border": "#EAD4C5",
+                    },
+                    fontFamily: {
+                        "display": ["Playfair Display", "serif"],
+                        "body": ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        "DEFAULT": "4px",
+                        "sm": "2px",
+                        "md": "4px",
+                        "lg": "8px",
+                    },
+                    boxShadow: {
+                        "hard": "4px 4px 0px #1F1F1F",
+                        "hover": "6px 6px 0px #EE5F5B",
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Playfair Display', serif;
+        }
+        /* Custom scrollbar for table if needed */
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #FFF5EA;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #EAD4C5;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #C76B4A;
+        }
+    </style>
+</head>
+<body class="bg-background-light text-text-main antialiased min-h-screen flex flex-col md:flex-row overflow-x-hidden">
+<!-- Mobile Header -->
+<header class="md:hidden flex items-center justify-between p-4 bg-surface border-b border-border sticky top-0 z-20">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 bg-primary rounded-sm flex items-center justify-center text-surface font-bold font-display">W</div>
+<span class="font-display font-bold text-lg">Weekend Explorer</span>
+</div>
+<button class="text-text-main p-1">
+<span class="material-symbols-outlined">menu</span>
+</button>
+</header>
+<!-- Sidebar Navigation -->
+<aside class="hidden md:flex flex-col w-64 bg-surface border-r border-border h-screen sticky top-0 z-10">
+<div class="p-6 border-b border-border">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-primary rounded flex items-center justify-center shadow-hard text-surface font-bold font-display text-xl">W</div>
+<div class="flex flex-col">
+<h1 class="font-display font-bold text-lg leading-tight">Weekend<br/>Explorer</h1>
+</div>
+</div>
+<div class="mt-6 flex items-center gap-3">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border border-border" data-alt="Portrait of a young female workshop creator" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuA6iQfntdsxsUeMymZw0TB5zpQnwEXrYeF9tfoPPy06zLFsYg90Wy9i0gVdsmjHO8-BIxgkcsS2MN7y24Pq1hBxeWzVcMBnMqhHy44UgRx0aAYFtVbGgl8qOVO37pAgf206vwfnbW5WJW272kV1vijUiCP5HweKMsCy-RO-LlApeO-eon89FFFc7t7arQ2ASwxpWJ7ih2jlvfGCJX50jPipTNHuxNYHU2ED-FZn0pL85HpqivE0iDdFP932PZ8js0j44u-JRE0YvYU");'></div>
+<div class="flex flex-col">
+<p class="text-text-main text-sm font-bold">Sarah Jenkins</p>
+<p class="text-accent text-xs font-medium">Creator Studio</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 overflow-y-auto py-6 px-4 flex flex-col gap-2">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded bg-background-light border border-border shadow-sm group" href="#">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="text-text-main font-medium text-sm">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded hover:bg-background-light hover:text-primary transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-muted group-hover:text-primary">event_note</span>
+<span class="text-text-main font-medium text-sm">My Workshops</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded hover:bg-background-light hover:text-primary transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-muted group-hover:text-primary">mail</span>
+<span class="text-text-main font-medium text-sm">Inbox</span>
+<span class="ml-auto bg-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">3</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded hover:bg-background-light hover:text-primary transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-muted group-hover:text-primary">account_balance_wallet</span>
+<span class="text-text-main font-medium text-sm">Wallet &amp; Payouts</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded hover:bg-background-light hover:text-primary transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-muted group-hover:text-primary">insights</span>
+<span class="text-text-main font-medium text-sm">Analytics</span>
+</a>
+</nav>
+<div class="p-4 border-t border-border">
+<button class="w-full flex items-center justify-center gap-2 bg-primary text-white py-2.5 px-4 rounded shadow-hard hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all font-bold text-sm">
+<span class="material-symbols-outlined text-lg">add</span>
+                Create Workshop
+            </button>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 p-4 md:p-8 lg:p-10 max-w-[1600px] mx-auto w-full">
+<!-- Header -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+<div>
+<p class="text-text-muted text-sm font-medium mb-1 uppercase tracking-wider">Overview</p>
+<h2 class="text-3xl md:text-4xl font-display font-bold text-text-main">Dashboard</h2>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2 bg-surface px-3 py-1.5 border border-border rounded shadow-sm">
+<span class="material-symbols-outlined text-text-muted text-sm">calendar_today</span>
+<span class="text-sm font-medium">Last 30 Days</span>
+<span class="material-symbols-outlined text-text-muted text-sm">expand_more</span>
+</div>
+<button class="bg-surface p-2 border border-border rounded shadow-sm hover:shadow-md transition-shadow">
+<span class="material-symbols-outlined text-text-main">download</span>
+</button>
+</div>
+</div>
+<!-- Stats Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+<!-- Stat Card 1 -->
+<div class="bg-surface p-5 rounded border border-border shadow-hard flex flex-col justify-between h-40">
+<div class="flex justify-between items-start">
+<div>
+<p class="text-text-muted text-xs font-bold uppercase tracking-wide">Total Sales</p>
+<p class="text-2xl font-bold font-body mt-1 text-text-main">$12,450</p>
+</div>
+<div class="bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">trending_up</span>
+                        12%
+                    </div>
+</div>
+<!-- Mini Chart Visual -->
+<div class="h-10 w-full flex items-end gap-1 mt-auto opacity-80">
+<div class="w-1/6 bg-green-200 h-[40%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-200 h-[60%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-200 h-[30%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-200 h-[70%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-200 h-[50%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-500 h-[90%] rounded-t-sm"></div>
+</div>
+</div>
+<!-- Stat Card 2 -->
+<div class="bg-surface p-5 rounded border border-border shadow-hard flex flex-col justify-between h-40">
+<div class="flex justify-between items-start">
+<div>
+<p class="text-text-muted text-xs font-bold uppercase tracking-wide">Page Views</p>
+<p class="text-2xl font-bold font-body mt-1 text-text-main">4,102</p>
+</div>
+<div class="bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">trending_up</span>
+                        5%
+                    </div>
+</div>
+<!-- Mini Chart Visual -->
+<div class="h-10 w-full flex items-end gap-1 mt-auto opacity-80">
+<div class="w-1/6 bg-green-200 h-[30%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-200 h-[45%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-200 h-[60%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-200 h-[50%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-200 h-[75%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-500 h-[85%] rounded-t-sm"></div>
+</div>
+</div>
+<!-- Stat Card 3 -->
+<div class="bg-surface p-5 rounded border border-border shadow-hard flex flex-col justify-between h-40">
+<div class="flex justify-between items-start">
+<div>
+<p class="text-text-muted text-xs font-bold uppercase tracking-wide">Conversion</p>
+<p class="text-2xl font-bold font-body mt-1 text-text-main">3.2%</p>
+</div>
+<div class="bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">trending_down</span>
+                        1%
+                    </div>
+</div>
+<!-- Mini Chart Visual -->
+<div class="h-10 w-full flex items-end gap-1 mt-auto opacity-80">
+<div class="w-1/6 bg-red-200 h-[60%] rounded-t-sm"></div>
+<div class="w-1/6 bg-red-200 h-[55%] rounded-t-sm"></div>
+<div class="w-1/6 bg-red-200 h-[70%] rounded-t-sm"></div>
+<div class="w-1/6 bg-red-200 h-[50%] rounded-t-sm"></div>
+<div class="w-1/6 bg-red-200 h-[40%] rounded-t-sm"></div>
+<div class="w-1/6 bg-primary h-[30%] rounded-t-sm"></div>
+</div>
+</div>
+<!-- Stat Card 4 -->
+<div class="bg-surface p-5 rounded border border-border shadow-hard flex flex-col justify-between h-40">
+<div class="flex justify-between items-start">
+<div>
+<p class="text-text-muted text-xs font-bold uppercase tracking-wide">Avg. Rating</p>
+<p class="text-2xl font-bold font-body mt-1 text-text-main">4.8</p>
+</div>
+<div class="bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">star</span>
+                        +0.2
+                    </div>
+</div>
+<!-- Mini Chart Visual -->
+<div class="h-10 w-full flex items-end gap-1 mt-auto opacity-80">
+<div class="w-1/6 bg-green-200 h-[80%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-200 h-[85%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-200 h-[80%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-200 h-[90%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-200 h-[92%] rounded-t-sm"></div>
+<div class="w-1/6 bg-green-500 h-[95%] rounded-t-sm"></div>
+</div>
+</div>
+</div>
+<!-- Dashboard Main Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+<!-- Left Column: Upcoming Workshops Table (Span 2) -->
+<div class="lg:col-span-2 flex flex-col gap-6">
+<div class="bg-surface rounded border border-border shadow-hard overflow-hidden flex flex-col h-full">
+<div class="px-6 py-4 border-b border-border flex justify-between items-center bg-gray-50/50">
+<h3 class="font-display font-bold text-lg">Upcoming Workshops</h3>
+<a class="text-primary text-sm font-bold hover:underline" href="#">View All</a>
+</div>
+<div class="overflow-x-auto custom-scrollbar">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-border bg-background-light/30">
+<th class="px-6 py-3 text-xs font-bold text-text-muted uppercase tracking-wider w-32">Date</th>
+<th class="px-6 py-3 text-xs font-bold text-text-muted uppercase tracking-wider">Event Details</th>
+<th class="px-6 py-3 text-xs font-bold text-text-muted uppercase tracking-wider w-48">Spots Filled</th>
+<th class="px-6 py-3 text-xs font-bold text-text-muted uppercase tracking-wider w-24 text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border">
+<!-- Row 1 -->
+<tr class="hover:bg-background-light/50 transition-colors group">
+<td class="px-6 py-4 align-top">
+<div class="flex flex-col">
+<span class="font-bold text-text-main">Sep 24</span>
+<span class="text-xs text-text-muted">10:00 AM</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-cover bg-center shrink-0 border border-border" data-alt="Pottery workshop details" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCnEUwJd47AHxS-wBY_-g_e3CMi0YbidItWORv3sInCbu83p2xMEZVMQQ-CvtFd7fFcwCXQCvr9wV6AtOKntp0KwYyaxJkk65ehWZsJSN_UstbRDo83I4ogR_xa4sC2xwaYCNQ7Fgd9nkqZiEAEnFtd1OQtdX9xlVrwmNjaPFpUQOCUDQdcdghwBxLiMdGHkPkGJ5f6HaNdRTeZymoyFlXOtNv6S995R0AQ49xRwDkArznaDaVoqdJ2vd-8IcbQVX0MznQnUxI7-gA')"></div>
+<div>
+<p class="font-bold text-text-main text-sm">Pottery for Beginners</p>
+<p class="text-xs text-text-muted">Brooklyn Studio B</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 align-middle">
+<div class="flex flex-col gap-1.5">
+<div class="flex justify-between text-xs font-medium">
+<span class="text-primary font-bold">12/15</span>
+<span class="text-text-muted">80%</span>
+</div>
+<div class="w-full bg-background-light border border-border rounded-full h-2.5 overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 80%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 align-middle text-right">
+<button class="text-text-muted hover:text-primary transition-colors p-1">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-background-light/50 transition-colors group">
+<td class="px-6 py-4 align-top">
+<div class="flex flex-col">
+<span class="font-bold text-text-main">Oct 02</span>
+<span class="text-xs text-text-muted">2:00 PM</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-cover bg-center shrink-0 border border-border" data-alt="Woodworking workshop thumbnail" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCfXy-gnIbX6KQHX9P1ziKljNVWYiv9eM0bitR7OK6V3GSZxHH6uCWUgf9jQIz4Vqx--IVQpEf184de6M0LVg4jGOaiR8Wry5k9HGLk71HTxpOBWVMZaChc2D5W3n4Be9bkwvcCnHTzhD9lvVl3ss1S44Q9LHWG5oFgbxugLZ5B_KCF5j7F2Lnz15wlOQvVbgcNACzeaZAu9Gt4c1QGVG47Mq_SRE_wquaBz_yjFGDBeTa7Sdg7NPLw5qRxPBEO664Ne6y6CxU3fM8')"></div>
+<div>
+<p class="font-bold text-text-main text-sm">Intro to Woodworking</p>
+<p class="text-xs text-text-muted">The Wood Shop</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 align-middle">
+<div class="flex flex-col gap-1.5">
+<div class="flex justify-between text-xs font-medium">
+<span class="text-accent font-bold">4/10</span>
+<span class="text-text-muted">40%</span>
+</div>
+<div class="w-full bg-background-light border border-border rounded-full h-2.5 overflow-hidden">
+<div class="bg-accent h-full rounded-full" style="width: 40%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 align-middle text-right">
+<button class="text-text-muted hover:text-primary transition-colors p-1">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-background-light/50 transition-colors group">
+<td class="px-6 py-4 align-top">
+<div class="flex flex-col">
+<span class="font-bold text-text-main">Oct 08</span>
+<span class="text-xs text-text-muted">6:30 PM</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-cover bg-center shrink-0 border border-border" data-alt="Wine tasting event thumbnail" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBWmuYmDQ2DfCWqw22n_-B6CIHVm29zSSqQsjUvwHLbegHOMQrKRSC0Jm8iK2snse6eXj9rAzWGp67ILxVNMthLe9bwkVLx4mUt-Hi2Dk3LvgrfQOv8XJf2ICXwxMwEpKTva713af_FnepbuAVUIXsnSb5y55sGxoNB7k9sNFMPrVdUu0IpD4GpCjJHo25mvDLMjFH7ani2N2KHNTcHSsPcTaSqrvwcRIBOwrXkfuolvcyeRO1kGB4NIQOIUzbRZp11KhhW4DIbtGM')"></div>
+<div>
+<p class="font-bold text-text-main text-sm">Organic Wine Tasting</p>
+<p class="text-xs text-text-muted">Vino Cellar</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 align-middle">
+<div class="flex flex-col gap-1.5">
+<div class="flex justify-between text-xs font-medium">
+<span class="text-green-600 font-bold">20/20</span>
+<span class="text-text-muted">Sold Out</span>
+</div>
+<div class="w-full bg-background-light border border-border rounded-full h-2.5 overflow-hidden">
+<div class="bg-green-500 h-full rounded-full" style="width: 100%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 align-middle text-right">
+<button class="text-text-muted hover:text-primary transition-colors p-1">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-background-light/50 transition-colors group">
+<td class="px-6 py-4 align-top">
+<div class="flex flex-col">
+<span class="font-bold text-text-main">Oct 15</span>
+<span class="text-xs text-text-muted">11:00 AM</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-cover bg-center shrink-0 border border-border" data-alt="Abstract painting workshop thumbnail" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAnCRNibtsVC37bKnVZrk6mpKgMpAVrH8eQCozJay0uUzxxk3YpiEgiY0Qi84cxLTM_orUSBtCD-Aam_mVJZsOyn3t5q00VTeOXs5s6dCjkOcKIE7N0m-33-eZ37Pult2P55ytb4llGenCrrjP6hUUzgDn4pFloAJBTIth-Izfy0DrUPFXDR_rSPhA6rJ-9abwyfpMOEir6-3W56XysFOSFTqSTDB6aeOAYJD2p-pN36ys6lUbKdwSqdXAJWut9pKE5D1--O8eegqc')"></div>
+<div>
+<p class="font-bold text-text-main text-sm">Abstract Painting</p>
+<p class="text-xs text-text-muted">Art Loft 4</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 align-middle">
+<div class="flex flex-col gap-1.5">
+<div class="flex justify-between text-xs font-medium">
+<span class="text-primary font-bold">2/12</span>
+<span class="text-text-muted">16%</span>
+</div>
+<div class="w-full bg-background-light border border-border rounded-full h-2.5 overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 16%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 align-middle text-right">
+<button class="text-text-muted hover:text-primary transition-colors p-1">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Right Column: Revenue Chart & Notifications (Span 1) -->
+<div class="lg:col-span-1 flex flex-col gap-6">
+<!-- Chart Widget -->
+<div class="bg-surface rounded border border-border shadow-hard p-6 flex flex-col gap-4">
+<div class="flex justify-between items-center">
+<h3 class="font-display font-bold text-lg">Revenue</h3>
+<div class="flex gap-2">
+<span class="w-2 h-2 rounded-full bg-primary mt-1.5"></span>
+<span class="text-xs text-text-muted">This Month</span>
+</div>
+</div>
+<div class="h-48 w-full flex items-end justify-between gap-2 px-2 pb-2 border-b border-border border-dashed">
+<!-- Bar 1 -->
+<div class="w-full bg-background-light hover:bg-border transition-colors h-[40%] relative group rounded-t-sm">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-text-main text-surface text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">$420</div>
+</div>
+<!-- Bar 2 -->
+<div class="w-full bg-background-light hover:bg-border transition-colors h-[65%] relative group rounded-t-sm">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-text-main text-surface text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">$650</div>
+</div>
+<!-- Bar 3 -->
+<div class="w-full bg-accent hover:bg-accent/80 transition-colors h-[55%] relative group rounded-t-sm">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-text-main text-surface text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">$550</div>
+</div>
+<!-- Bar 4 -->
+<div class="w-full bg-background-light hover:bg-border transition-colors h-[35%] relative group rounded-t-sm">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-text-main text-surface text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">$350</div>
+</div>
+<!-- Bar 5 -->
+<div class="w-full bg-background-light hover:bg-border transition-colors h-[75%] relative group rounded-t-sm">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-text-main text-surface text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">$750</div>
+</div>
+<!-- Bar 6 (Current) -->
+<div class="w-full bg-primary hover:bg-primary-dark transition-colors h-[90%] relative group rounded-t-sm shadow-md">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-text-main text-surface text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">$900</div>
+</div>
+</div>
+<div class="flex justify-between text-xs text-text-muted font-medium px-1">
+<span>W1</span>
+<span>W2</span>
+<span>W3</span>
+<span>W4</span>
+<span>W5</span>
+<span>W6</span>
+</div>
+</div>
+<!-- Recent Activity / Notifications -->
+<div class="bg-surface rounded border border-border shadow-hard p-6 flex flex-col h-full">
+<h3 class="font-display font-bold text-lg mb-4">Latest Activity</h3>
+<div class="flex flex-col gap-4">
+<div class="flex gap-3 items-start">
+<div class="w-8 h-8 rounded-full bg-green-100 text-green-700 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-sm">confirmation_number</span>
+</div>
+<div>
+<p class="text-sm text-text-main"><span class="font-bold">Julia M.</span> booked 2 tickets for <span class="font-medium italic">Pottery for Beginners</span>.</p>
+<p class="text-xs text-text-muted mt-1">2 mins ago</p>
+</div>
+</div>
+<div class="w-full h-px bg-border/50"></div>
+<div class="flex gap-3 items-start">
+<div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-sm">star</span>
+</div>
+<div>
+<p class="text-sm text-text-main"><span class="font-bold">Alex R.</span> left a 5-star review.</p>
+<p class="text-xs text-text-muted mt-1">1 hour ago</p>
+</div>
+</div>
+<div class="w-full h-px bg-border/50"></div>
+<div class="flex gap-3 items-start">
+<div class="w-8 h-8 rounded-full bg-yellow-100 text-yellow-700 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-sm">notifications</span>
+</div>
+<div>
+<p class="text-sm text-text-main">Reminder: Send prep materials for tomorrow's class.</p>
+<p class="text-xs text-text-muted mt-1">3 hours ago</p>
+</div>
+</div>
+</div>
+<button class="mt-auto w-full text-center text-primary text-sm font-bold pt-4 hover:underline">View All Notifications</button>
+</div>
+</div>
+</div>
+</main>
+</body></html>
