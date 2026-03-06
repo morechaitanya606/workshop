@@ -78,6 +78,7 @@ function SectionHeader({
 // ─── Main Homepage ───────────────────────────────────────────────
 export default function HomePage() {
     const heroRef = useRef<HTMLDivElement>(null);
+    const [selectedCategory, setSelectedCategory] = useState("trending");
     const { scrollYProgress } = useScroll({
         target: heroRef,
         offset: ["start start", "end start"],
@@ -186,12 +187,15 @@ export default function HomePage() {
 
             {/* ═════════ SEARCH BAR SECTION ═════════ */}
             <section className="relative -mt-12 z-20 section-padding">
-                <SearchBar />
+                <SearchBar selectedCategoryId={selectedCategory} />
             </section>
 
             {/* ═════════ CATEGORY FILTERS ═════════ */}
             <section className="section-padding mt-10">
-                <CategoryFilter />
+                <CategoryFilter
+                    activeCategory={selectedCategory}
+                    onCategoryChange={setSelectedCategory}
+                />
             </section>
 
             {/* ═════════ TRENDING WORKSHOPS ═════════ */}

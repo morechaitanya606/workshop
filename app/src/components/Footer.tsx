@@ -33,13 +33,18 @@ export default function Footer() {
                             Company
                         </h4>
                         <ul className="space-y-3">
-                            {["About Us", "Careers", "Press", "Blog"].map((item) => (
-                                <li key={item}>
+                            {[
+                                { label: "About Us", href: "/about" },
+                                { label: "Careers", href: "/careers" },
+                                { label: "Press", href: "/press" },
+                                { label: "Blog", href: "/blog" },
+                            ].map((item) => (
+                                <li key={item.label}>
                                     <Link
-                                        href="#"
+                                        href={item.href}
                                         className="text-sm font-inter text-dark-muted hover:text-terracotta transition-colors duration-300"
                                     >
-                                        {item}
+                                        {item.label}
                                     </Link>
                                 </li>
                             ))}
@@ -56,7 +61,7 @@ export default function Footer() {
                                 (item) => (
                                     <li key={item}>
                                         <Link
-                                            href="#"
+                                            href={`/explore?city=${encodeURIComponent(item)}`}
                                             className="text-sm font-inter text-dark-muted hover:text-terracotta transition-colors duration-300"
                                         >
                                             {item}
@@ -74,17 +79,17 @@ export default function Footer() {
                         </h4>
                         <ul className="space-y-3">
                             {[
-                                "Help Center",
-                                "Cancellation Options",
-                                "Safety",
-                                "Contact Us",
+                                { label: "Help Center", href: "/help" },
+                                { label: "Cancellation Options", href: "/cancellations" },
+                                { label: "Safety", href: "/safety" },
+                                { label: "Contact Us", href: "/contact" },
                             ].map((item) => (
-                                <li key={item}>
+                                <li key={item.label}>
                                     <Link
-                                        href="#"
+                                        href={item.href}
                                         className="text-sm font-inter text-dark-muted hover:text-terracotta transition-colors duration-300"
                                     >
-                                        {item}
+                                        {item.label}
                                     </Link>
                                 </li>
                             ))}
@@ -100,13 +105,17 @@ export default function Footer() {
                         &copy; {new Date().getFullYear()} OnlyWorkshop Inc. All rights reserved.
                     </p>
                     <div className="flex items-center gap-6">
-                        {["Privacy", "Terms", "Sitemap"].map((item) => (
+                        {[
+                            { label: "Privacy", href: "/legal/privacy" },
+                            { label: "Terms", href: "/legal/terms" },
+                            { label: "Sitemap", href: "/sitemap" },
+                        ].map((item) => (
                             <Link
-                                key={item}
-                                href="#"
+                                key={item.label}
+                                href={item.href}
                                 className="text-xs font-inter text-dark-muted hover:text-terracotta transition-colors"
                             >
-                                {item}
+                                {item.label}
                             </Link>
                         ))}
                     </div>

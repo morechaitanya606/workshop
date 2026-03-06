@@ -3,19 +3,33 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { signIn, signInWithGoogle } = useAuth();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const rawRedirect = searchParams.get("redirect");
+    let redirectPath = "/";
+    if (rawRedirect) {
+        try {
+            const decoded = decodeURIComponent(rawRedirect);
+            if (decoded.startsWith("/")) {
+                redirectPath = decoded;
+            }
+        } catch {
+            redirectPath = "/";
+        }
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -27,7 +41,15 @@ export default function LoginPage() {
             setError(authError);
             setLoading(false);
         } else {
-            router.push("/");
+            router.push(redirectPath);
+        }
+    };
+
+    const handleGoogleSignIn = async () => {
+        setError(null);
+        const { error: oauthError } = await signInWithGoogle(redirectPath);
+        if (oauthError) {
+            setError(oauthError);
         }
     };
 
@@ -124,7 +146,7 @@ export default function LoginPage() {
                                 </span>
                             </label>
                             <Link
-                                href="#"
+                                href="/auth/forgot-password"
                                 className="text-sm font-inter font-medium text-terracotta hover:underline"
                             >
                                 Forgot password?
@@ -159,7 +181,7 @@ export default function LoginPage() {
                     </div>
 
                     <button
-                        onClick={signInWithGoogle}
+                        onClick={handleGoogleSignIn}
                         className="w-full flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-xl py-3.5 text-sm font-inter font-medium text-dark hover:border-terracotta/40 transition-colors"
                     >
                         <svg className="w-5 h-5" viewBox="0 0 24 24">

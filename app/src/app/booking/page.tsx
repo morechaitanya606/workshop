@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -12,77 +12,165 @@ import {
     MapPin,
     Users,
     Shield,
-    CreditCard,
     Check,
     Star,
     Loader2,
-    Instagram,
-    Youtube,
-    Globe,
-    Play,
-    Lock,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { mockWorkshops } from "@/lib/data";
+import type { Workshop } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+
+const SERVICE_FEE = 99;
 
 function BookingContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { user, loading } = useAuth();
+    const { user, session, loading } = useAuth();
 
-    const workshopId = searchParams.get("workshop") || "1";
-    const guestsParam = parseInt(searchParams.get("guests") || "2");
-    const workshop = mockWorkshops.find((w) => w.id === workshopId) || mockWorkshops[0];
+    const workshopId = searchParams.get("workshop") || "";
+    const holdId = searchParams.get("hold") || "";
+    const guestsParam = Number.parseInt(searchParams.get("guests") || "1", 10);
+    const guests = Number.isFinite(guestsParam) ? Math.max(1, guestsParam) : 1;
+
+    const fallbackWorkshop =
+        mockWorkshops.find((item) => item.id === workshopId) || null;
+    const [workshop, setWorkshop] = useState<Workshop | null>(fallbackWorkshop);
+    const [workshopLoading, setWorkshopLoading] = useState(Boolean(workshopId));
 
     const [step, setStep] = useState(1);
-    const [guests] = useState(guestsParam);
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [confirmedBooking, setConfirmedBooking] = useState<{
+        id: string;
+        total: number;
+        workshop?: {
+            title?: string;
+            date?: string;
+            time?: string;
+            cover_image?: string;
+        };
+    } | null>(null);
     const [formData, setFormData] = useState({
         firstName: "",
         lastName: "",
-        email: user?.email || "",
+        email: "",
         phone: "",
         notes: "",
     });
-    const [submitting, setSubmitting] = useState(false);
 
-    const serviceFee = 99;
-    const subtotal = workshop.price * guests;
-    const total = subtotal + serviceFee;
-
-    // Redirect to login if not authenticated
     useEffect(() => {
         if (!loading && !user) {
-            router.push(`/auth/login?redirect=/booking?workshop=${workshopId}&guests=${guests}`);
+            const redirectPath = encodeURIComponent(
+                `/booking?workshop=${workshopId}&guests=${guests}${holdId ? `&hold=${holdId}` : ""}`
+            );
+            router.push(`/auth/login?redirect=${redirectPath}`);
         }
-    }, [loading, user, router, workshopId, guests]);
+    }, [loading, user, router, workshopId, guests, holdId]);
 
-    // Pre-fill email when user loads
     useEffect(() => {
-        if (user?.email) {
-            setFormData((prev) => ({ ...prev, email: user.email || "" }));
-        }
-        if (user?.user_metadata?.full_name) {
-            const parts = user.user_metadata.full_name.split(" ");
-            setFormData((prev) => ({
-                ...prev,
-                firstName: parts[0] || "",
-                lastName: parts.slice(1).join(" ") || "",
-            }));
-        }
+        if (!user) return;
+        const fullName = user.user_metadata?.full_name || "";
+        const [firstName, ...rest] = fullName.split(" ");
+        setFormData((prev) => ({
+            ...prev,
+            firstName: prev.firstName || firstName || "",
+            lastName: prev.lastName || rest.join(" ") || "",
+            email: prev.email || user.email || "",
+        }));
     }, [user]);
 
-    const handleSubmit = async () => {
+    useEffect(() => {
+        let cancelled = false;
+        const fetchWorkshop = async () => {
+            if (!workshopId) {
+                setWorkshopLoading(false);
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/workshops/${workshopId}`, {
+                    cache: "no-store",
+                });
+                const result = await response.json();
+                if (!cancelled && response.ok && result.workshop) {
+                    setWorkshop(result.workshop as Workshop);
+                }
+            } catch {
+                // fallback workshop is already set if available
+            } finally {
+                if (!cancelled) {
+                    setWorkshopLoading(false);
+                }
+            }
+        };
+
+        fetchWorkshop();
+        return () => {
+            cancelled = true;
+        };
+    }, [workshopId]);
+
+    const subtotal = (workshop?.price || 0) * guests;
+    const total = subtotal + SERVICE_FEE;
+
+    const handleCheckout = async () => {
+        if (!workshop) return;
+        setError(null);
+
+        if (!holdId) {
+            setError(
+                "Seat hold is missing or expired. Please go back and reserve seats again."
+            );
+            return;
+        }
+
+        if (!session?.access_token) {
+            setError("Your session expired. Please log in again.");
+            return;
+        }
+
         setSubmitting(true);
-        // Simulate payment processing
-        await new Promise((r) => setTimeout(r, 2000));
-        setStep(3);
-        setSubmitting(false);
+        try {
+            const response = await fetch("/api/bookings/checkout", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                    holdId,
+                    workshopId: workshop.id,
+                    firstName: formData.firstName,
+                    lastName: formData.lastName,
+                    email: formData.email,
+                    phone: formData.phone,
+                    notes: formData.notes,
+                }),
+            });
+
+            const result = await response.json();
+            if (!response.ok) {
+                const fallbackMessage =
+                    response.status === 402
+                        ? "Payment intent created, but client-side card collection is not implemented yet. Enable STRIPE_AUTOCONFIRM_TEST=true for test auto-confirm."
+                        : "Checkout failed. Please try again.";
+                setError(result.error || fallbackMessage);
+                return;
+            }
+
+            setConfirmedBooking(result.booking || null);
+            setStep(3);
+        } catch {
+            setError("Unable to complete checkout right now. Please try again.");
+        } finally {
+            setSubmitting(false);
+        }
     };
 
-    if (loading || !user) {
+    if (loading || !user || workshopLoading) {
         return (
             <main className="min-h-screen flex items-center justify-center">
                 <Loader2 className="w-8 h-8 animate-spin text-terracotta" />
@@ -90,8 +178,31 @@ function BookingContent() {
         );
     }
 
-    // Success step
+    if (!workshop) {
+        return (
+            <main className="min-h-screen bg-cream">
+                <Navbar />
+                <div className="pt-28 pb-16 section-padding text-center">
+                    <h1 className="heading-lg mb-3">Workshop not found</h1>
+                    <p className="text-body text-dark-muted mb-8">
+                        The workshop in this booking link is unavailable.
+                    </p>
+                    <Link href="/explore" className="btn-primary">
+                        Back to Explore
+                    </Link>
+                </div>
+                <Footer />
+            </main>
+        );
+    }
+
     if (step === 3) {
+        const bookingWorkshopTitle = confirmedBooking?.workshop?.title || workshop.title;
+        const bookingWorkshopDate = confirmedBooking?.workshop?.date || workshop.date;
+        const bookingWorkshopTime = confirmedBooking?.workshop?.time || workshop.time;
+        const bookingCover =
+            confirmedBooking?.workshop?.cover_image || workshop.coverImage;
+
         return (
             <main className="min-h-screen bg-cream">
                 <Navbar />
@@ -104,22 +215,23 @@ function BookingContent() {
                         <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
                             <Check className="w-10 h-10 text-emerald-600" />
                         </div>
-                        <h1 className="heading-lg mb-3">Booking Confirmed!</h1>
-                        <p className="text-body text-dark-muted mb-2">
-                            Your spot at <strong>{workshop.title}</strong> has been reserved.
-                        </p>
-                        <p className="text-sm font-inter text-dark-muted mb-8">
-                            Confirmation details have been sent to <strong>{formData.email}</strong>
+                        <h1 className="heading-lg mb-3">Booking Confirmed</h1>
+                        <p className="text-body text-dark-muted mb-8">
+                            Your booking for <strong>{bookingWorkshopTitle}</strong> is confirmed.
                         </p>
                         <div className="bg-white rounded-2xl p-6 shadow-soft mb-8 text-left">
-                            <div className="flex gap-4 mb-4">
+                            <div className="flex gap-4">
                                 <div className="relative w-20 h-20 rounded-xl overflow-hidden flex-shrink-0">
-                                    <Image src={workshop.coverImage} alt={workshop.title} fill className="object-cover" />
+                                    <Image src={bookingCover} alt={bookingWorkshopTitle} fill className="object-cover" />
                                 </div>
                                 <div>
-                                    <h3 className="font-playfair font-semibold text-dark">{workshop.title}</h3>
-                                    <p className="text-sm font-inter text-dark-muted mt-1">{formatDate(workshop.date)} · {workshop.time}</p>
-                                    <p className="text-sm font-inter text-dark-muted">{guests} guests · {formatCurrency(total)}</p>
+                                    <h3 className="font-playfair font-semibold text-dark">{bookingWorkshopTitle}</h3>
+                                    <p className="text-sm font-inter text-dark-muted mt-1">
+                                        {formatDate(bookingWorkshopDate)} · {bookingWorkshopTime}
+                                    </p>
+                                    <p className="text-sm font-inter text-dark-muted">
+                                        {guests} guests · {formatCurrency(confirmedBooking?.total || total)}
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -140,9 +252,7 @@ function BookingContent() {
     return (
         <main className="min-h-screen bg-cream">
             <Navbar />
-
             <div className="pt-24 pb-16 section-padding">
-                {/* Back link */}
                 <Link
                     href={`/workshop/${workshop.id}`}
                     className="inline-flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta transition-colors mb-6"
@@ -151,145 +261,57 @@ function BookingContent() {
                     Back to workshop
                 </Link>
 
-                {/* Steps indicator */}
-                <div className="flex items-center gap-3 mb-8">
-                    {["Guest Info", "Confirm & Pay"].map((label, i) => (
-                        <div key={label} className="flex items-center gap-2">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-inter font-bold ${step > i + 1 ? "bg-emerald-500 text-white" : step === i + 1 ? "bg-terracotta text-white" : "bg-gray-200 text-dark-muted"}`}>
-                                {step > i + 1 ? <Check className="w-4 h-4" /> : i + 1}
-                            </div>
-                            <span className={`text-sm font-inter font-medium ${step === i + 1 ? "text-dark" : "text-dark-muted"}`}>
-                                {label}
-                            </span>
-                            {i < 1 && <div className="w-12 h-px bg-gray-200" />}
+                {!holdId && (
+                    <div className="mb-6 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-inter">
+                        Seat hold is missing. Please go back and click &quot;Reserve Spot&quot; again.
+                    </div>
+                )}
+                {error && (
+                    <div className="mb-6 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-inter">
+                        {error}
+                    </div>
+                )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-[1fr,380px] gap-8 lg:gap-12">
+                    <div className="bg-white rounded-2xl p-6 shadow-soft space-y-5">
+                        <h2 className="heading-sm">Guest Information</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <input value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} placeholder="First name" className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta" />
+                            <input value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} placeholder="Last name" className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta" />
                         </div>
-                    ))}
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-[1fr,400px] gap-8 lg:gap-12">
-                    {/* Left - Form */}
-                    <div>
-                        {step === 1 && (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                                <h2 className="heading-sm mb-6">Guest Information</h2>
-                                <div className="bg-white rounded-2xl p-6 shadow-soft space-y-5">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">First Name</label>
-                                            <input
-                                                type="text"
-                                                value={formData.firstName}
-                                                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                                                required
-                                                className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">Last Name</label>
-                                            <input
-                                                type="text"
-                                                value={formData.lastName}
-                                                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                                                required
-                                                className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">Email</label>
-                                        <input
-                                            type="email"
-                                            value={formData.email}
-                                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                            required
-                                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">Phone Number</label>
-                                        <input
-                                            type="tel"
-                                            value={formData.phone}
-                                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                            placeholder="+91 XXXXXXXXXX"
-                                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">Special Requests (Optional)</label>
-                                        <textarea
-                                            value={formData.notes}
-                                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                            rows={3}
-                                            placeholder="Any dietary restrictions, allergies, or special needs?"
-                                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors resize-none"
-                                        />
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setStep(2)}
-                                    disabled={!formData.firstName || !formData.lastName || !formData.email}
-                                    className="btn-primary w-full sm:w-auto !py-3.5 !px-8 mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    Continue to Payment
-                                </button>
-                            </motion.div>
-                        )}
-
-                        {step === 2 && (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                                <h2 className="heading-sm mb-6">Confirm & Pay</h2>
-                                <div className="bg-white rounded-2xl p-6 shadow-soft space-y-5">
-                                    <div>
-                                        <h3 className="text-sm font-inter font-bold text-dark mb-3">Booking Details</h3>
-                                        <div className="space-y-2 text-sm font-inter">
-                                            <div className="flex justify-between"><span className="text-dark-muted">Name</span><span className="text-dark font-medium">{formData.firstName} {formData.lastName}</span></div>
-                                            <div className="flex justify-between"><span className="text-dark-muted">Email</span><span className="text-dark font-medium">{formData.email}</span></div>
-                                            {formData.phone && <div className="flex justify-between"><span className="text-dark-muted">Phone</span><span className="text-dark font-medium">{formData.phone}</span></div>}
-                                        </div>
-                                    </div>
-                                    <hr className="border-gray-100" />
-                                    <div>
-                                        <h3 className="text-sm font-inter font-bold text-dark mb-3">Payment</h3>
-                                        <p className="text-sm font-inter text-dark-muted mb-4">You will be redirected to a secure payment page after confirming.</p>
-                                        <div className="flex items-center gap-2 bg-cream-100 rounded-xl px-4 py-3">
-                                            <Shield className="w-5 h-5 text-emerald-600" />
-                                            <span className="text-sm font-inter text-dark-secondary">256-bit SSL encrypted payment</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="flex gap-3 mt-6">
-                                    <button onClick={() => setStep(1)} className="btn-secondary">Back</button>
-                                    <button
-                                        onClick={handleSubmit}
-                                        disabled={submitting}
-                                        className="btn-primary !py-3.5 !px-8 disabled:opacity-60"
-                                    >
-                                        {submitting ? (
-                                            <><Loader2 className="w-5 h-5 animate-spin" /> Processing...</>
-                                        ) : (
-                                            <>Confirm & Pay {formatCurrency(total)}</>
-                                        )}
-                                    </button>
-                                </div>
-                            </motion.div>
-                        )}
+                        <input value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="Email" className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta" />
+                        <input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="Phone number (optional)" className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta" />
+                        <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} rows={3} placeholder="Special requests (optional)" className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta resize-none" />
+                        <button
+                            onClick={handleCheckout}
+                            disabled={
+                                submitting ||
+                                !formData.firstName ||
+                                !formData.lastName ||
+                                !formData.email ||
+                                !holdId
+                            }
+                            className="btn-primary w-full sm:w-auto !py-3.5 !px-8 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {submitting ? (
+                                <>
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                    Processing...
+                                </>
+                            ) : (
+                                <>Confirm & Pay {formatCurrency(total)}</>
+                            )}
+                        </button>
                     </div>
 
-                    {/* Right - Order Summary Sidebar */}
                     <div className="hidden lg:block">
                         <div className="sticky top-28 bg-white rounded-2xl shadow-soft p-6 border border-gray-100">
-                            <h3 className="text-sm font-inter font-bold text-dark-muted uppercase tracking-wider mb-4">Order Summary</h3>
-
-                            {/* Workshop preview */}
+                            <h3 className="text-sm font-inter font-bold text-dark-muted uppercase tracking-wider mb-4">
+                                Order Summary
+                            </h3>
                             <div className="flex gap-3 mb-4">
                                 <div className="relative w-24 h-24 rounded-xl overflow-hidden flex-shrink-0">
                                     <Image src={workshop.coverImage} alt={workshop.title} fill className="object-cover" />
-                                    {workshop.videoUrl && (
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                                            <Play className="w-6 h-6 text-white" />
-                                        </div>
-                                    )}
                                 </div>
                                 <div>
                                     <h4 className="font-playfair font-semibold text-dark text-sm leading-tight">{workshop.title}</h4>
@@ -300,88 +322,20 @@ function BookingContent() {
                                     </div>
                                 </div>
                             </div>
-
-                            {/* Creator info */}
-                            <div className="flex items-center gap-3 py-3 border-t border-gray-100">
-                                <div className="relative w-8 h-8 rounded-full overflow-hidden">
-                                    <Image src={workshop.hostAvatar} alt={workshop.hostName} fill className="object-cover" />
-                                </div>
-                                <div>
-                                    <p className="text-xs font-inter font-semibold text-dark">{workshop.hostName}</p>
-                                    {workshop.hostExperience && (
-                                        <p className="text-[10px] font-inter text-dark-muted">{workshop.hostExperience}</p>
-                                    )}
-                                </div>
-                                {/* Creator social links */}
-                                <div className="ml-auto flex gap-1">
-                                    {workshop.hostSocialLinks?.instagram && (
-                                        <a href={workshop.hostSocialLinks.instagram} target="_blank" rel="noopener noreferrer" className="p-1.5 hover:bg-cream-100 rounded-md transition-colors">
-                                            <Instagram className="w-3.5 h-3.5 text-dark-muted" />
-                                        </a>
-                                    )}
-                                    {workshop.hostSocialLinks?.youtube && (
-                                        <a href={workshop.hostSocialLinks.youtube} target="_blank" rel="noopener noreferrer" className="p-1.5 hover:bg-cream-100 rounded-md transition-colors">
-                                            <Youtube className="w-3.5 h-3.5 text-dark-muted" />
-                                        </a>
-                                    )}
-                                    {workshop.hostSocialLinks?.website && (
-                                        <a href={workshop.hostSocialLinks.website} target="_blank" rel="noopener noreferrer" className="p-1.5 hover:bg-cream-100 rounded-md transition-colors">
-                                            <Globe className="w-3.5 h-3.5 text-dark-muted" />
-                                        </a>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Details */}
                             <div className="space-y-3 py-4 border-t border-gray-100">
-                                <div className="flex items-center gap-2 text-sm font-inter text-dark-secondary">
-                                    <Calendar className="w-4 h-4 text-dark-muted" />
-                                    {formatDate(workshop.date)} · {workshop.time}
-                                </div>
-                                <div className="flex items-center gap-2 text-sm font-inter text-dark-secondary">
-                                    <Clock className="w-4 h-4 text-dark-muted" />
-                                    {workshop.duration}
-                                </div>
-                                <div className="flex items-center gap-2 text-sm font-inter text-dark-secondary">
-                                    <MapPin className="w-4 h-4 text-dark-muted" />
-                                    {workshop.location}, {workshop.city}
-                                </div>
-                                <div className="flex items-center gap-2 text-sm font-inter text-dark-secondary">
-                                    <Users className="w-4 h-4 text-dark-muted" />
-                                    {guests} guests
-                                </div>
+                                <div className="flex items-center gap-2 text-sm font-inter text-dark-secondary"><Calendar className="w-4 h-4 text-dark-muted" />{formatDate(workshop.date)} · {workshop.time}</div>
+                                <div className="flex items-center gap-2 text-sm font-inter text-dark-secondary"><Clock className="w-4 h-4 text-dark-muted" />{workshop.duration}</div>
+                                <div className="flex items-center gap-2 text-sm font-inter text-dark-secondary"><MapPin className="w-4 h-4 text-dark-muted" />{workshop.location}, {workshop.city}</div>
+                                <div className="flex items-center gap-2 text-sm font-inter text-dark-secondary"><Users className="w-4 h-4 text-dark-muted" />{guests} guests</div>
                             </div>
-
-                            {/* Workshop social links */}
-                            {workshop.socialLinks && (
-                                <div className="flex gap-2 py-3 border-t border-gray-100">
-                                    {workshop.socialLinks.instagram && (
-                                        <a href={workshop.socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs font-inter text-dark-muted hover:text-terracotta transition-colors bg-cream-100 px-2 py-1 rounded-lg">
-                                            <Instagram className="w-3 h-3" /> Instagram
-                                        </a>
-                                    )}
-                                    {workshop.socialLinks.youtube && (
-                                        <a href={workshop.socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs font-inter text-dark-muted hover:text-terracotta transition-colors bg-cream-100 px-2 py-1 rounded-lg">
-                                            <Youtube className="w-3 h-3" /> YouTube
-                                        </a>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Pricing */}
                             <div className="space-y-2 pt-4 border-t border-gray-100">
-                                <div className="flex justify-between text-sm font-inter">
-                                    <span className="text-dark-secondary">{formatCurrency(workshop.price)} × {guests} guests</span>
-                                    <span className="text-dark font-medium">{formatCurrency(subtotal)}</span>
-                                </div>
-                                <div className="flex justify-between text-sm font-inter">
-                                    <span className="text-dark-secondary">Service fee</span>
-                                    <span className="text-dark font-medium">{formatCurrency(serviceFee)}</span>
-                                </div>
-                                <div className="flex justify-between text-base font-inter font-bold pt-3 border-t border-gray-100">
-                                    <span className="text-dark">Total</span>
-                                    <span className="text-dark">{formatCurrency(total)}</span>
-                                </div>
+                                <div className="flex justify-between text-sm font-inter"><span className="text-dark-secondary">{formatCurrency(workshop.price)} × {guests} guests</span><span className="text-dark font-medium">{formatCurrency(subtotal)}</span></div>
+                                <div className="flex justify-between text-sm font-inter"><span className="text-dark-secondary">Service fee</span><span className="text-dark font-medium">{formatCurrency(SERVICE_FEE)}</span></div>
+                                <div className="flex justify-between text-base font-inter font-bold pt-3 border-t border-gray-100"><span className="text-dark">Total</span><span className="text-dark">{formatCurrency(total)}</span></div>
+                            </div>
+                            <div className="flex items-center gap-2 bg-cream-100 rounded-xl px-4 py-3 mt-4">
+                                <Shield className="w-5 h-5 text-emerald-600" />
+                                <span className="text-sm font-inter text-dark-secondary">Payment intent is verified before booking confirmation.</span>
                             </div>
                         </div>
                     </div>
@@ -394,11 +348,13 @@ function BookingContent() {
 
 export default function BookingPage() {
     return (
-        <Suspense fallback={
-            <main className="min-h-screen flex items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-terracotta" />
-            </main>
-        }>
+        <Suspense
+            fallback={
+                <main className="min-h-screen flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-terracotta" />
+                </main>
+            }
+        >
             <BookingContent />
         </Suspense>
     );

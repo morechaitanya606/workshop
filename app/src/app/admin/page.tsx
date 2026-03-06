@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     LayoutDashboard,
@@ -31,7 +32,9 @@ import {
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { mockWorkshops, categories } from "@/lib/data";
+import type { Workshop } from "@/lib/data";
 import { formatCurrency } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 
 interface WorkshopFormData {
     title: string;
@@ -88,11 +91,84 @@ const emptyForm: WorkshopFormData = {
 };
 
 export default function AdminPage() {
+    const router = useRouter();
+    const { user, session, loading } = useAuth();
     const [activeTab, setActiveTab] = useState("dashboard");
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [form, setForm] = useState<WorkshopFormData>({ ...emptyForm });
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [adminRoleLoading, setAdminRoleLoading] = useState(true);
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [adminWorkshops, setAdminWorkshops] = useState<Workshop[]>(mockWorkshops);
+    const [loadingAdminWorkshops, setLoadingAdminWorkshops] = useState(false);
+
+    useEffect(() => {
+        if (!loading && !user) {
+            const redirectPath = encodeURIComponent("/admin");
+            router.push(`/auth/login?redirect=${redirectPath}`);
+        }
+    }, [loading, user, router]);
+
+    const loadAdminWorkshops = useCallback(async () => {
+        if (!session?.access_token) return;
+        setLoadingAdminWorkshops(true);
+        try {
+            const response = await fetch("/api/admin/workshops", {
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                cache: "no-store",
+            });
+            const result = await response.json();
+            if (response.ok && Array.isArray(result.data)) {
+                setAdminWorkshops(result.data as Workshop[]);
+            }
+        } finally {
+            setLoadingAdminWorkshops(false);
+        }
+    }, [session]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const validateAdminRole = async () => {
+            if (!user || !session?.access_token) {
+                if (!cancelled) {
+                    setAdminRoleLoading(false);
+                }
+                return;
+            }
+
+            setAdminRoleLoading(true);
+            try {
+                const response = await fetch("/api/auth/me", {
+                    headers: {
+                        Authorization: `Bearer ${session.access_token}`,
+                    },
+                    cache: "no-store",
+                });
+                const result = await response.json();
+                if (!cancelled) {
+                    const hasAdminRole = response.ok && result.role === "admin";
+                    setIsAdmin(hasAdminRole);
+                    if (hasAdminRole) {
+                        await loadAdminWorkshops();
+                    }
+                }
+            } finally {
+                if (!cancelled) {
+                    setAdminRoleLoading(false);
+                }
+            }
+        };
+
+        validateAdminRole();
+        return () => {
+            cancelled = true;
+        };
+    }, [user, session, loadAdminWorkshops]);
 
     const sidebarItems = [
         { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -125,24 +201,118 @@ export default function AdminPage() {
     };
 
     const handleSave = async () => {
+        setSaveError(null);
+        if (!session?.access_token) {
+            setSaveError("Your session expired. Please log in again.");
+            return;
+        }
+
         setSaving(true);
-        // Simulate API save
-        await new Promise((r) => setTimeout(r, 1500));
-        setSaving(false);
-        setSaved(true);
-        setTimeout(() => {
-            setSaved(false);
-            setShowCreateForm(false);
-            setForm({ ...emptyForm });
-        }, 2000);
+        try {
+            const payload = {
+                title: form.title.trim(),
+                description: form.description.trim(),
+                category: form.category.trim(),
+                price: Number(form.price),
+                location: form.location.trim(),
+                city: form.city.trim(),
+                duration: form.duration.trim(),
+                date: form.date.trim(),
+                time: form.time.trim(),
+                maxSeats: Number(form.maxSeats),
+                coverImage: form.coverImage.trim(),
+                galleryImages: form.galleryImages
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+                videoUrl: form.videoUrl.trim(),
+                socialLinks: {
+                    instagram: form.instagramLink.trim(),
+                    youtube: form.youtubeLink.trim(),
+                    website: form.websiteLink.trim(),
+                },
+                hostName: form.hostName.trim(),
+                hostBio: form.hostBio.trim(),
+                hostExperience: form.hostExperience.trim(),
+                hostSocialLinks: {
+                    instagram: form.hostInstagram.trim(),
+                    youtube: form.hostYoutube.trim(),
+                    website: form.hostWebsite.trim(),
+                },
+                whatYouLearn: form.whatYouLearn
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+                materialsProvided: form.materialsProvided
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+            };
+
+            const response = await fetch("/api/admin/workshops", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify(payload),
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                setSaveError(
+                    result.error ||
+                        "Unable to publish workshop. Confirm DB migration is applied."
+                );
+                return;
+            }
+
+            setSaved(true);
+            await loadAdminWorkshops();
+            setTimeout(() => {
+                setSaved(false);
+                setShowCreateForm(false);
+                setForm({ ...emptyForm });
+            }, 1200);
+        } catch {
+            setSaveError("Unable to publish workshop right now.");
+        } finally {
+            setSaving(false);
+        }
     };
 
     const stats = [
-        { label: "Active Workshops", value: mockWorkshops.length, change: "+2 this month" },
+        {
+            label: "Active Workshops",
+            value: adminWorkshops.length,
+            change: loadingAdminWorkshops ? "Syncing..." : "Live from database",
+        },
         { label: "Total Bookings", value: 342, change: "+18% vs last month" },
-        { label: "Revenue", value: "₹4,85,000", change: "+24% vs last month" },
+        { label: "Revenue", value: "INR 4,85,000", change: "+24% vs last month" },
         { label: "Avg Rating", value: "4.8", change: "Consistent" },
     ];
+
+    if (loading || !user || adminRoleLoading) {
+        return (
+            <main className="min-h-screen flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-terracotta" />
+            </main>
+        );
+    }
+
+    if (!isAdmin) {
+        return (
+            <main className="min-h-screen bg-cream">
+                <Navbar />
+                <div className="pt-28 pb-16 section-padding text-center">
+                    <h1 className="heading-lg mb-3">Admin access required</h1>
+                    <p className="text-body text-dark-muted mb-8">
+                        Your account does not have the admin role yet.
+                    </p>
+                    <button onClick={() => router.push("/")} className="btn-primary">
+                        Go to Home
+                    </button>
+                </div>
+                <Footer />
+            </main>
+        );
+    }
 
     return (
         <main className="min-h-screen bg-cream">
@@ -604,11 +774,19 @@ export default function AdminPage() {
                                     </section>
 
                                     {/* ═══ SAVE ═══ */}
-                                    <div className="flex items-center justify-between bg-white rounded-2xl p-6 shadow-soft">
-                                        <p className="text-sm font-inter text-dark-muted">
-                                            All fields marked with * are required
-                                        </p>
-                                        <div className="flex gap-3">
+                                    <div className="bg-white rounded-2xl p-6 shadow-soft">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                            <div>
+                                                <p className="text-sm font-inter text-dark-muted">
+                                                    All fields marked with * are required
+                                                </p>
+                                                {saveError && (
+                                                    <p className="text-sm font-inter text-red-600 mt-2">
+                                                        {saveError}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-3">
                                             <button
                                                 onClick={() => setShowCreateForm(false)}
                                                 className="btn-secondary"
@@ -628,6 +806,7 @@ export default function AdminPage() {
                                                     <>Publish Workshop</>
                                                 )}
                                             </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -670,7 +849,7 @@ export default function AdminPage() {
                                         <h3 className="font-playfair text-lg font-semibold text-dark">Your Workshops</h3>
                                     </div>
                                     <div className="divide-y divide-gray-50">
-                                        {mockWorkshops.slice(0, 5).map((ws) => (
+                                        {adminWorkshops.slice(0, 8).map((ws) => (
                                             <div key={ws.id} className="px-6 py-4 flex items-center gap-4 hover:bg-cream-100/50 transition-colors">
                                                 <div className="relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0">
                                                     <Image src={ws.coverImage} alt={ws.title} fill className="object-cover" />
@@ -688,6 +867,11 @@ export default function AdminPage() {
                                                 </span>
                                             </div>
                                         ))}
+                                        {adminWorkshops.length === 0 && (
+                                            <div className="px-6 py-10 text-sm font-inter text-dark-muted text-center">
+                                                No workshops found in the database yet.
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </motion.div>

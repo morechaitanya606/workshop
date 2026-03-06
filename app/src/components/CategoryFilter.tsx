@@ -6,13 +6,20 @@ import { categories } from "@/lib/data";
 
 interface CategoryFilterProps {
     onCategoryChange?: (category: string) => void;
+    activeCategory?: string;
 }
 
-export default function CategoryFilter({ onCategoryChange }: CategoryFilterProps) {
-    const [active, setActive] = useState("trending");
+export default function CategoryFilter({
+    onCategoryChange,
+    activeCategory,
+}: CategoryFilterProps) {
+    const [localActive, setLocalActive] = useState("trending");
+    const active = activeCategory ?? localActive;
 
     const handleClick = (id: string) => {
-        setActive(id);
+        if (!activeCategory) {
+            setLocalActive(id);
+        }
         onCategoryChange?.(id);
     };
 

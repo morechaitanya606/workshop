@@ -1,54 +1,196 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
-import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { Search, SlidersHorizontal, Heart, MapPin, X } from "lucide-react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
 import WorkshopCard from "@/components/WorkshopCard";
-import { mockWorkshops } from "@/lib/data";
+import { categories } from "@/lib/data";
+import type { Workshop } from "@/lib/data";
+
+type SortOption =
+    | "date_asc"
+    | "date_desc"
+    | "price_asc"
+    | "price_desc"
+    | "rating_desc";
+
+const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
+    { value: "date_asc", label: "Date: Soonest" },
+    { value: "date_desc", label: "Date: Latest" },
+    { value: "price_asc", label: "Price: Low to High" },
+    { value: "price_desc", label: "Price: High to Low" },
+    { value: "rating_desc", label: "Top Rated" },
+];
+
+const CITY_OPTIONS = ["", "Pune", "Mumbai", "Bangalore", "Delhi", "Hyderabad"];
+const PAGE_SIZE = 8;
 
 export default function ExplorePage() {
-    const [searchQuery, setSearchQuery] = useState("");
+    const router = useRouter();
+    const searchParams = useSearchParams();
+
+    const parsedQuery = useMemo(() => {
+        const urlSort = searchParams.get("sort") as SortOption | null;
+        return {
+            q: searchParams.get("q") || "",
+            category: searchParams.get("category") || "",
+            city: searchParams.get("city") || "",
+            dateFrom: searchParams.get("dateFrom") || "",
+            dateTo: searchParams.get("dateTo") || "",
+            minPrice: searchParams.get("minPrice") || "",
+            maxPrice: searchParams.get("maxPrice") || "",
+            sort: SORT_OPTIONS.some((item) => item.value === urlSort)
+                ? (urlSort as SortOption)
+                : "date_asc",
+            page: Math.max(1, Number.parseInt(searchParams.get("page") || "1", 10)),
+            pageSize: Math.max(
+                1,
+                Number.parseInt(searchParams.get("pageSize") || String(PAGE_SIZE), 10)
+            ),
+        };
+    }, [searchParams]);
+
+    const [searchQuery, setSearchQuery] = useState(parsedQuery.q);
     const [showFilters, setShowFilters] = useState(false);
-    const [selectedCategory, setSelectedCategory] = useState("all");
+    const [selectedCategory, setSelectedCategory] = useState(parsedQuery.category);
+    const [selectedCity, setSelectedCity] = useState(parsedQuery.city);
+    const [dateFrom, setDateFrom] = useState(parsedQuery.dateFrom);
+    const [dateTo, setDateTo] = useState(parsedQuery.dateTo);
+    const [minPrice, setMinPrice] = useState(parsedQuery.minPrice);
+    const [maxPrice, setMaxPrice] = useState(parsedQuery.maxPrice);
+    const [sort, setSort] = useState<SortOption>(parsedQuery.sort);
 
-    const categories = [
-        "All",
-        "Pottery",
-        "Painting",
-        "Food & Drink",
-        "Music",
-        "Arts & Crafts",
-        "Wellness",
-        "Photography",
-    ];
+    const [workshops, setWorkshops] = useState<Workshop[]>([]);
+    const [total, setTotal] = useState(0);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [source, setSource] = useState<"supabase" | "mock">("mock");
 
-    const filteredWorkshops = mockWorkshops.filter((w) => {
-        const matchesSearch =
-            searchQuery === "" ||
-            w.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            w.category.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesCategory =
-            selectedCategory === "all" ||
-            w.category.toLowerCase() === selectedCategory.toLowerCase();
-        return matchesSearch && matchesCategory;
-    });
+    const totalPages = Math.max(1, Math.ceil(total / parsedQuery.pageSize));
 
-    // Group workshops
-    const recommended = filteredWorkshops.slice(0, 4);
-    const happeningNow = filteredWorkshops.slice(2, 6);
-    const newOnPlatform = filteredWorkshops.slice(4);
+    useEffect(() => {
+        setSearchQuery(parsedQuery.q);
+        setSelectedCategory(parsedQuery.category);
+        setSelectedCity(parsedQuery.city);
+        setDateFrom(parsedQuery.dateFrom);
+        setDateTo(parsedQuery.dateTo);
+        setMinPrice(parsedQuery.minPrice);
+        setMaxPrice(parsedQuery.maxPrice);
+        setSort(parsedQuery.sort);
+    }, [parsedQuery]);
+
+    useEffect(() => {
+        let isCancelled = false;
+
+        const fetchWorkshops = async () => {
+            setLoading(true);
+            setError(null);
+
+            const params = new URLSearchParams();
+            if (parsedQuery.q) params.set("q", parsedQuery.q);
+            if (parsedQuery.category) params.set("category", parsedQuery.category);
+            if (parsedQuery.city) params.set("city", parsedQuery.city);
+            if (parsedQuery.dateFrom) params.set("dateFrom", parsedQuery.dateFrom);
+            if (parsedQuery.dateTo) params.set("dateTo", parsedQuery.dateTo);
+            if (parsedQuery.minPrice) params.set("minPrice", parsedQuery.minPrice);
+            if (parsedQuery.maxPrice) params.set("maxPrice", parsedQuery.maxPrice);
+            params.set("sort", parsedQuery.sort);
+            params.set("page", String(parsedQuery.page));
+            params.set("pageSize", String(parsedQuery.pageSize));
+
+            try {
+                const response = await fetch(`/api/workshops?${params.toString()}`, {
+                    cache: "no-store",
+                });
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || "Failed to load workshops.");
+                }
+
+                if (!isCancelled) {
+                    setWorkshops(result.data || []);
+                    setTotal(Number(result.total || 0));
+                    setSource(result.source === "supabase" ? "supabase" : "mock");
+                }
+            } catch (err) {
+                if (!isCancelled) {
+                    setWorkshops([]);
+                    setTotal(0);
+                    setError(
+                        err instanceof Error
+                            ? err.message
+                            : "Unable to load workshops right now."
+                    );
+                }
+            } finally {
+                if (!isCancelled) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        fetchWorkshops();
+        return () => {
+            isCancelled = true;
+        };
+    }, [parsedQuery]);
+
+    const pushFilters = (overrides?: Partial<typeof parsedQuery>) => {
+        const next = {
+            q: searchQuery.trim(),
+            category: selectedCategory.trim(),
+            city: selectedCity.trim(),
+            dateFrom: dateFrom.trim(),
+            dateTo: dateTo.trim(),
+            minPrice: minPrice.trim(),
+            maxPrice: maxPrice.trim(),
+            sort,
+            page: 1,
+            pageSize: parsedQuery.pageSize || PAGE_SIZE,
+            ...overrides,
+        };
+
+        const params = new URLSearchParams();
+        if (next.q) params.set("q", next.q);
+        if (next.category) params.set("category", next.category);
+        if (next.city) params.set("city", next.city);
+        if (next.dateFrom) params.set("dateFrom", next.dateFrom);
+        if (next.dateTo) params.set("dateTo", next.dateTo);
+        if (next.minPrice) params.set("minPrice", next.minPrice);
+        if (next.maxPrice) params.set("maxPrice", next.maxPrice);
+        params.set("sort", next.sort);
+        params.set("page", String(next.page));
+        params.set("pageSize", String(next.pageSize));
+
+        router.push(`/explore?${params.toString()}`);
+    };
+
+    const clearFilters = () => {
+        setSearchQuery("");
+        setSelectedCategory("");
+        setSelectedCity("");
+        setDateFrom("");
+        setDateTo("");
+        setMinPrice("");
+        setMaxPrice("");
+        setSort("date_asc");
+        router.push(`/explore?page=1&pageSize=${parsedQuery.pageSize || PAGE_SIZE}`);
+    };
+
+    const categoryOptions = categories
+        .filter((item) => item.id !== "trending")
+        .map((item) => item.label);
 
     return (
         <main className="min-h-screen pb-20 md:pb-0">
             <Navbar />
 
             <div className="pt-24 sm:pt-28">
-                {/* Header */}
                 <div className="section-padding">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -61,20 +203,24 @@ export default function ExplorePage() {
                         </p>
                     </motion.div>
 
-                    {/* Search + Filter Row */}
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.6, delay: 0.1 }}
-                        className="mt-8 flex gap-3"
+                        className="mt-8 flex flex-col lg:flex-row gap-3"
                     >
                         <div className="flex-1 flex items-center gap-3 bg-white rounded-xl px-4 py-3 shadow-soft border border-gray-100">
                             <Search className="w-5 h-5 text-dark-muted flex-shrink-0" />
                             <input
                                 type="text"
-                                placeholder="Search for workshops, artists, or locations..."
+                                placeholder="Search workshops, artists, or locations..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        pushFilters({ page: 1 });
+                                    }
+                                }}
                                 className="flex-1 bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted/60"
                             />
                             {searchQuery && (
@@ -83,99 +229,196 @@ export default function ExplorePage() {
                                 </button>
                             )}
                         </div>
-                        <button
-                            onClick={() => setShowFilters(!showFilters)}
-                            className={`flex items-center gap-2 px-5 py-3 rounded-xl border text-sm font-inter font-medium transition-all duration-300 ${showFilters
-                                    ? "bg-terracotta text-white border-terracotta"
-                                    : "bg-white text-terracotta border-terracotta hover:bg-terracotta/5"
+
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setShowFilters((prev) => !prev)}
+                                className={`flex items-center gap-2 px-5 py-3 rounded-xl border text-sm font-inter font-medium transition-all duration-300 ${
+                                    showFilters
+                                        ? "bg-terracotta text-white border-terracotta"
+                                        : "bg-white text-terracotta border-terracotta hover:bg-terracotta/5"
                                 }`}
-                        >
-                            <SlidersHorizontal className="w-4 h-4" />
-                            <span className="hidden sm:inline">Filter</span>
-                        </button>
+                            >
+                                <SlidersHorizontal className="w-4 h-4" />
+                                <span>Filters</span>
+                            </button>
+
+                            <select
+                                value={sort}
+                                onChange={(e) => {
+                                    const value = e.target.value as SortOption;
+                                    setSort(value);
+                                    pushFilters({ sort: value, page: 1 });
+                                }}
+                                className="bg-white border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
+                            >
+                                {SORT_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+
+                            <button
+                                onClick={() => pushFilters({ page: 1 })}
+                                className="btn-primary !py-3 !px-6 text-sm"
+                            >
+                                Search
+                            </button>
+                        </div>
                     </motion.div>
 
-                    {/* Category Chips */}
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.6, delay: 0.2 }}
-                        className="mt-5 flex gap-2 overflow-x-auto scrollbar-hide pb-2"
-                    >
-                        {categories.map((cat) => (
-                            <button
-                                key={cat}
-                                onClick={() =>
-                                    setSelectedCategory(cat === "All" ? "all" : cat)
-                                }
-                                className={`px-4 py-2 rounded-full text-sm font-inter font-medium whitespace-nowrap transition-all duration-300 ${(cat === "All" && selectedCategory === "all") ||
-                                        cat.toLowerCase() === selectedCategory.toLowerCase()
-                                        ? "bg-terracotta text-white"
-                                        : "bg-white text-dark-secondary border border-gray-200 hover:border-terracotta"
-                                    }`}
-                            >
-                                {cat}
-                            </button>
-                        ))}
-                    </motion.div>
+                    {showFilters && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mt-4 bg-white rounded-2xl border border-gray-100 shadow-soft p-4 sm:p-5"
+                        >
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                <select
+                                    value={selectedCategory}
+                                    onChange={(e) => setSelectedCategory(e.target.value)}
+                                    className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
+                                >
+                                    <option value="">All Categories</option>
+                                    {categoryOptions.map((category) => (
+                                        <option key={category} value={category}>
+                                            {category}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                <select
+                                    value={selectedCity}
+                                    onChange={(e) => setSelectedCity(e.target.value)}
+                                    className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
+                                >
+                                    {CITY_OPTIONS.map((city) => (
+                                        <option key={city || "all"} value={city}>
+                                            {city || "All Cities"}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                <input
+                                    type="date"
+                                    value={dateFrom}
+                                    onChange={(e) => setDateFrom(e.target.value)}
+                                    className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
+                                />
+
+                                <input
+                                    type="date"
+                                    value={dateTo}
+                                    onChange={(e) => setDateTo(e.target.value)}
+                                    className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
+                                />
+
+                                <input
+                                    type="number"
+                                    value={minPrice}
+                                    onChange={(e) => setMinPrice(e.target.value)}
+                                    placeholder="Min price"
+                                    className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
+                                />
+
+                                <input
+                                    type="number"
+                                    value={maxPrice}
+                                    onChange={(e) => setMaxPrice(e.target.value)}
+                                    placeholder="Max price"
+                                    className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
+                                />
+                            </div>
+
+                            <div className="flex gap-3 mt-4">
+                                <button
+                                    onClick={() => pushFilters({ page: 1 })}
+                                    className="btn-primary !py-2.5 !px-5 text-sm"
+                                >
+                                    Apply Filters
+                                </button>
+                                <button
+                                    onClick={clearFilters}
+                                    className="btn-secondary !py-2.5 !px-5 text-sm"
+                                >
+                                    Reset
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
                 </div>
 
-                {/* Recommended Section */}
-                {recommended.length > 0 && (
-                    <section className="section-padding mt-10">
-                        <motion.h2
-                            initial={{ opacity: 0, y: 15 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true }}
-                            className="heading-md mb-6"
-                        >
-                            Recommended for You
-                        </motion.h2>
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                            {recommended.map((w, i) => (
-                                <WorkshopCard key={w.id} workshop={w} index={i} />
-                            ))}
-                        </div>
-                    </section>
-                )}
+                <section className="section-padding mt-8">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-5">
+                        <p className="text-sm font-inter text-dark-muted">
+                            {loading
+                                ? "Loading workshops..."
+                                : `${total} workshop${total === 1 ? "" : "s"} found`}
+                        </p>
+                        <p className="text-xs font-inter text-dark-muted uppercase tracking-wider">
+                            Data source: {source}
+                        </p>
+                    </div>
 
-                {/* Happening This Weekend */}
-                {happeningNow.length > 0 && (
-                    <section className="section-padding mt-16">
-                        <motion.h2
-                            initial={{ opacity: 0, y: 15 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true }}
-                            className="heading-md mb-6"
-                        >
-                            Happening This Weekend
-                        </motion.h2>
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                            {happeningNow.map((w, i) => (
-                                <WorkshopCard key={w.id + "-hw"} workshop={w} index={i} />
-                            ))}
+                    {error && (
+                        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-inter mb-5">
+                            {error}
                         </div>
-                    </section>
-                )}
+                    )}
 
-                {/* New on the Platform */}
-                {newOnPlatform.length > 0 && (
-                    <section className="section-padding mt-16">
-                        <motion.h2
-                            initial={{ opacity: 0, y: 15 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true }}
-                            className="heading-md mb-6"
-                        >
-                            New on the Platform
-                        </motion.h2>
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                            {newOnPlatform.map((w, i) => (
-                                <WorkshopCard key={w.id + "-np"} workshop={w} index={i} />
-                            ))}
+                    {!loading && workshops.length === 0 && !error && (
+                        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 text-center">
+                            <h2 className="heading-sm mb-2">No workshops match your filters</h2>
+                            <p className="text-body text-dark-muted mb-6">
+                                Try broadening your search or resetting filters.
+                            </p>
+                            <button onClick={clearFilters} className="btn-primary">
+                                Reset Filters
+                            </button>
                         </div>
-                    </section>
-                )}
+                    )}
+
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                        {workshops.map((workshop, index) => (
+                            <WorkshopCard
+                                key={`${workshop.id}-${index}`}
+                                workshop={workshop}
+                                index={index}
+                            />
+                        ))}
+                    </div>
+
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-center gap-3 mt-10">
+                            <button
+                                onClick={() =>
+                                    pushFilters({
+                                        page: Math.max(1, parsedQuery.page - 1),
+                                    })
+                                }
+                                disabled={parsedQuery.page <= 1}
+                                className="btn-secondary !py-2 !px-4 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                Previous
+                            </button>
+                            <span className="text-sm font-inter text-dark-muted">
+                                Page {parsedQuery.page} of {totalPages}
+                            </span>
+                            <button
+                                onClick={() =>
+                                    pushFilters({
+                                        page: Math.min(totalPages, parsedQuery.page + 1),
+                                    })
+                                }
+                                disabled={parsedQuery.page >= totalPages}
+                                className="btn-secondary !py-2 !px-4 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    )}
+                </section>
             </div>
 
             <Footer />

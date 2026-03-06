@@ -25,6 +25,7 @@ import {
     Youtube,
     Globe,
     ExternalLink,
+    Loader2,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -40,23 +41,85 @@ export default function WorkshopDetailPage({
 }) {
     const { id } = params;
     const router = useRouter();
-    const { user } = useAuth();
-    const workshop = mockWorkshops.find((w) => w.id === id) || mockWorkshops[0];
+    const { user, session } = useAuth();
+    const workshop = mockWorkshops.find((w) => w.id === id);
     const [guests, setGuests] = useState(2);
     const [activeImage, setActiveImage] = useState(0);
     const [isSaved, setIsSaved] = useState(false);
     const [showVideo, setShowVideo] = useState(false);
+    const [bookingLoading, setBookingLoading] = useState(false);
+    const [holdError, setHoldError] = useState<string | null>(null);
+
+    if (!workshop) {
+        return (
+            <main className="min-h-screen bg-cream">
+                <Navbar />
+                <div className="pt-32 pb-20 section-padding text-center">
+                    <h1 className="heading-lg mb-3">Workshop not found</h1>
+                    <p className="text-body text-dark-muted mb-8">
+                        This workshop may have been removed or the link is incorrect.
+                    </p>
+                    <Link href="/explore" className="btn-primary">
+                        Back to Explore
+                    </Link>
+                </div>
+                <Footer />
+                <MobileNav />
+            </main>
+        );
+    }
 
     const serviceFee = 99;
     const subtotal = workshop.price * guests;
     const total = subtotal + serviceFee;
 
-    const handleBooking = () => {
+    const handleBooking = async () => {
+        setHoldError(null);
         if (!user) {
-            router.push(`/auth/login?redirect=/workshop/${workshop.id}`);
+            const redirectPath = encodeURIComponent(`/workshop/${workshop.id}`);
+            router.push(`/auth/login?redirect=${redirectPath}`);
             return;
         }
-        router.push(`/booking?workshop=${workshop.id}&guests=${guests}`);
+
+        if (!session?.access_token) {
+            setHoldError("Your session expired. Please log in again.");
+            return;
+        }
+
+        setBookingLoading(true);
+        try {
+            const response = await fetch("/api/bookings/hold", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                    workshopId: workshop.id,
+                    guests,
+                }),
+            });
+
+            const result = await response.json();
+            if (!response.ok) {
+                setHoldError(result.error || "Unable to reserve seats right now.");
+                return;
+            }
+
+            const holdId = result?.hold?.id;
+            if (!holdId) {
+                setHoldError("Seat hold was created but could not be verified.");
+                return;
+            }
+
+            router.push(
+                `/booking?workshop=${workshop.id}&guests=${guests}&hold=${holdId}`
+            );
+        } catch {
+            setHoldError("Unable to reserve seats. Please try again.");
+        } finally {
+            setBookingLoading(false);
+        }
     };
 
     return (
@@ -183,6 +246,7 @@ export default function WorkshopDetailPage({
                                     >
                                         <iframe
                                             src={workshop.videoUrl}
+                                            title={`${workshop.title} video`}
                                             className="w-full h-full"
                                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                             allowFullScreen
@@ -501,9 +565,19 @@ export default function WorkshopDetailPage({
                                 {/* Reserve CTA */}
                                 <button
                                     onClick={handleBooking}
-                                    className="btn-primary w-full text-center !py-4 text-base"
+                                    disabled={bookingLoading}
+                                    className="btn-primary w-full text-center !py-4 text-base disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
-                                    {user ? "Reserve Spot →" : "Log in to Book →"}
+                                    {bookingLoading ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Reserving...
+                                        </>
+                                    ) : user ? (
+                                        "Reserve Spot →"
+                                    ) : (
+                                        "Log in to Book →"
+                                    )}
                                 </button>
 
                                 <p className="text-center text-xs font-inter text-dark-muted mt-3">
@@ -511,6 +585,11 @@ export default function WorkshopDetailPage({
                                         ? "You won't be charged yet."
                                         : "You need to be logged in to book."}
                                 </p>
+                                {holdError && (
+                                    <p className="text-center text-xs font-inter text-red-600 mt-2">
+                                        {holdError}
+                                    </p>
+                                )}
 
                                 {/* Trust badges */}
                                 <div className="flex items-center justify-center gap-5 mt-5 pt-4 border-t border-gray-100">
@@ -543,11 +622,26 @@ export default function WorkshopDetailPage({
                     </div>
                     <button
                         onClick={handleBooking}
-                        className="btn-primary !py-3 !px-8"
+                        disabled={bookingLoading}
+                        className="btn-primary !py-3 !px-8 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                        {user ? "Book My Spot" : "Log in to Book"}
+                        {bookingLoading ? (
+                            <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Reserving
+                            </>
+                        ) : user ? (
+                            "Book My Spot"
+                        ) : (
+                            "Log in to Book"
+                        )}
                     </button>
                 </div>
+                {holdError && (
+                    <p className="text-center text-xs font-inter text-red-600 mt-2">
+                        {holdError}
+                    </p>
+                )}
             </div>
 
             <Footer />

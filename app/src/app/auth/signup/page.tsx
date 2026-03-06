@@ -3,13 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Loader2, AlertCircle, CheckCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 export default function SignupPage() {
-    const router = useRouter();
     const { signUp, signInWithGoogle } = useAuth();
     const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");
@@ -37,6 +35,14 @@ export default function SignupPage() {
         } else {
             setSuccess(true);
             setLoading(false);
+        }
+    };
+
+    const handleGoogleSignIn = async () => {
+        setError(null);
+        const { error: oauthError } = await signInWithGoogle("/");
+        if (oauthError) {
+            setError(oauthError);
         }
     };
 
@@ -194,9 +200,9 @@ export default function SignupPage() {
                             />
                             <span className="text-sm font-inter text-dark-muted leading-snug">
                                 I agree to the{" "}
-                                <Link href="#" className="text-terracotta hover:underline">Terms of Service</Link>{" "}
+                                <Link href="/legal/terms" className="text-terracotta hover:underline">Terms of Service</Link>{" "}
                                 and{" "}
-                                <Link href="#" className="text-terracotta hover:underline">Privacy Policy</Link>
+                                <Link href="/legal/privacy" className="text-terracotta hover:underline">Privacy Policy</Link>
                             </span>
                         </label>
 
@@ -228,7 +234,7 @@ export default function SignupPage() {
                     </div>
 
                     <button
-                        onClick={signInWithGoogle}
+                        onClick={handleGoogleSignIn}
                         className="w-full flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-xl py-3.5 text-sm font-inter font-medium text-dark hover:border-terracotta/40 transition-colors"
                     >
                         <svg className="w-5 h-5" viewBox="0 0 24 24">

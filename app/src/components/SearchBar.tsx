@@ -1,9 +1,37 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Search, Calendar, MapPin, ArrowRight } from "lucide-react";
+import { categories } from "@/lib/data";
 
-export default function SearchBar() {
+interface SearchBarProps {
+    selectedCategoryId?: string;
+}
+
+export default function SearchBar({ selectedCategoryId = "trending" }: SearchBarProps) {
+    const router = useRouter();
+    const [query, setQuery] = useState("");
+    const [date, setDate] = useState("");
+    const [city, setCity] = useState("Pune");
+
+    const selectedCategory = useMemo(() => {
+        const matched = categories.find((item) => item.id === selectedCategoryId);
+        if (!matched || matched.id === "trending") return "";
+        return matched.label;
+    }, [selectedCategoryId]);
+
+    const handleSearch = () => {
+        const params = new URLSearchParams();
+        if (query.trim()) params.set("q", query.trim());
+        if (date) params.set("dateFrom", date);
+        if (city) params.set("city", city);
+        if (selectedCategory) params.set("category", selectedCategory);
+        params.set("page", "1");
+        router.push(`/explore?${params.toString()}`);
+    };
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -23,6 +51,8 @@ export default function SearchBar() {
                             <input
                                 type="text"
                                 placeholder="Pottery, Jazz, Hiking..."
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
                                 className="w-full bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted/60"
                             />
                         </div>
@@ -36,8 +66,10 @@ export default function SearchBar() {
                                 When
                             </label>
                             <input
-                                type="text"
+                                type="date"
                                 placeholder="Pick a date"
+                                value={date}
+                                onChange={(e) => setDate(e.target.value)}
                                 className="w-full bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted/60"
                             />
                         </div>
@@ -50,7 +82,11 @@ export default function SearchBar() {
                             <label className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-0.5">
                                 Where
                             </label>
-                            <select className="w-full bg-transparent outline-none text-sm font-inter text-dark appearance-none cursor-pointer">
+                            <select
+                                value={city}
+                                onChange={(e) => setCity(e.target.value)}
+                                className="w-full bg-transparent outline-none text-sm font-inter text-dark appearance-none cursor-pointer"
+                            >
                                 <option>Pune</option>
                                 <option>Mumbai</option>
                                 <option>Bangalore</option>
@@ -61,7 +97,10 @@ export default function SearchBar() {
 
                     {/* Search Button */}
                     <div className="flex items-center px-2">
-                        <button className="btn-primary w-full sm:w-auto !rounded-xl !px-6">
+                        <button
+                            onClick={handleSearch}
+                            className="btn-primary w-full sm:w-auto !rounded-xl !px-6"
+                        >
                             <span className="hidden sm:inline">Find Fun</span>
                             <ArrowRight className="w-5 h-5" />
                         </button>

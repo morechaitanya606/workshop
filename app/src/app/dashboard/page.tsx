@@ -1,41 +1,146 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
     CalendarDays,
     Clock,
     MapPin,
-    Calendar,
-    Heart,
     Settings,
     LogOut,
-    ChevronRight,
-    Star,
-    ExternalLink,
     Ticket,
+    Loader2,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import MobileNav from "@/components/MobileNav";
-import { mockWorkshops } from "@/lib/data";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 
-const sidebarItems = [
+type BookingItem = {
+    id: string;
+    guests: number;
+    total: number;
+    status: string;
+    created_at: string;
+    workshop?: {
+        id: string;
+        title: string;
+        date: string;
+        time: string;
+        duration?: string;
+        location: string;
+        city: string;
+        cover_image: string;
+        host_name?: string;
+    };
+};
+
+const tabs = [
     { id: "upcoming", label: "Upcoming Sessions", icon: CalendarDays },
     { id: "past", label: "Past Workshops", icon: Clock },
-    { id: "saved", label: "Saved Inspiration", icon: Heart },
     { id: "settings", label: "Account Settings", icon: Settings },
 ];
 
 export default function DashboardPage() {
+    const router = useRouter();
+    const { user, session, loading, signOut } = useAuth();
     const [activeTab, setActiveTab] = useState("upcoming");
-    const [filterType, setFilterType] = useState("all");
+    const [bookings, setBookings] = useState<BookingItem[]>([]);
+    const [fetchingBookings, setFetchingBookings] = useState(false);
+    const [bookingsError, setBookingsError] = useState<string | null>(null);
 
-    const upcomingWorkshops = mockWorkshops.slice(0, 2);
-    const pastWorkshops = mockWorkshops.slice(2, 5);
-    const savedWorkshops = mockWorkshops.slice(5);
+    useEffect(() => {
+        if (!loading && !user) {
+            const redirectPath = encodeURIComponent("/dashboard");
+            router.push(`/auth/login?redirect=${redirectPath}`);
+        }
+    }, [loading, user, router]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadBookings = async () => {
+            if (!user || !session?.access_token) return;
+
+            setFetchingBookings(true);
+            setBookingsError(null);
+            try {
+                const response = await fetch("/api/bookings", {
+                    headers: {
+                        Authorization: `Bearer ${session.access_token}`,
+                    },
+                    cache: "no-store",
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.error || "Failed to load bookings.");
+                }
+                if (!cancelled) {
+                    setBookings((result.data || []) as BookingItem[]);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    setBookingsError(
+                        error instanceof Error
+                            ? error.message
+                            : "Unable to load your bookings."
+                    );
+                }
+            } finally {
+                if (!cancelled) {
+                    setFetchingBookings(false);
+                }
+            }
+        };
+
+        loadBookings();
+        return () => {
+            cancelled = true;
+        };
+    }, [user, session]);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const upcomingBookings = useMemo(
+        () =>
+            bookings.filter(
+                (booking) =>
+                    booking.workshop?.date && booking.workshop.date >= today
+            ),
+        [bookings, today]
+    );
+    const pastBookings = useMemo(
+        () =>
+            bookings.filter(
+                (booking) =>
+                    booking.workshop?.date && booking.workshop.date < today
+            ),
+        [bookings, today]
+    );
+
+    const userName =
+        user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Creator";
+    const memberSince = user?.created_at
+        ? new Date(user.created_at).getFullYear()
+        : new Date().getFullYear();
+    const avatarUrl =
+        user?.user_metadata?.avatar_url || "/images/workshops/IMG-20260306-WA0006.jpg";
+
+    const handleSignOut = async () => {
+        await signOut();
+        router.push("/");
+    };
+
+    if (loading || !user) {
+        return (
+            <main className="min-h-screen flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-terracotta" />
+            </main>
+        );
+    }
+
+    const activeList = activeTab === "past" ? pastBookings : upcomingBookings;
 
     return (
         <main className="min-h-screen pb-20 md:pb-0 bg-cream">
@@ -44,7 +149,6 @@ export default function DashboardPage() {
             <div className="pt-20 sm:pt-24">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="grid grid-cols-1 lg:grid-cols-[240px,1fr] gap-8">
-                        {/* ═══ SIDEBAR ═══ */}
                         <motion.aside
                             initial={{ opacity: 0, x: -30 }}
                             animate={{ opacity: 1, x: 0 }}
@@ -52,53 +156,47 @@ export default function DashboardPage() {
                             className="hidden lg:block"
                         >
                             <div className="sticky top-28">
-                                {/* User */}
                                 <div className="text-center mb-8">
                                     <div className="relative w-20 h-20 mx-auto mb-3 rounded-full overflow-hidden ring-3 ring-terracotta/20">
-                                        <Image
-                                            src="/images/workshops/IMG-20260306-WA0006.jpg"
-                                            alt="Alex Rivera"
-                                            fill
-                                            className="object-cover"
-                                        />
+                                        <Image src={avatarUrl} alt={userName} fill className="object-cover" />
                                     </div>
-                                    <h3 className="font-playfair text-lg font-bold text-dark">
-                                        Alex Rivera
-                                    </h3>
+                                    <h3 className="font-playfair text-lg font-bold text-dark">{userName}</h3>
                                     <p className="text-xs font-inter text-dark-muted mt-0.5">
-                                        Member since 2023
+                                        Member since {memberSince}
                                     </p>
                                 </div>
 
-                                {/* Navigation */}
                                 <nav className="space-y-1">
-                                    {sidebarItems.map((item) => {
-                                        const Icon = item.icon;
-                                        const isActive = activeTab === item.id;
+                                    {tabs.map((tab) => {
+                                        const Icon = tab.icon;
+                                        const isActive = activeTab === tab.id;
                                         return (
                                             <button
-                                                key={item.id}
-                                                onClick={() => setActiveTab(item.id)}
-                                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-inter font-medium transition-all duration-300 ${isActive
+                                                key={tab.id}
+                                                onClick={() => setActiveTab(tab.id)}
+                                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-inter font-medium transition-all duration-300 ${
+                                                    isActive
                                                         ? "bg-terracotta/10 text-terracotta"
                                                         : "text-dark-muted hover:bg-clay/20 hover:text-dark"
-                                                    }`}
+                                                }`}
                                             >
                                                 <Icon className="w-5 h-5" />
-                                                {item.label}
+                                                {tab.label}
                                             </button>
                                         );
                                     })}
                                 </nav>
 
-                                <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-inter font-medium text-dark-muted hover:text-terracotta hover:bg-terracotta/5 transition-all duration-300 mt-8 border border-gray-200">
+                                <button
+                                    onClick={handleSignOut}
+                                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-inter font-medium text-dark-muted hover:text-terracotta hover:bg-terracotta/5 transition-all duration-300 mt-8 border border-gray-200"
+                                >
                                     <LogOut className="w-5 h-5" />
                                     LOG OUT
                                 </button>
                             </div>
                         </motion.aside>
 
-                        {/* ═══ MAIN CONTENT ═══ */}
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -111,112 +209,100 @@ export default function DashboardPage() {
                                 <h1 className="heading-lg">
                                     {activeTab === "upcoming" && "Your Upcoming Sessions"}
                                     {activeTab === "past" && "Past Workshops"}
-                                    {activeTab === "saved" && "Saved Inspiration"}
                                     {activeTab === "settings" && "Account Settings"}
                                 </h1>
                             </div>
 
-                            {/* Mobile tabs */}
                             <div className="flex gap-2 mb-8 overflow-x-auto scrollbar-hide lg:hidden">
-                                {sidebarItems.map((item) => (
+                                {tabs.map((tab) => (
                                     <button
-                                        key={item.id}
-                                        onClick={() => setActiveTab(item.id)}
-                                        className={`px-4 py-2 rounded-full text-sm font-inter font-medium whitespace-nowrap transition-all ${activeTab === item.id
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`px-4 py-2 rounded-full text-sm font-inter font-medium whitespace-nowrap transition-all ${
+                                            activeTab === tab.id
                                                 ? "bg-terracotta text-white"
                                                 : "bg-white text-dark-secondary border border-gray-200"
-                                            }`}
+                                        }`}
                                     >
-                                        {item.label}
+                                        {tab.label}
                                     </button>
                                 ))}
                             </div>
 
-                            {/* Filter Pills */}
-                            {activeTab === "upcoming" && (
-                                <div className="flex items-center gap-2 mb-8">
-                                    {["all", "workshops", "online"].map((type) => (
-                                        <button
-                                            key={type}
-                                            onClick={() => setFilterType(type)}
-                                            className={`px-5 py-2 rounded-full text-sm font-inter font-medium capitalize transition-all duration-300 ${filterType === type
-                                                    ? "bg-dark text-white"
-                                                    : "bg-white text-dark-secondary border border-gray-200 hover:border-dark"
-                                                }`}
-                                        >
-                                            {type}
-                                        </button>
-                                    ))}
+                            {bookingsError && activeTab !== "settings" && (
+                                <div className="mb-6 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-inter">
+                                    {bookingsError}
                                 </div>
                             )}
 
-                            {/* ─── Upcoming Sessions ─── */}
-                            {activeTab === "upcoming" && (
+                            {activeTab !== "settings" && fetchingBookings && (
+                                <div className="flex items-center gap-2 text-sm font-inter text-dark-muted">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Loading your bookings...
+                                </div>
+                            )}
+
+                            {activeTab !== "settings" && !fetchingBookings && activeList.length === 0 && (
+                                <div className="bg-white rounded-2xl p-8 shadow-soft text-center">
+                                    <h2 className="heading-sm mb-2">No bookings yet</h2>
+                                    <p className="text-body text-dark-muted mb-6">
+                                        {activeTab === "upcoming"
+                                            ? "You have no upcoming bookings right now."
+                                            : "You have no past bookings yet."}
+                                    </p>
+                                    <button
+                                        onClick={() => router.push("/explore")}
+                                        className="btn-primary"
+                                    >
+                                        Explore Workshops
+                                    </button>
+                                </div>
+                            )}
+
+                            {activeTab !== "settings" && !fetchingBookings && activeList.length > 0 && (
                                 <div className="space-y-6">
-                                    {upcomingWorkshops.map((w, i) => (
+                                    {activeList.map((booking, index) => (
                                         <motion.div
-                                            key={w.id}
+                                            key={booking.id}
                                             initial={{ opacity: 0, y: 20 }}
                                             animate={{ opacity: 1, y: 0 }}
-                                            transition={{ delay: i * 0.1 }}
+                                            transition={{ delay: index * 0.08 }}
                                             className="bg-white rounded-2xl shadow-soft overflow-hidden"
                                         >
                                             <div className="flex flex-col sm:flex-row">
-                                                {/* Date column */}
-                                                <div className="hidden sm:flex flex-col items-center justify-center px-6 py-4 border-r border-gray-100">
-                                                    <span className="font-playfair text-3xl font-bold text-terracotta">
-                                                        {new Date(w.date).getDate()}
-                                                    </span>
-                                                    <span className="text-xs font-inter font-bold uppercase text-terracotta">
-                                                        {new Date(w.date).toLocaleString("default", {
-                                                            month: "short",
-                                                        })}
-                                                    </span>
-                                                </div>
-
-                                                {/* Image */}
                                                 <div className="relative w-full sm:w-56 h-48 sm:h-auto flex-shrink-0">
                                                     <Image
-                                                        src={w.coverImage}
-                                                        alt={w.title}
+                                                        src={booking.workshop?.cover_image || "/images/workshops/IMG-20260306-WA0006.jpg"}
+                                                        alt={booking.workshop?.title || "Workshop"}
                                                         fill
                                                         className="object-cover"
                                                     />
-                                                    <div className="sm:hidden absolute top-3 left-3 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg">
-                                                        <span className="text-xs font-inter font-bold text-terracotta">
-                                                            IN 3 DAYS
-                                                        </span>
-                                                    </div>
                                                 </div>
-
-                                                {/* Content */}
                                                 <div className="flex-1 p-5 sm:p-6">
-                                                    <span className="hidden sm:inline-block text-[10px] font-inter font-bold bg-terracotta/10 text-terracotta px-2.5 py-1 rounded-full uppercase tracking-wider mb-3">
-                                                        In 3 Days
-                                                    </span>
                                                     <h3 className="font-playfair text-xl font-bold text-dark mb-1">
-                                                        {w.title}
+                                                        {booking.workshop?.title || "Workshop"}
                                                     </h3>
                                                     <p className="text-sm font-inter text-dark-muted mb-4">
-                                                        with {w.hostName}
+                                                        Booking #{booking.id.slice(0, 8)}
                                                     </p>
-
                                                     <div className="flex flex-wrap gap-3 mb-5">
                                                         <span className="inline-flex items-center gap-1.5 text-xs font-inter text-dark-secondary bg-cream-200/50 px-3 py-1.5 rounded-lg">
                                                             <Clock className="w-3.5 h-3.5 text-terracotta" />
-                                                            {w.time} - {w.duration}
+                                                            {booking.workshop?.time || "--:--"} · {booking.workshop?.duration || "Session"}
+                                                        </span>
+                                                        <span className="inline-flex items-center gap-1.5 text-xs font-inter text-dark-secondary bg-cream-200/50 px-3 py-1.5 rounded-lg">
+                                                            <CalendarDays className="w-3.5 h-3.5 text-terracotta" />
+                                                            {booking.workshop?.date ? formatDate(booking.workshop.date) : "Date TBA"}
                                                         </span>
                                                         <span className="inline-flex items-center gap-1.5 text-xs font-inter text-dark-secondary bg-cream-200/50 px-3 py-1.5 rounded-lg">
                                                             <MapPin className="w-3.5 h-3.5 text-terracotta" />
-                                                            {w.location}, {w.city}
+                                                            {booking.workshop?.location || "Location"}{booking.workshop?.city ? `, ${booking.workshop.city}` : ""}
                                                         </span>
                                                     </div>
-
                                                     <div className="flex items-center justify-between">
-                                                        <button className="inline-flex items-center gap-1.5 text-sm font-inter text-dark-muted hover:text-terracotta transition-colors">
-                                                            <Calendar className="w-4 h-4" />
-                                                            Add to Calendar
-                                                        </button>
+                                                        <span className="text-sm font-inter font-semibold text-dark">
+                                                            {booking.guests} guests · {formatCurrency(booking.total)}
+                                                        </span>
                                                         <button className="btn-primary !py-2.5 !px-6 text-sm">
                                                             <Ticket className="w-4 h-4" />
                                                             View Ticket
@@ -229,81 +315,6 @@ export default function DashboardPage() {
                                 </div>
                             )}
 
-                            {/* ─── Past Workshops ─── */}
-                            {activeTab === "past" && (
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                    {pastWorkshops.map((w, i) => (
-                                        <motion.div
-                                            key={w.id}
-                                            initial={{ opacity: 0, y: 20 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            transition={{ delay: i * 0.1 }}
-                                            className="bg-white rounded-2xl overflow-hidden shadow-soft"
-                                        >
-                                            <div className="relative aspect-[4/3]">
-                                                <Image
-                                                    src={w.coverImage}
-                                                    alt={w.title}
-                                                    fill
-                                                    className="object-cover"
-                                                    loading="lazy"
-                                                />
-                                            </div>
-                                            <div className="p-4">
-                                                <h4 className="font-playfair font-semibold text-dark text-sm leading-snug mb-2 line-clamp-2">
-                                                    {w.title}
-                                                </h4>
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-xs font-inter text-dark-muted">
-                                                        {formatDate(w.date)}
-                                                    </span>
-                                                    <button className="text-xs font-inter font-semibold text-terracotta bg-terracotta/10 px-3 py-1 rounded-full hover:bg-terracotta/20 transition-colors">
-                                                        Review
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </motion.div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* ─── Saved Workshops ─── */}
-                            {activeTab === "saved" && (
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                    {savedWorkshops.map((w, i) => (
-                                        <motion.div
-                                            key={w.id}
-                                            initial={{ opacity: 0, y: 20 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            transition={{ delay: i * 0.1 }}
-                                            className="bg-white rounded-2xl overflow-hidden shadow-soft group"
-                                        >
-                                            <div className="relative aspect-[4/3]">
-                                                <Image
-                                                    src={w.coverImage}
-                                                    alt={w.title}
-                                                    fill
-                                                    className="object-cover"
-                                                    loading="lazy"
-                                                />
-                                                <button className="absolute top-3 right-3 p-2 bg-white/90 rounded-full">
-                                                    <Heart className="w-4 h-4 text-terracotta fill-terracotta" />
-                                                </button>
-                                            </div>
-                                            <div className="p-4">
-                                                <h4 className="font-playfair font-semibold text-dark text-sm leading-snug mb-1 line-clamp-2">
-                                                    {w.title}
-                                                </h4>
-                                                <p className="text-sm font-inter font-bold text-terracotta">
-                                                    {formatCurrency(w.price)}
-                                                </p>
-                                            </div>
-                                        </motion.div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* ─── Settings ─── */}
                             {activeTab === "settings" && (
                                 <div className="bg-white rounded-2xl shadow-soft p-6 max-w-2xl">
                                     <div className="space-y-6">
@@ -313,7 +324,7 @@ export default function DashboardPage() {
                                             </label>
                                             <input
                                                 type="text"
-                                                defaultValue="Alex Rivera"
+                                                defaultValue={userName}
                                                 className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
                                             />
                                         </div>
@@ -323,19 +334,9 @@ export default function DashboardPage() {
                                             </label>
                                             <input
                                                 type="email"
-                                                defaultValue="alex@example.com"
+                                                defaultValue={user.email || ""}
                                                 className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
                                             />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                                City
-                                            </label>
-                                            <select className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors">
-                                                <option>Pune</option>
-                                                <option>Mumbai</option>
-                                                <option>Bangalore</option>
-                                            </select>
                                         </div>
                                         <button className="btn-primary !py-3">
                                             Save Changes
