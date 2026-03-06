@@ -106,7 +106,7 @@ export default function HomePage() {
                         className="object-cover"
                         sizes="100vw"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/30 to-black/60" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/80" />
                 </motion.div>
 
                 {/* Hero Content */}
@@ -137,7 +137,7 @@ export default function HomePage() {
                         >
                             A Better Weekend
                             <br />
-                            <span className="text-gradient bg-gradient-to-r from-terracotta-300 to-clay">
+                            <span className="text-terracotta-300">
                                 Awaits
                             </span>
                         </motion.h1>
