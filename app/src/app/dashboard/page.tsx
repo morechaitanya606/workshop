@@ -45,7 +45,7 @@ const tabs = [
 
 export default function DashboardPage() {
     const router = useRouter();
-    const { user, session, loading, signOut } = useAuth();
+    const { user, session, role, roleLoading, loading, signOut } = useAuth();
     const [activeTab, setActiveTab] = useState("upcoming");
     const [bookings, setBookings] = useState<BookingItem[]>([]);
     const [fetchingBookings, setFetchingBookings] = useState(false);
@@ -59,10 +59,18 @@ export default function DashboardPage() {
     }, [loading, user, router]);
 
     useEffect(() => {
+        if (!loading && !roleLoading && user && role !== "admin") {
+            router.push("/");
+        }
+    }, [loading, roleLoading, user, role, router]);
+
+    useEffect(() => {
         let cancelled = false;
 
         const loadBookings = async () => {
-            if (!user || !session?.access_token) return;
+            if (!user || !session?.access_token || roleLoading || role !== "admin") {
+                return;
+            }
 
             setFetchingBookings(true);
             setBookingsError(null);
@@ -99,7 +107,7 @@ export default function DashboardPage() {
         return () => {
             cancelled = true;
         };
-    }, [user, session]);
+    }, [role, roleLoading, user, session]);
 
     const today = new Date().toISOString().slice(0, 10);
     const upcomingBookings = useMemo(
@@ -125,19 +133,23 @@ export default function DashboardPage() {
         ? new Date(user.created_at).getFullYear()
         : new Date().getFullYear();
     const avatarUrl =
-        user?.user_metadata?.avatar_url || "/images/workshops/IMG-20260306-WA0006.jpg";
+        user?.user_metadata?.avatar_url || "/images/workshops/IMG-20260306-WA0006.webp";
 
     const handleSignOut = async () => {
         await signOut();
         router.push("/");
     };
 
-    if (loading || !user) {
+    if (loading || roleLoading || !user) {
         return (
             <main className="min-h-screen flex items-center justify-center">
                 <Loader2 className="w-8 h-8 animate-spin text-terracotta" />
             </main>
         );
+    }
+
+    if (role !== "admin") {
+        return null;
     }
 
     const activeList = activeTab === "past" ? pastBookings : upcomingBookings;
@@ -174,11 +186,10 @@ export default function DashboardPage() {
                                             <button
                                                 key={tab.id}
                                                 onClick={() => setActiveTab(tab.id)}
-                                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-inter font-medium transition-all duration-300 ${
-                                                    isActive
+                                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-inter font-medium transition-all duration-300 ${isActive
                                                         ? "bg-terracotta/10 text-terracotta"
                                                         : "text-dark-muted hover:bg-clay/20 hover:text-dark"
-                                                }`}
+                                                    }`}
                                             >
                                                 <Icon className="w-5 h-5" />
                                                 {tab.label}
@@ -218,11 +229,10 @@ export default function DashboardPage() {
                                     <button
                                         key={tab.id}
                                         onClick={() => setActiveTab(tab.id)}
-                                        className={`px-4 py-2 rounded-full text-sm font-inter font-medium whitespace-nowrap transition-all ${
-                                            activeTab === tab.id
+                                        className={`px-4 py-2 rounded-full text-sm font-inter font-medium whitespace-nowrap transition-all ${activeTab === tab.id
                                                 ? "bg-terracotta text-white"
                                                 : "bg-white text-dark-secondary border border-gray-200"
-                                        }`}
+                                            }`}
                                     >
                                         {tab.label}
                                     </button>
@@ -272,7 +282,7 @@ export default function DashboardPage() {
                                             <div className="flex flex-col sm:flex-row">
                                                 <div className="relative w-full sm:w-56 h-48 sm:h-auto flex-shrink-0">
                                                     <Image
-                                                        src={booking.workshop?.cover_image || "/images/workshops/IMG-20260306-WA0006.jpg"}
+                                                        src={booking.workshop?.cover_image || "/images/workshops/IMG-20260306-WA0006.webp"}
                                                         alt={booking.workshop?.title || "Workshop"}
                                                         fill
                                                         className="object-cover"

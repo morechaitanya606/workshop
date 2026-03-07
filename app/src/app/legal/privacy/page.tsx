@@ -4,7 +4,7 @@ export default function PrivacyPage() {
     return (
         <StaticPage
             title="Privacy Policy"
-            description="How OnlyWorkshop collects, uses, and protects your data."
+            description="How Only Workshop collects, uses, and protects your data."
         >
             <section>
                 <h2 className="heading-sm mb-2">Data We Collect</h2>

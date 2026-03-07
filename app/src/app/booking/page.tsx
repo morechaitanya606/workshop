@@ -248,7 +248,7 @@ function BookingContent() {
                 key: order.keyId,
                 amount: order.amount,
                 currency: order.currency,
-                name: order.name || "OnlyWorkshop",
+                name: order.name || "Only Workshop",
                 description: order.description || workshop.title,
                 order_id: order.id,
                 prefill: order.prefill,
@@ -408,8 +408,8 @@ function BookingContent() {
                                 </div>
                             </div>
                             <div className="flex gap-3 justify-center">
-                                <Link href="/dashboard" className="btn-primary">
-                                    View My Bookings
+                                <Link href="/profile" className="btn-primary">
+                                    View My Tickets
                                 </Link>
                                 <Link href="/explore" className="btn-secondary">
                                     Explore More

@@ -4,9 +4,13 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { User, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./supabase";
 
+type UserRole = "admin" | "user";
+
 interface AuthContextType {
     user: User | null;
     session: Session | null;
+    role: UserRole;
+    roleLoading: boolean;
     loading: boolean;
     signIn: (email: string, password: string) => Promise<{ error: string | null }>;
     signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
@@ -17,6 +21,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
     user: null,
     session: null,
+    role: "user",
+    roleLoading: true,
     loading: true,
     signIn: async () => ({ error: null }),
     signUp: async () => ({ error: null }),
@@ -27,31 +33,82 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [session, setSession] = useState<Session | null>(null);
+    const [role, setRole] = useState<UserRole>("user");
+    const [roleLoading, setRoleLoading] = useState(isSupabaseConfigured);
     const [loading, setLoading] = useState(isSupabaseConfigured);
 
     useEffect(() => {
         if (!isSupabaseConfigured) {
             setLoading(false);
+            setRoleLoading(false);
             return;
         }
 
-        // Get initial session
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            setUser(session?.user ?? null);
+        let cancelled = false;
+        let roleRequestId = 0;
+
+        const loadRole = async (accessToken: string) => {
+            try {
+                const response = await fetch("/api/auth/me", {
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                    },
+                    cache: "no-store",
+                });
+
+                if (!response.ok) {
+                    return "user" as UserRole;
+                }
+
+                const result = await response.json();
+                return result.role === "admin" ? "admin" : "user";
+            } catch {
+                return "user" as UserRole;
+            }
+        };
+
+        const applySession = (nextSession: Session | null) => {
+            setSession(nextSession);
+            setUser(nextSession?.user ?? null);
             setLoading(false);
+
+            if (!nextSession?.access_token) {
+                roleRequestId += 1;
+                setRole("user");
+                setRoleLoading(false);
+                return;
+            }
+
+            const currentRequestId = ++roleRequestId;
+            setRoleLoading(true);
+            void loadRole(nextSession.access_token).then((nextRole) => {
+                if (cancelled || currentRequestId !== roleRequestId) {
+                    return;
+                }
+                setRole(nextRole);
+                setRoleLoading(false);
+            });
+        };
+
+        // Get initial session
+        supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+            if (cancelled) return;
+            applySession(initialSession);
         });
 
         // Listen for auth state changes
         const {
             data: { subscription },
-        } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
-            setUser(session?.user ?? null);
-            setLoading(false);
+        } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+            if (cancelled) return;
+            applySession(nextSession);
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            cancelled = true;
+            roleRequestId += 1;
+            subscription.unsubscribe();
+        };
     }, []);
 
     const signIn = async (email: string, password: string) => {
@@ -91,7 +148,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const safeRedirectPath = redirectPath.startsWith("/") ? redirectPath : "/";
         const { error } = await supabase.auth.signInWithOAuth({
             provider: "google",
-            options: { redirectTo: `${window.location.origin}${safeRedirectPath}` },
+            options: {
+                redirectTo: `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(safeRedirectPath)}`,
+            },
         });
         return { error: error?.message ?? null };
     };
@@ -103,7 +162,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return (
         <AuthContext.Provider
-            value={{ user, session, loading, signIn, signUp, signInWithGoogle, signOut }}
+            value={{
+                user,
+                session,
+                role,
+                roleLoading,
+                loading,
+                signIn,
+                signUp,
+                signInWithGoogle,
+                signOut,
+            }}
         >
             {children}
         </AuthContext.Provider>

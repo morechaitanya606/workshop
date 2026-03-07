@@ -37,9 +37,9 @@ export default function SearchBar({ selectedCategoryId = "trending" }: SearchBar
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full max-w-4xl mx-auto"
+            className="w-full max-w-4xl mx-auto relative z-30"
         >
-            <div className="bg-white rounded-2xl shadow-card p-2 sm:p-3">
+            <div className="bg-white rounded-2xl shadow-card p-2 sm:p-3 relative z-30">
                 <div className="grid grid-cols-1 sm:grid-cols-[1fr,1fr,1fr,auto] gap-2 sm:gap-0">
                     {/* What */}
                     <div className="flex items-center gap-3 px-4 py-3 sm:border-r border-gray-100">
@@ -101,7 +101,7 @@ export default function SearchBar({ selectedCategoryId = "trending" }: SearchBar
                             onClick={handleSearch}
                             className="btn-primary w-full sm:w-auto !rounded-xl !px-6"
                         >
-                            <span className="hidden sm:inline">Find Fun</span>
+                            <span className="hidden sm:inline">Find Experiences</span>
                             <ArrowRight className="w-5 h-5" />
                         </button>
                     </div>

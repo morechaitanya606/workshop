@@ -3,11 +3,29 @@ import type { Workshop } from "@/lib/data";
 import { mockWorkshops } from "@/lib/data";
 import type { WorkshopCreateInput, WorkshopQueryInput } from "@/lib/validators";
 
+const LOCAL_WORKSHOP_IMAGE_PREFIX = "/images/workshops/";
+const LEGACY_LOCAL_IMAGE_EXT_RE = /\.(?:jpe?g|png)(\?.*)?$/i;
+
 function normalizeTimeValue(timeValue: string | null | undefined) {
     if (!timeValue) return "";
     const [h, m] = String(timeValue).split(":");
     if (!h || !m) return String(timeValue);
     return `${h}:${m}`;
+}
+
+function normalizeWorkshopImageUrl(value: unknown) {
+    if (typeof value !== "string") return "";
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+
+    if (
+        trimmed.startsWith(LOCAL_WORKSHOP_IMAGE_PREFIX) &&
+        LEGACY_LOCAL_IMAGE_EXT_RE.test(trimmed)
+    ) {
+        return trimmed.replace(LEGACY_LOCAL_IMAGE_EXT_RE, ".webp$1");
+    }
+
+    return trimmed;
 }
 
 function cleanUrlValue(value: unknown) {
@@ -40,17 +58,19 @@ export function mapWorkshopRowToWorkshop(row: Record<string, unknown>): Workshop
         time: normalizeTimeValue(String(row.time || "")),
         maxSeats: Number(row.max_seats || 0),
         seatsRemaining: Number(row.seats_remaining || 0),
-        coverImage: String(row.cover_image || ""),
+        coverImage: normalizeWorkshopImageUrl(row.cover_image),
         galleryImages: Array.isArray(row.gallery_images)
-            ? (row.gallery_images as string[])
+            ? (row.gallery_images as unknown[])
+                .map((img) => normalizeWorkshopImageUrl(img))
+                .filter((img) => img.length > 0)
             : [],
         videoUrl: cleanUrlValue(row.video_url),
         rating: Number(row.rating || 4.8),
         reviewCount: Number(row.review_count || 0),
         hostName: String(row.host_name || ""),
         hostAvatar:
-            cleanUrlValue(row.host_avatar) ||
-            "/images/workshops/IMG-20260306-WA0006.jpg",
+            normalizeWorkshopImageUrl(cleanUrlValue(row.host_avatar)) ||
+            "/images/workshops/IMG-20260306-WA0006.webp",
         hostBio: String(row.host_bio || ""),
         hostExperience: cleanUrlValue(row.host_experience),
         hostSocialLinks,

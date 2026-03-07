@@ -4,7 +4,7 @@ export default function BlogPage() {
     return (
         <StaticPage
             title="Blog"
-            description="Stories, creator spotlights, and workshop tips from the OnlyWorkshop community."
+            description="Stories, creator spotlights, and workshop tips from the Only Workshop community."
         />
     );
 }

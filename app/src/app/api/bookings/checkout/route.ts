@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
                     amount: Number(order.amount || totalPaise),
                     currency: String(order.currency || PAYMENT_CURRENCY),
                     keyId: getRazorpayKeyId(),
-                    name: "OnlyWorkshop",
+                    name: "Only Workshop",
                     description: workshop.title,
                     prefill: {
                         name: `${payload.firstName} ${payload.lastName}`.trim(),

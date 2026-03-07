@@ -4,7 +4,7 @@ export default function PressPage() {
     return (
         <StaticPage
             title="Press"
-            description="Press resources and media updates for OnlyWorkshop."
+            description="Press resources and media updates for Only Workshop."
         />
     );
 }

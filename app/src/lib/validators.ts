@@ -91,6 +91,23 @@ export const bookingCheckoutSchema = z.object({
 
 export type BookingCheckoutInput = z.infer<typeof bookingCheckoutSchema>;
 
+export const workshopNotificationSchema = z.object({
+    mode: z.enum(["similar", "creator"]),
+});
+
+export type WorkshopNotificationInput = z.infer<
+    typeof workshopNotificationSchema
+>;
+
+export const workshopFeedbackSchema = z.object({
+    rating: z.coerce.number().int().min(1).max(5),
+    comment: z.string().trim().min(3).max(2000),
+    photos: z.array(z.string().url()).optional().default([]),
+    videoUrl: urlOrEmpty.optional(),
+});
+
+export type WorkshopFeedbackInput = z.infer<typeof workshopFeedbackSchema>;
+
 export const workshopQuerySchema = z.object({
     q: z.string().trim().max(120).optional().default(""),
     category: z.string().trim().max(80).optional().default(""),

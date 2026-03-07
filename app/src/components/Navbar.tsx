@@ -5,12 +5,31 @@ import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Menu, X, LogOut } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
+const SUGGESTIONS = [
+    "Pottery Workshop",
+    "Coffee Brewing",
+    "Resin Art",
+    "Salsa Dancing",
+    "Mixology",
+    "Wine Tasting",
+    "Jazz Event",
+    "Baking Masterclass"
+];
+
 export default function Navbar() {
+    const router = useRouter();
     const [isScrolled, setIsScrolled] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const { user, loading, signOut } = useAuth();
+    const [query, setQuery] = useState("");
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const { user, role, roleLoading, loading, signOut } = useAuth();
+
+    const filteredSuggestions = query
+        ? SUGGESTIONS.filter(s => s.toLowerCase().includes(query.toLowerCase()))
+        : SUGGESTIONS;
 
     useEffect(() => {
         const handleScroll = () => {
@@ -40,27 +59,60 @@ export default function Navbar() {
                             <div className="relative w-9 h-9 rounded-lg overflow-hidden transition-transform duration-300 group-hover:scale-110">
                                 <Image
                                     src="/images/logo-black.jpeg"
-                                    alt="OnlyWorkshop"
+                                    alt="Only Workshop"
                                     fill
                                     className="object-cover"
                                 />
                             </div>
                             <span className="font-playfair text-xl font-bold text-dark hidden sm:block">
-                                OnlyWorkshop
+                                Only Workshop
                             </span>
                         </Link>
 
                         {/* Desktop Search */}
                         <div
-                            className={`hidden md:flex items-center gap-2 bg-white rounded-full px-5 py-2.5 shadow-soft border border-gray-100 max-w-md flex-1 mx-8 transition-all duration-300 ${isScrolled ? "opacity-100" : "opacity-0 pointer-events-none"
+                            className={`hidden md:flex items-center gap-2 bg-white rounded-full px-5 py-2.5 shadow-soft border border-gray-100 max-w-md flex-1 mx-8 transition-all duration-300 relative ${isScrolled ? "opacity-100" : "opacity-0 pointer-events-none"
                                 }`}
                         >
                             <Search className="w-4 h-4 text-dark-muted" />
                             <input
                                 type="text"
                                 placeholder="Search experiences..."
-                                className="flex-1 bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted"
+                                value={query}
+                                onFocus={() => setShowSuggestions(true)}
+                                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                                onChange={(e) => setQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && query.trim()) {
+                                        router.push(`/explore?q=${encodeURIComponent(query.trim())}`);
+                                    }
+                                }}
+                                className="flex-1 w-full bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted"
                             />
+                            {/* Suggestive Dropdown */}
+                            {showSuggestions && filteredSuggestions.length > 0 && (
+                                <div className="absolute top-[100%] mt-2 left-0 w-full bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50 max-h-56 overflow-y-auto">
+                                    <div className="px-4 py-1.5 text-xs font-semibold text-dark-muted uppercase tracking-wider mb-1">
+                                        Suggestive Experiences
+                                    </div>
+                                    {filteredSuggestions.map((suggestion, idx) => (
+                                        <button
+                                            key={idx}
+                                            type="button"
+                                            className="w-full text-left px-4 py-2.5 text-sm font-medium text-dark hover:bg-cream-50 hover:text-terracotta transition-colors flex items-center gap-3"
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={() => {
+                                                setQuery(suggestion);
+                                                setShowSuggestions(false);
+                                                router.push(`/explore?q=${encodeURIComponent(suggestion)}`);
+                                            }}
+                                        >
+                                            <Search className="w-3.5 h-3.5 text-terracotta/50" />
+                                            {suggestion}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         {/* Desktop Nav */}
@@ -71,7 +123,7 @@ export default function Navbar() {
                             >
                                 Explore
                             </Link>
-                            {user && (
+                            {user && !roleLoading && role === "admin" && (
                                 <Link
                                     href="/dashboard"
                                     className="text-sm font-inter font-medium text-dark-secondary hover:text-terracotta transition-colors duration-300"
@@ -94,9 +146,13 @@ export default function Navbar() {
                             )}
                             {user && (
                                 <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 bg-terracotta rounded-full flex items-center justify-center text-white font-inter font-bold text-sm">
+                                    <Link
+                                        href="/profile"
+                                        aria-label="Open profile"
+                                        className="w-9 h-9 bg-terracotta rounded-full flex items-center justify-center text-white font-inter font-bold text-sm hover:opacity-90 transition-opacity"
+                                    >
                                         {userInitial}
-                                    </div>
+                                    </Link>
                                     <button
                                         onClick={signOut}
                                         className="text-sm font-inter font-medium text-dark-muted hover:text-terracotta transition-colors duration-300 flex items-center gap-1"
@@ -136,7 +192,10 @@ export default function Navbar() {
                             {[
                                 { href: "/", label: "Home" },
                                 { href: "/explore", label: "Explore Workshops" },
-                                ...(user ? [{ href: "/dashboard", label: "My Bookings" }] : []),
+                                ...(user ? [{ href: "/profile", label: "Profile" }] : []),
+                                ...(user && !roleLoading && role === "admin"
+                                    ? [{ href: "/dashboard", label: "Dashboard" }]
+                                    : []),
                                 { href: "mailto:hello@onlyworkshop.com", label: "Contact Us" },
                             ].map((link, i) => (
                                 <motion.div

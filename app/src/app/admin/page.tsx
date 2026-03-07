@@ -103,6 +103,12 @@ export default function AdminPage() {
     const [isAdmin, setIsAdmin] = useState(false);
     const [adminWorkshops, setAdminWorkshops] = useState<Workshop[]>(mockWorkshops);
     const [loadingAdminWorkshops, setLoadingAdminWorkshops] = useState(false);
+    const [adminStats, setAdminStats] = useState<{
+        activeWorkshops: number;
+        totalBookedSeats: number;
+        revenue: number;
+        avgRating: string;
+    } | null>(null);
 
     useEffect(() => {
         if (!loading && !user) {
@@ -115,15 +121,29 @@ export default function AdminPage() {
         if (!session?.access_token) return;
         setLoadingAdminWorkshops(true);
         try {
-            const response = await fetch("/api/admin/workshops", {
-                headers: {
-                    Authorization: `Bearer ${session.access_token}`,
-                },
-                cache: "no-store",
-            });
-            const result = await response.json();
-            if (response.ok && Array.isArray(result.data)) {
-                setAdminWorkshops(result.data as Workshop[]);
+            const [workshopsRes, statsRes] = await Promise.all([
+                fetch("/api/admin/workshops", {
+                    headers: { Authorization: `Bearer ${session.access_token}` },
+                    cache: "no-store",
+                }),
+                fetch("/api/admin/stats", {
+                    headers: { Authorization: `Bearer ${session.access_token}` },
+                    cache: "no-store",
+                }),
+            ]);
+
+            if (workshopsRes.ok) {
+                const result = await workshopsRes.json();
+                if (Array.isArray(result.data)) {
+                    setAdminWorkshops(result.data as Workshop[]);
+                }
+            }
+
+            if (statsRes.ok) {
+                const result = await statsRes.json();
+                if (result.stats) {
+                    setAdminStats(result.stats);
+                }
             }
         } finally {
             setLoadingAdminWorkshops(false);
@@ -258,7 +278,7 @@ export default function AdminPage() {
             if (!response.ok) {
                 setSaveError(
                     result.error ||
-                        "Unable to publish workshop. Confirm DB migration is applied."
+                    "Unable to publish workshop. Confirm DB migration is applied."
                 );
                 return;
             }
@@ -280,12 +300,16 @@ export default function AdminPage() {
     const stats = [
         {
             label: "Active Workshops",
-            value: adminWorkshops.length,
+            value: adminStats?.activeWorkshops ?? adminWorkshops.length,
             change: loadingAdminWorkshops ? "Syncing..." : "Live from database",
         },
-        { label: "Total Bookings", value: 342, change: "+18% vs last month" },
-        { label: "Revenue", value: "INR 4,85,000", change: "+24% vs last month" },
-        { label: "Avg Rating", value: "4.8", change: "Consistent" },
+        { label: "Total Seats Booked", value: adminStats?.totalBookedSeats ?? 0, change: "Confirmed bookings" },
+        {
+            label: "Revenue (Actual)",
+            value: formatCurrency(adminStats?.revenue ?? 0),
+            change: "From paid bookings",
+        },
+        { label: "Avg Rating", value: adminStats?.avgRating ?? "–", change: adminStats ? `From ${adminStats.activeWorkshops} workshops` : "Loading..." },
     ];
 
     if (loading || !user || adminRoleLoading) {
@@ -787,25 +811,25 @@ export default function AdminPage() {
                                                 )}
                                             </div>
                                             <div className="flex gap-3">
-                                            <button
-                                                onClick={() => setShowCreateForm(false)}
-                                                className="btn-secondary"
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                onClick={handleSave}
-                                                disabled={saving || !form.title || !form.category || !form.price || !form.hostName}
-                                                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                                            >
-                                                {saving ? (
-                                                    <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
-                                                ) : saved ? (
-                                                    <><Check className="w-4 h-4" /> Saved!</>
-                                                ) : (
-                                                    <>Publish Workshop</>
-                                                )}
-                                            </button>
+                                                <button
+                                                    onClick={() => setShowCreateForm(false)}
+                                                    className="btn-secondary"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={handleSave}
+                                                    disabled={saving || !form.title || !form.category || !form.price || !form.hostName}
+                                                    className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {saving ? (
+                                                        <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
+                                                    ) : saved ? (
+                                                        <><Check className="w-4 h-4" /> Saved!</>
+                                                    ) : (
+                                                        <>Publish Workshop</>
+                                                    )}
+                                                </button>
                                             </div>
                                         </div>
                                     </div>

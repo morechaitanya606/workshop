@@ -49,6 +49,19 @@ function LoginContent() {
             setError(authError);
             setLoading(false);
         } else {
+            // Check role after successful login
+            try {
+                const res = await fetch("/api/auth/me");
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.role === "admin") {
+                        router.push("/admin");
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to check role during login:", err);
+            }
             router.push(redirectPath);
         }
     };
@@ -74,13 +87,13 @@ function LoginContent() {
                         <div className="relative w-10 h-10 rounded-xl overflow-hidden">
                             <Image
                                 src="/images/logo-black.jpeg"
-                                alt="OnlyWorkshop"
+                                alt="Only Workshop"
                                 fill
                                 className="object-cover"
                             />
                         </div>
                         <span className="font-playfair text-2xl font-bold text-dark">
-                            OnlyWorkshop
+                            Only Workshop
                         </span>
                     </Link>
 
@@ -226,7 +239,7 @@ function LoginContent() {
 
             <div className="hidden lg:block w-[45%] relative">
                 <Image
-                    src="/images/background.png"
+                    src="/images/background.webp"
                     alt="Creative workshops"
                     fill
                     className="object-cover"

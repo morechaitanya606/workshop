@@ -3,44 +3,44 @@
 
 export const workshopImages = {
     // Workshop cover and gallery images
-    pottery1: "/images/workshops/IMG_20260306_125435.jpg",
-    pottery2: "/images/workshops/IMG_20260306_125503.jpg",
-    pottery3: "/images/workshops/IMG_20260306_125535.jpg",
-    painting1: "/images/workshops/IMG_20260306_125552.jpg",
-    painting2: "/images/workshops/IMG_20260306_125609.jpg",
-    crafts1: "/images/workshops/IMG_20260306_125622.jpg",
-    crafts2: "/images/workshops/IMG_20260306_125643.jpg",
-    workshop1: "/images/workshops/IMG_20260306_125722.jpg",
-    workshop2: "/images/workshops/IMG_20260306_125743.jpg",
-    workshop3: "/images/workshops/IMG_20260306_125759.jpg",
-    workshop4: "/images/workshops/IMG_20260306_125816.jpg",
-    workshop5: "/images/workshops/IMG_20260306_125836.jpg",
-    workshop6: "/images/workshops/IMG_20260306_125941.jpg",
-    workshop7: "/images/workshops/IMG_20260306_125957.jpg",
-    workshop8: "/images/workshops/IMG_20260306_130025.jpg",
-    workshop9: "/images/workshops/IMG_20260306_130143.jpg",
-    workshop10: "/images/workshops/IMG_20260306_130158.jpg",
-    workshop11: "/images/workshops/IMG_20260306_130217.jpg",
-    workshop12: "/images/workshops/IMG_20260306_130237.jpg",
-    workshop13: "/images/workshops/IMG_20260306_130322.jpg",
-    workshop14: "/images/workshops/IMG_20260306_130407.jpg",
-    workshop15: "/images/workshops/IMG_20260306_130429.jpg",
-    workshop16: "/images/workshops/IMG_20260306_130454.jpg",
-    workshop17: "/images/workshops/IMG_20260306_130534.jpg",
-    workshop18: "/images/workshops/IMG_20260306_130705.jpg",
-    workshop19: "/images/workshops/IMG_20260306_130725.jpg",
-    hero: "/images/background.png",
-    whatsapp1: "/images/workshops/IMG-20260306-WA0006.jpg",
-    whatsapp2: "/images/workshops/IMG-20260306-WA0007.jpg",
-    whatsapp3: "/images/workshops/IMG-20260306-WA0008.jpg",
-    large1: "/images/workshops/1772784515448.jpg",
+    pottery1: "/images/workshops/IMG_20260306_125435.webp",
+    pottery2: "/images/workshops/IMG_20260306_125503.webp",
+    pottery3: "/images/workshops/IMG_20260306_125535.webp",
+    painting1: "/images/workshops/IMG_20260306_125552.webp",
+    painting2: "/images/workshops/IMG_20260306_125609.webp",
+    crafts1: "/images/workshops/IMG_20260306_125622.webp",
+    crafts2: "/images/workshops/IMG_20260306_125643.webp",
+    workshop1: "/images/workshops/IMG_20260306_125722.webp",
+    workshop2: "/images/workshops/IMG_20260306_125743.webp",
+    workshop3: "/images/workshops/IMG_20260306_125759.webp",
+    workshop4: "/images/workshops/IMG_20260306_125816.webp",
+    workshop5: "/images/workshops/IMG_20260306_125836.webp",
+    workshop6: "/images/workshops/IMG_20260306_125941.webp",
+    workshop7: "/images/workshops/IMG_20260306_125957.webp",
+    workshop8: "/images/workshops/IMG_20260306_130025.webp",
+    workshop9: "/images/workshops/IMG_20260306_130143.webp",
+    workshop10: "/images/workshops/IMG_20260306_130158.webp",
+    workshop11: "/images/workshops/IMG_20260306_130217.webp",
+    workshop12: "/images/workshops/IMG_20260306_130237.webp",
+    workshop13: "/images/workshops/IMG_20260306_130322.webp",
+    workshop14: "/images/workshops/IMG_20260306_130407.webp",
+    workshop15: "/images/workshops/IMG_20260306_130429.webp",
+    workshop16: "/images/workshops/IMG_20260306_130454.webp",
+    workshop17: "/images/workshops/IMG_20260306_130534.webp",
+    workshop18: "/images/workshops/IMG_20260306_130705.webp",
+    workshop19: "/images/workshops/IMG_20260306_130725.webp",
+    hero: "/images/background.webp",
+    whatsapp1: "/images/workshops/IMG-20260306-WA0006.webp",
+    whatsapp2: "/images/workshops/IMG-20260306-WA0007.webp",
+    whatsapp3: "/images/workshops/IMG-20260306-WA0008.webp",
+    large1: "/images/workshops/1772784515448.webp",
 };
 
 // Brand assets
 export const brandAssets = {
     logoBlack: "/images/logo-black.jpeg",
     logoWhite: "/images/logo-white.jpeg",
-    background: "/images/background.png",
+    background: "/images/background.webp",
 };
 
 // Mock workshop data
@@ -78,6 +78,8 @@ export interface Workshop {
     };
     whatYouLearn: string[];
     materialsProvided: string[];
+    feedbackHighlight?: string;
+    feedbackAuthor?: string;
     isNew?: boolean;
     isBestseller?: boolean;
 }
@@ -445,6 +447,52 @@ export const mockWorkshops: Workshop[] = [
             "Finished piece to take home",
         ],
         isBestseller: true,
+    },
+    {
+        id: "past-1",
+        title: "Handmade Candle & Fragrance Lab",
+        description:
+            "A cozy, hands-on candle-making evening where participants blended custom fragrances, poured soy wax candles, and learned safe home-studio techniques.",
+        category: "Arts & Crafts",
+        price: 1300,
+        location: "Studio Scent",
+        city: "Pune",
+        duration: "2 hours",
+        date: "2026-02-18",
+        time: "17:30",
+        maxSeats: 18,
+        seatsRemaining: 0,
+        coverImage: workshopImages.workshop18,
+        galleryImages: [
+            workshopImages.workshop18,
+            workshopImages.workshop19,
+            workshopImages.whatsapp2,
+        ],
+        rating: 4.8,
+        reviewCount: 57,
+        hostName: "Meera Kulkarni",
+        hostAvatar: workshopImages.whatsapp3,
+        hostBio:
+            "Fragrance artist and workshop host who blends storytelling with scent design.",
+        hostExperience: "7 years in candle and scent design",
+        hostSocialLinks: {
+            instagram: "https://instagram.com/studioscent.in",
+        },
+        whatYouLearn: [
+            "Fragrance notes and blending basics",
+            "Safe wax melting and pouring",
+            "Wick sizing and cure times",
+            "Packaging and gift finishing",
+        ],
+        materialsProvided: [
+            "Soy wax and fragrance oils",
+            "Glass jars and cotton wicks",
+            "Protective gloves and tools",
+            "One finished candle to take home",
+        ],
+        feedbackHighlight:
+            "I loved blending my own signature scent and the host explained every step clearly. Super relaxing session.",
+        feedbackAuthor: "Ananya P.",
     },
 ];
 

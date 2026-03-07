@@ -4,7 +4,7 @@ export default function TermsPage() {
     return (
         <StaticPage
             title="Terms of Service"
-            description="These terms govern your use of OnlyWorkshop."
+            description="These terms govern your use of Only Workshop."
         >
             <section>
                 <h2 className="heading-sm mb-2">1. Booking and Attendance</h2>
@@ -23,7 +23,7 @@ export default function TermsPage() {
             <section>
                 <h2 className="heading-sm mb-2">3. Liability</h2>
                 <p>
-                    OnlyWorkshop acts as a platform between hosts and attendees. Hosts are
+                    Only Workshop acts as a platform between hosts and attendees. Hosts are
                     responsible for workshop delivery and on-site safety compliance.
                 </p>
             </section>

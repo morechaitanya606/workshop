@@ -4,7 +4,6 @@ import StaticPage from "@/components/StaticPage";
 const links = [
     { href: "/", label: "Home" },
     { href: "/explore", label: "Explore" },
-    { href: "/dashboard", label: "Dashboard" },
     { href: "/admin", label: "Admin" },
     { href: "/auth/login", label: "Login" },
     { href: "/auth/signup", label: "Signup" },
@@ -16,7 +15,7 @@ export default function SitemapPage() {
     return (
         <StaticPage
             title="Sitemap"
-            description="Quick links to the main pages on OnlyWorkshop."
+            description="Quick links to the main pages on Only Workshop."
         >
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {links.map((item) => (
