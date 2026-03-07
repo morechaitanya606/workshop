@@ -32,6 +32,7 @@ import MobileNav from "@/components/MobileNav";
 import type { Workshop } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { isDirectVideoFileUrl } from "@/lib/workshop-media";
 
 export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
     const router = useRouter();
@@ -67,6 +68,7 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
         }
         return workshopDateTime.getTime() < Date.now();
     })();
+    const isDirectVideoFile = isDirectVideoFileUrl(workshop.videoUrl);
     const accessToken = session?.access_token ?? null;
 
     useEffect(() => {
@@ -307,7 +309,16 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
                             {showVideo && workshop.videoUrl && (
                                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4" onClick={() => setShowVideo(false)}>
                                     <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="relative w-full max-w-4xl aspect-video rounded-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                                        <iframe src={workshop.videoUrl} title={`${workshop.title} video`} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                                        {isDirectVideoFile ? (
+                                            <video
+                                                src={workshop.videoUrl}
+                                                className="w-full h-full bg-black"
+                                                controls
+                                                autoPlay
+                                            />
+                                        ) : (
+                                            <iframe src={workshop.videoUrl} title={`${workshop.title} video`} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                                        )}
                                         <button onClick={() => setShowVideo(false)} className="absolute -top-12 right-0 text-white text-sm font-inter hover:text-terracotta transition-colors">Close ×</button>
                                     </motion.div>
                                 </motion.div>

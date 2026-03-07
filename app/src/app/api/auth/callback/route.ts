@@ -50,7 +50,7 @@ export async function GET(request: Request) {
 
                 if (role === "admin") {
                     // Force admin redirect
-                    return NextResponse.redirect(new URL("/admin", request.url));
+                    return NextResponse.redirect(new URL("/admin/dashboard", request.url));
                 }
             }
         } catch (err) {

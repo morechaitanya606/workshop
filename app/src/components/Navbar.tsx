@@ -61,6 +61,7 @@ export default function Navbar() {
                                     src="/images/logo-black.jpeg"
                                     alt="Only Workshop"
                                     fill
+                                    sizes="36px"
                                     className="object-cover"
                                 />
                             </div>
@@ -125,7 +126,7 @@ export default function Navbar() {
                             </Link>
                             {user && !roleLoading && role === "admin" && (
                                 <Link
-                                    href="/dashboard"
+                                    href="/admin/dashboard"
                                     className="text-sm font-inter font-medium text-dark-secondary hover:text-terracotta transition-colors duration-300"
                                 >
                                     Dashboard
@@ -194,7 +195,7 @@ export default function Navbar() {
                                 { href: "/explore", label: "Explore Workshops" },
                                 ...(user ? [{ href: "/profile", label: "Profile" }] : []),
                                 ...(user && !roleLoading && role === "admin"
-                                    ? [{ href: "/dashboard", label: "Dashboard" }]
+                                    ? [{ href: "/admin/dashboard", label: "Dashboard" }]
                                     : []),
                                 { href: "mailto:hello@onlyworkshop.com", label: "Contact Us" },
                             ].map((link, i) => (

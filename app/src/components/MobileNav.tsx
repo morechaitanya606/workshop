@@ -12,7 +12,7 @@ export default function MobileNav() {
         { href: "/", label: "Home", icon: Home },
         { href: "/explore", label: "Discover", icon: Search },
         ...(user && !roleLoading && role === "admin"
-            ? [{ href: "/dashboard", label: "Dashboard", icon: CalendarDays }]
+            ? [{ href: "/admin/dashboard", label: "Dashboard", icon: CalendarDays }]
             : []),
         { href: user ? "/profile" : "/auth/login", label: "Profile", icon: User },
     ];

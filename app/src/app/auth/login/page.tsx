@@ -15,6 +15,7 @@ import {
     AlertCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/lib/supabase";
 
 function LoginContent() {
     const router = useRouter();
@@ -51,11 +52,20 @@ function LoginContent() {
         } else {
             // Check role after successful login
             try {
-                const res = await fetch("/api/auth/me");
-                if (res.ok) {
+                const {
+                    data: { session },
+                } = await supabase.auth.getSession();
+                const accessToken = session?.access_token;
+                const res = await fetch("/api/auth/me", {
+                    headers: accessToken
+                        ? { Authorization: `Bearer ${accessToken}` }
+                        : undefined,
+                    cache: "no-store",
+                });
+                if (res.ok && accessToken) {
                     const data = await res.json();
                     if (data.role === "admin") {
-                        router.push("/admin");
+                        router.push("/admin/dashboard");
                         return;
                     }
                 }

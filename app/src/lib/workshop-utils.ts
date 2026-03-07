@@ -2,6 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Workshop } from "@/lib/data";
 import { mockWorkshops } from "@/lib/data";
 import type { WorkshopCreateInput, WorkshopQueryInput } from "@/lib/validators";
+import {
+    normalizeWorkshopImageUrlInput,
+    normalizeWorkshopVideoUrlInput,
+} from "@/lib/workshop-media";
 
 const LOCAL_WORKSHOP_IMAGE_PREFIX = "/images/workshops/";
 const LEGACY_LOCAL_IMAGE_EXT_RE = /\.(?:jpe?g|png)(\?.*)?$/i;
@@ -98,6 +102,13 @@ export function buildWorkshopInsertPayload(
         .slice(0, 36);
 
     const id = `${slug || "workshop"}-${Date.now()}`;
+    const coverImage = normalizeWorkshopImageUrlInput(input.coverImage);
+    const galleryImages = input.galleryImages.map((item) =>
+        normalizeWorkshopImageUrlInput(item)
+    );
+    const videoUrl = input.videoUrl
+        ? normalizeWorkshopVideoUrlInput(input.videoUrl)
+        : "";
 
     return {
         id,
@@ -112,12 +123,12 @@ export function buildWorkshopInsertPayload(
         time: input.time,
         max_seats: input.maxSeats,
         seats_remaining: input.maxSeats,
-        cover_image: input.coverImage,
-        gallery_images: input.galleryImages,
-        video_url: input.videoUrl || null,
+        cover_image: coverImage,
+        gallery_images: galleryImages,
+        video_url: videoUrl || null,
         social_links: input.socialLinks,
         host_name: input.hostName,
-        host_avatar: input.coverImage,
+        host_avatar: coverImage,
         host_bio: input.hostBio,
         host_experience: input.hostExperience || null,
         host_social_links: input.hostSocialLinks,

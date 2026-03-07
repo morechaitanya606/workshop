@@ -18,13 +18,24 @@ export async function POST(request: NextRequest) {
             return jsonError("No file provided.", 400);
         }
 
-        const validTypes = ["image/jpeg", "image/png", "image/webp"];
-        if (!validTypes.includes(file.type)) {
-            return jsonError("Invalid file type. Only JPEG, PNG, and WebP are allowed.", 400);
+        const imageTypes = ["image/jpeg", "image/png", "image/webp"];
+        const videoTypes = ["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"];
+        const isImage = imageTypes.includes(file.type);
+        const isVideo = videoTypes.includes(file.type);
+
+        if (!isImage && !isVideo) {
+            return jsonError(
+                "Invalid file type. Allowed: JPEG, PNG, WebP, MP4, WebM, MOV.",
+                400
+            );
         }
 
-        if (file.size > 5 * 1024 * 1024) {
-            return jsonError("File size exceeds 5MB limit.", 400);
+        const maxBytes = isVideo ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
+        if (file.size > maxBytes) {
+            return jsonError(
+                isVideo ? "Video size exceeds 50MB limit." : "Image size exceeds 5MB limit.",
+                400
+            );
         }
 
         const bytes = await file.arrayBuffer();

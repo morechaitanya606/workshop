@@ -10,6 +10,27 @@ const urlOrEmpty = z
         "Must be a valid URL."
     );
 
+const mediaUrl = z
+    .string()
+    .trim()
+    .refine(
+        (value) => value.startsWith("/") || /^https?:\/\/.+/i.test(value),
+        "Must be a valid URL."
+    );
+
+const mediaUrlOrEmpty = z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => value || "")
+    .refine(
+        (value) =>
+            value === "" ||
+            value.startsWith("/") ||
+            /^https?:\/\/.+/i.test(value),
+        "Must be a valid URL."
+    );
+
 export const socialLinksSchema = z.object({
     instagram: urlOrEmpty,
     youtube: urlOrEmpty,
@@ -27,9 +48,9 @@ export const workshopCreateSchema = z.object({
     date: z.string().trim().min(8).max(20),
     time: z.string().trim().min(3).max(20),
     maxSeats: z.coerce.number().int().min(1).max(500),
-    coverImage: z.string().trim().url(),
-    galleryImages: z.array(z.string().trim().url()).max(20).default([]),
-    videoUrl: urlOrEmpty,
+    coverImage: mediaUrl,
+    galleryImages: z.array(mediaUrl).max(20).default([]),
+    videoUrl: mediaUrlOrEmpty,
     socialLinks: socialLinksSchema.default({
         instagram: "",
         youtube: "",
@@ -54,6 +75,28 @@ export const workshopCreateSchema = z.object({
 });
 
 export type WorkshopCreateInput = z.infer<typeof workshopCreateSchema>;
+
+export const workshopUpdateSchema = z
+    .object({
+        title: z.string().trim().min(3).max(180).optional(),
+        description: z.string().trim().min(20).max(5000).optional(),
+        category: z.string().trim().min(2).max(80).optional(),
+        price: z.coerce.number().int().positive().max(1000000).optional(),
+        location: z.string().trim().min(2).max(180).optional(),
+        city: z.string().trim().min(2).max(120).optional(),
+        duration: z.string().trim().min(1).max(80).optional(),
+        date: z.string().trim().min(8).max(20).optional(),
+        time: z.string().trim().min(3).max(20).optional(),
+        maxSeats: z.coerce.number().int().min(1).max(500).optional(),
+        coverImage: mediaUrl.optional(),
+        galleryImages: z.array(mediaUrl).max(20).optional(),
+        videoUrl: mediaUrlOrEmpty.optional(),
+    })
+    .refine((value) => Object.keys(value).length > 0, {
+        message: "Provide at least one field to update.",
+    });
+
+export type WorkshopUpdateInput = z.infer<typeof workshopUpdateSchema>;
 
 export const bookingHoldSchema = z.object({
     workshopId: z.string().trim().min(1).max(120),
@@ -102,11 +145,24 @@ export type WorkshopNotificationInput = z.infer<
 export const workshopFeedbackSchema = z.object({
     rating: z.coerce.number().int().min(1).max(5),
     comment: z.string().trim().min(3).max(2000),
-    photos: z.array(z.string().url()).optional().default([]),
-    videoUrl: urlOrEmpty.optional(),
+    photos: z.array(mediaUrl).optional().default([]),
+    videoUrl: mediaUrlOrEmpty.optional(),
 });
 
 export type WorkshopFeedbackInput = z.infer<typeof workshopFeedbackSchema>;
+
+export const adminFeedbackUpdateSchema = z
+    .object({
+        rating: z.coerce.number().int().min(1).max(5).optional(),
+        comment: z.string().trim().min(3).max(2000).optional(),
+    })
+    .refine((value) => Object.keys(value).length > 0, {
+        message: "Provide at least one field to update.",
+    });
+
+export type AdminFeedbackUpdateInput = z.infer<
+    typeof adminFeedbackUpdateSchema
+>;
 
 export const workshopQuerySchema = z.object({
     q: z.string().trim().max(120).optional().default(""),
