@@ -1,9 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import {
-    createSupabaseServiceClient,
-    isSupabaseServiceConfigured,
-} from "@/lib/supabase-server";
+import { handleApiError, parseBody } from "@/lib/api-route";
+import type { DbUpdate } from "@/lib/database.types";
+import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { requireAdminUser } from "@/lib/api-auth";
 import { adminFeedbackUpdateSchema } from "@/lib/validators";
 
@@ -24,26 +23,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         );
     }
 
-    let body: unknown;
-    try {
-        body = await request.json();
-    } catch {
-        return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 });
-    }
-
-    const parsed = adminFeedbackUpdateSchema.safeParse(body);
-    if (!parsed.success) {
-        return NextResponse.json(
-            {
-                error: "Feedback update validation failed.",
-                details: parsed.error.flatten(),
-            },
-            { status: 400 }
-        );
+    const parsed = await parseBody(
+        request,
+        adminFeedbackUpdateSchema,
+        "Invalid JSON payload.",
+        "Feedback update validation failed."
+    );
+    if (!parsed.ok) {
+        return parsed.response;
     }
 
     try {
-        const patch: Record<string, unknown> = {};
+        const patch: DbUpdate<"workshop_feedback"> = {};
         if (typeof parsed.data.rating === "number") {
             patch.rating = parsed.data.rating;
         }
@@ -56,9 +47,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             .from("workshop_feedback")
             .update(patch)
             .eq("id", params.id)
-            .select(
-                "id,user_id,workshop_id,rating,comment,photos,video_url,created_at,updated_at"
-            )
+            .select("id,user_id,workshop_id,rating,comment,photos,video_url,created_at,updated_at")
             .maybeSingle();
 
         if (updateResult.error?.code === "42703") {
@@ -68,7 +57,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             }
             if (!("comment" in patch)) {
                 return NextResponse.json(
-                    { error: "Rating edits are not available until feedback migration is applied." },
+                    {
+                        error: "Rating edits are not available until feedback migration is applied.",
+                    },
                     { status: 400 }
                 );
             }
@@ -93,18 +84,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
         const data = updateResult.data;
         if (!data) {
-            return NextResponse.json(
-                { error: "Feedback not found." },
-                { status: 404 }
-            );
+            return NextResponse.json({ error: "Feedback not found." }, { status: 404 });
         }
 
         return NextResponse.json({ feedback: data });
     } catch (error) {
-        return NextResponse.json(
-            { error: "Failed to update feedback.", details: String(error) },
-            { status: 500 }
-        );
+        return handleApiError("Failed to update feedback.", error);
     }
 }
 
@@ -138,17 +123,11 @@ export async function DELETE(request: NextRequest, { params }: Params) {
         }
 
         if (!data) {
-            return NextResponse.json(
-                { error: "Feedback not found." },
-                { status: 404 }
-            );
+            return NextResponse.json({ error: "Feedback not found." }, { status: 404 });
         }
 
         return NextResponse.json({ success: true });
     } catch (error) {
-        return NextResponse.json(
-            { error: "Failed to delete feedback.", details: String(error) },
-            { status: 500 }
-        );
+        return handleApiError("Failed to delete feedback.", error);
     }
 }

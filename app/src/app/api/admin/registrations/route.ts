@@ -1,10 +1,12 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import {
-    createSupabaseServiceClient,
-    isSupabaseServiceConfigured,
-} from "@/lib/supabase-server";
+import { handleApiError, parseQuery } from "@/lib/api-route";
+import type { DbTable } from "@/lib/database.types";
+import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { requireAdminUser } from "@/lib/api-auth";
+import { adminRegistrationsQuerySchema } from "@/lib/validators";
+
+const BOOKING_STATUSES: DbTable<"bookings">["status"][] = ["confirmed", "cancelled", "refunded"];
 
 export async function GET(request: NextRequest) {
     const auth = await requireAdminUser(request);
@@ -20,22 +22,25 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        const params = request.nextUrl.searchParams;
-        const q = (params.get("q") || "").trim();
-        const status = (params.get("status") || "all").trim().toLowerCase();
-        const page = Math.max(1, Number.parseInt(params.get("page") || "1", 10));
-        const pageSize = Math.min(
-            50,
-            Math.max(1, Number.parseInt(params.get("pageSize") || "12", 10))
+        const parsedQuery = parseQuery(
+            request,
+            adminRegistrationsQuerySchema,
+            "Invalid registrations query."
         );
+        if (!parsedQuery.ok) {
+            return parsedQuery.response;
+        }
+
+        const q = parsedQuery.data.q;
+        const status = parsedQuery.data.status.toLowerCase();
+        const page = parsedQuery.data.page;
+        const pageSize = parsedQuery.data.pageSize;
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
 
         const serviceClient = createSupabaseServiceClient();
-        let query = serviceClient
-            .from("bookings")
-            .select(
-                `
+        let query = serviceClient.from("bookings").select(
+            `
                 id,
                 user_id,
                 first_name,
@@ -54,13 +59,15 @@ export async function GET(request: NextRequest) {
                     city,
                     location
                 )
-            `
-                ,
-                { count: "exact" }
-            );
+            `,
+            { count: "exact" }
+        );
 
-        if (status && status !== "all") {
-            query = query.eq("status", status);
+        if (
+            status !== "all" &&
+            BOOKING_STATUSES.includes(status as DbTable<"bookings">["status"])
+        ) {
+            query = query.eq("status", status as DbTable<"bookings">["status"]);
         }
 
         if (q) {
@@ -93,9 +100,6 @@ export async function GET(request: NextRequest) {
             },
         });
     } catch (error) {
-        return NextResponse.json(
-            { error: "Failed to load registrations.", details: String(error) },
-            { status: 500 }
-        );
+        return handleApiError("Failed to load registrations.", error);
     }
 }

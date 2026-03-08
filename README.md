@@ -202,6 +202,7 @@ Create a `.env.local` file in the `app/` directory:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key-here
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 # Optional fallback:
 # NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
@@ -209,6 +210,11 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 RAZORPAY_KEY_ID=your-razorpay-key-id
 RAZORPAY_KEY_SECRET=your-razorpay-key-secret
 RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
+
+# Optional Mappls (Workshop location/maps)
+# NEXT_PUBLIC_MAPPLS_API_KEY=your-mappls-public-key
+# MAPPLS_CLIENT_ID=your-mappls-client-id
+# MAPPLS_CLIENT_SECRET=your-mappls-client-secret
 
 # Optional observability
 # NEXT_PUBLIC_POSTHOG_KEY=...
@@ -253,6 +259,10 @@ npm run start
 | `npm run build` | Create production build             |
 | `npm run start` | Start production server             |
 | `npm run lint`  | Run ESLint                          |
+| `npm run typecheck` | Run TypeScript checks          |
+| `npm run test`  | Run unit/integration tests (Vitest) |
+| `npm run test:e2e` | Run Playwright e2e tests        |
+| `npm run storybook` | Run Storybook UI               |
 
 ---
 

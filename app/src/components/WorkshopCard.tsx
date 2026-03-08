@@ -1,11 +1,13 @@
 "use client";
 
+import React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Calendar, MapPin, Star, Heart, Clock } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { Workshop } from "@/lib/data";
+import { fadeInUp, revealViewport, standardTransition } from "@/lib/motion-presets";
 
 interface WorkshopCardProps {
     workshop: Workshop;
@@ -18,16 +20,19 @@ export default function WorkshopCard({
     index = 0,
     variant = "default",
 }: WorkshopCardProps) {
+    const prefersReducedMotion = useReducedMotion();
+
     return (
         <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-50px" }}
-            transition={{
-                duration: 0.6,
-                delay: index * 0.1,
-                ease: [0.22, 1, 0.36, 1],
-            }}
+            variants={prefersReducedMotion ? undefined : fadeInUp}
+            initial={prefersReducedMotion ? undefined : "hidden"}
+            whileInView={prefersReducedMotion ? undefined : "visible"}
+            viewport={prefersReducedMotion ? undefined : revealViewport}
+            transition={
+                prefersReducedMotion
+                    ? { duration: 0 }
+                    : { ...standardTransition, delay: index * 0.08 }
+            }
         >
             <Link href={`/workshop/${workshop.id}`} className="block group">
                 <div className="card-workshop">

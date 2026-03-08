@@ -1,11 +1,11 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
+import { handleApiError, parseBody } from "@/lib/api-route";
 import { bookingCheckoutSchema } from "@/lib/validators";
-import {
-    createSupabaseServiceClient,
-    isSupabaseServiceConfigured,
-} from "@/lib/supabase-server";
+import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { requireAuthenticatedUser } from "@/lib/api-auth";
+import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import {
     getRazorpayKeyId,
     getRazorpayServerClient,
@@ -41,7 +41,30 @@ function isExpired(isoDate: string) {
     return new Date(isoDate).getTime() < Date.now();
 }
 
-async function loadBookingById(serviceClient: ReturnType<typeof createSupabaseServiceClient>, bookingId: string) {
+function paymentError(message: string, status: number, context: Record<string, unknown> = {}) {
+    Sentry.captureMessage(message, {
+        level: "error",
+        tags: {
+            layer: "payments",
+            provider: "razorpay",
+            route: "bookings_checkout",
+        },
+        extra: context,
+    });
+
+    return NextResponse.json(
+        {
+            error: message,
+            ...context,
+        },
+        { status }
+    );
+}
+
+async function loadBookingById(
+    serviceClient: ReturnType<typeof createSupabaseServiceClient>,
+    bookingId: string
+) {
     const { data: booking } = await serviceClient
         .from("bookings")
         .select(
@@ -74,11 +97,20 @@ export async function POST(request: NextRequest) {
         return auth.response;
     }
 
+    const rateLimitResult = assertRateLimit({
+        key: getRateLimitKey(request, "bookings-checkout", auth.user.id),
+        limit: 30,
+        windowMs: 60_000,
+        message: "Too many checkout attempts. Please wait and retry.",
+    });
+    if (!rateLimitResult.ok) {
+        return rateLimitResult.response;
+    }
+
     if (!isSupabaseServiceConfigured) {
         return NextResponse.json(
             {
-                error:
-                    "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
+                error: "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
             },
             { status: 500 }
         );
@@ -87,29 +119,20 @@ export async function POST(request: NextRequest) {
     if (!isRazorpayConfigured) {
         return NextResponse.json(
             {
-                error:
-                    "Razorpay is not configured. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.",
+                error: "Razorpay is not configured. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.",
             },
             { status: 500 }
         );
     }
 
-    let body: unknown;
-    try {
-        body = await request.json();
-    } catch {
-        return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 });
-    }
-
-    const parsed = bookingCheckoutSchema.safeParse(body);
-    if (!parsed.success) {
-        return NextResponse.json(
-            {
-                error: "Booking checkout validation failed.",
-                details: parsed.error.flatten(),
-            },
-            { status: 400 }
-        );
+    const parsed = await parseBody(
+        request,
+        bookingCheckoutSchema,
+        "Invalid JSON payload.",
+        "Booking checkout validation failed."
+    );
+    if (!parsed.ok) {
+        return parsed.response;
     }
 
     const payload = parsed.data;
@@ -148,17 +171,20 @@ export async function POST(request: NextRequest) {
         const hold = holdData as HoldWithWorkshop | null;
 
         if (holdError || !hold) {
-            return NextResponse.json(
-                { error: "Seat hold not found for this user/workshop." },
-                { status: 404 }
-            );
+            return paymentError("Seat hold not found for this user/workshop.", 404, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+            });
         }
 
         if (hold.status !== "active") {
-            return NextResponse.json(
-                { error: "This seat hold is no longer active." },
-                { status: 409 }
-            );
+            return paymentError("This seat hold is no longer active.", 409, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                holdStatus: hold.status,
+            });
         }
 
         if (isExpired(hold.expires_at)) {
@@ -166,18 +192,20 @@ export async function POST(request: NextRequest) {
                 .from("booking_holds")
                 .update({ status: "expired" })
                 .eq("id", hold.id);
-            return NextResponse.json(
-                { error: "Seat hold expired. Please reserve seats again." },
-                { status: 409 }
-            );
+            return paymentError("Seat hold expired. Please reserve seats again.", 409, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+            });
         }
 
         const workshop = hold.workshop;
         if (!workshop) {
-            return NextResponse.json(
-                { error: "Workshop not found for this hold." },
-                { status: 404 }
-            );
+            return paymentError("Workshop not found for this hold.", 404, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+            });
         }
 
         const subtotal = Number(workshop.price || 0) * Number(hold.guests || 0);
@@ -228,60 +256,82 @@ export async function POST(request: NextRequest) {
         });
 
         if (!signatureValid) {
-            return NextResponse.json(
-                { error: "Invalid Razorpay payment signature." },
-                { status: 400 }
-            );
+            return paymentError("Invalid Razorpay payment signature.", 400, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                razorpayOrderId: payload.razorpayOrderId,
+                razorpayPaymentId: payload.razorpayPaymentId,
+            });
         }
 
         const order = await razorpay.orders.fetch(payload.razorpayOrderId!);
         if (!order || order.id !== payload.razorpayOrderId) {
-            return NextResponse.json(
-                { error: "Razorpay order not found." },
-                { status: 404 }
-            );
+            return paymentError("Razorpay order not found.", 404, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                razorpayOrderId: payload.razorpayOrderId,
+            });
         }
 
         if (String(order.receipt || "") !== payload.holdId) {
-            return NextResponse.json(
-                { error: "Order does not match the current seat hold." },
-                { status: 400 }
-            );
+            return paymentError("Order does not match the current seat hold.", 400, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                razorpayOrderId: payload.razorpayOrderId,
+            });
         }
 
         if (
             Number(order.amount || 0) !== totalPaise ||
             String(order.currency || "").toUpperCase() !== PAYMENT_CURRENCY
         ) {
-            return NextResponse.json(
-                { error: "Order amount mismatch for this booking." },
-                { status: 400 }
-            );
+            return paymentError("Order amount mismatch for this booking.", 400, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                expectedAmount: totalPaise,
+                actualAmount: Number(order.amount || 0),
+                expectedCurrency: PAYMENT_CURRENCY,
+                actualCurrency: String(order.currency || "").toUpperCase(),
+            });
         }
 
         const payment = await razorpay.payments.fetch(payload.razorpayPaymentId!);
         if (!payment || payment.id !== payload.razorpayPaymentId) {
-            return NextResponse.json(
-                { error: "Razorpay payment not found." },
-                { status: 404 }
-            );
+            return paymentError("Razorpay payment not found.", 404, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                razorpayPaymentId: payload.razorpayPaymentId,
+            });
         }
 
         if (payment.order_id !== payload.razorpayOrderId) {
-            return NextResponse.json(
-                { error: "Payment does not belong to this order." },
-                { status: 400 }
-            );
+            return paymentError("Payment does not belong to this order.", 400, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                razorpayPaymentId: payload.razorpayPaymentId,
+                razorpayOrderId: payload.razorpayOrderId,
+            });
         }
 
         if (
             Number(payment.amount || 0) !== totalPaise ||
             String(payment.currency || "").toUpperCase() !== PAYMENT_CURRENCY
         ) {
-            return NextResponse.json(
-                { error: "Payment amount mismatch for this booking." },
-                { status: 400 }
-            );
+            return paymentError("Payment amount mismatch for this booking.", 400, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                expectedAmount: totalPaise,
+                actualAmount: Number(payment.amount || 0),
+                expectedCurrency: PAYMENT_CURRENCY,
+                actualCurrency: String(payment.currency || "").toUpperCase(),
+            });
         }
 
         let paymentStatus = String(payment.status || "").toLowerCase();
@@ -295,13 +345,13 @@ export async function POST(request: NextRequest) {
         }
 
         if (paymentStatus !== "captured") {
-            return NextResponse.json(
-                {
-                    error: "Payment is not captured yet.",
-                    paymentStatus,
-                },
-                { status: 402 }
-            );
+            return paymentError("Payment is not captured yet.", 402, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                razorpayPaymentId: payload.razorpayPaymentId,
+                paymentStatus,
+            });
         }
 
         const { data: existingBooking } = await serviceClient
@@ -349,8 +399,7 @@ export async function POST(request: NextRequest) {
                 .update({
                     seats_remaining: Math.max(
                         0,
-                        Number(hold.workshop?.seats_remaining || 0) -
-                            Number(hold.guests || 0)
+                        Number(hold.workshop?.seats_remaining || 0) - Number(hold.guests || 0)
                     ),
                 })
                 .eq("id", payload.workshopId)
@@ -359,14 +408,16 @@ export async function POST(request: NextRequest) {
                 .single();
 
             if (seatUpdateError || !seatUpdated) {
-                return NextResponse.json(
+                return paymentError(
+                    "Payment succeeded, but seat reservation failed. Contact support immediately.",
+                    500,
                     {
-                        error:
-                            "Payment succeeded, but seat reservation failed. Contact support immediately.",
+                        userId: auth.user.id,
+                        holdId: payload.holdId,
+                        workshopId: payload.workshopId,
                         paymentId: payload.razorpayPaymentId,
                         details: seatUpdateError?.message || rpcError?.message || null,
-                    },
-                    { status: 500 }
+                    }
                 );
             }
 
@@ -393,14 +444,16 @@ export async function POST(request: NextRequest) {
                 .single();
 
             if (bookingError || !insertedBooking?.id) {
-                return NextResponse.json(
+                return paymentError(
+                    "Payment succeeded, but booking write failed. Contact support immediately.",
+                    500,
                     {
-                        error:
-                            "Payment succeeded, but booking write failed. Contact support immediately.",
+                        userId: auth.user.id,
+                        holdId: payload.holdId,
+                        workshopId: payload.workshopId,
                         paymentId: payload.razorpayPaymentId,
                         details: bookingError?.message || null,
-                    },
-                    { status: 500 }
+                    }
                 );
             }
 
@@ -413,10 +466,12 @@ export async function POST(request: NextRequest) {
         }
 
         if (!bookingId) {
-            return NextResponse.json(
-                { error: "Booking confirmation failed after payment capture." },
-                { status: 500 }
-            );
+            return paymentError("Booking confirmation failed after payment capture.", 500, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                paymentId: payload.razorpayPaymentId,
+            });
         }
 
         const booking = await loadBookingById(serviceClient, bookingId);
@@ -428,12 +483,20 @@ export async function POST(request: NextRequest) {
             paymentStatus,
         });
     } catch (error) {
-        return NextResponse.json(
-            {
-                error: "Checkout failed.",
-                details: String(error),
+        Sentry.captureException(error, {
+            tags: {
+                layer: "payments",
+                provider: "razorpay",
+                route: "bookings_checkout",
             },
-            { status: 500 }
-        );
+            extra: {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                razorpayOrderId: payload.razorpayOrderId ?? null,
+                razorpayPaymentId: payload.razorpayPaymentId ?? null,
+            },
+        });
+        return handleApiError("Checkout failed.", error);
     }
 }

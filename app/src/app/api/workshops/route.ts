@@ -1,27 +1,9 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
+import { parseQuery } from "@/lib/api-route";
 import { workshopQuerySchema } from "@/lib/validators";
-import {
-    mapWorkshopRowToWorkshop,
-    queryMockWorkshops,
-} from "@/lib/workshop-utils";
-
-function getQueryObject(request: NextRequest) {
-    const params = request.nextUrl.searchParams;
-    return {
-        q: params.get("q") ?? "",
-        category: params.get("category") ?? "",
-        city: params.get("city") ?? "",
-        dateFrom: params.get("dateFrom") ?? "",
-        dateTo: params.get("dateTo") ?? "",
-        minPrice: params.get("minPrice") ?? undefined,
-        maxPrice: params.get("maxPrice") ?? undefined,
-        sort: params.get("sort") ?? "date_asc",
-        page: params.get("page") ?? 1,
-        pageSize: params.get("pageSize") ?? 8,
-    };
-}
+import { mapWorkshopRowToWorkshop, queryMockWorkshops } from "@/lib/workshop-utils";
 
 function getSortConfig(sort: string) {
     if (sort === "date_desc") return { column: "date", ascending: false };
@@ -32,15 +14,9 @@ function getSortConfig(sort: string) {
 }
 
 export async function GET(request: NextRequest) {
-    const parsed = workshopQuerySchema.safeParse(getQueryObject(request));
-    if (!parsed.success) {
-        return NextResponse.json(
-            {
-                error: "Invalid workshop search query.",
-                details: parsed.error.flatten(),
-            },
-            { status: 400 }
-        );
+    const parsed = parseQuery(request, workshopQuerySchema, "Invalid workshop search query.");
+    if (!parsed.ok) {
+        return parsed.response;
     }
 
     const query = parsed.data;
@@ -51,9 +27,7 @@ export async function GET(request: NextRequest) {
         try {
             const serviceClient = createSupabaseServiceClient();
             const sortConfig = getSortConfig(query.sort);
-            let dbQuery = serviceClient
-                .from("workshops")
-                .select("*", { count: "exact" });
+            let dbQuery = serviceClient.from("workshops").select("*", { count: "exact" });
 
             if (query.q) {
                 const q = query.q.replace(/[%]/g, "");
@@ -89,9 +63,7 @@ export async function GET(request: NextRequest) {
             }
 
             return NextResponse.json({
-                data: (data || []).map((row) =>
-                    mapWorkshopRowToWorkshop(row as Record<string, unknown>)
-                ),
+                data: (data || []).map((row) => mapWorkshopRowToWorkshop(row)),
                 total: count || 0,
                 page: query.page,
                 pageSize: query.pageSize,
@@ -101,8 +73,7 @@ export async function GET(request: NextRequest) {
             const fallback = queryMockWorkshops(query);
             return NextResponse.json({
                 ...fallback,
-                warning:
-                    "Falling back to mock workshops because Supabase query failed.",
+                warning: "Falling back to mock workshops because Supabase query failed.",
                 error: String(error),
             });
         }

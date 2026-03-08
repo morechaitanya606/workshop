@@ -1,12 +1,10 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { handleApiError, parseBody } from "@/lib/api-route";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { requireAdminUser } from "@/lib/api-auth";
 import { workshopCreateSchema } from "@/lib/validators";
-import {
-    buildWorkshopInsertPayload,
-    mapWorkshopRowToWorkshop,
-} from "@/lib/workshop-utils";
+import { buildWorkshopInsertPayload, mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 
 export async function GET(request: NextRequest) {
     const auth = await requireAdminUser(request);
@@ -17,8 +15,7 @@ export async function GET(request: NextRequest) {
     if (!isSupabaseServiceConfigured) {
         return NextResponse.json(
             {
-                error:
-                    "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
+                error: "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
             },
             { status: 500 }
         );
@@ -37,18 +34,10 @@ export async function GET(request: NextRequest) {
         }
 
         return NextResponse.json({
-            data: (data || []).map((row) =>
-                mapWorkshopRowToWorkshop(row as Record<string, unknown>)
-            ),
+            data: (data || []).map((row) => mapWorkshopRowToWorkshop(row)),
         });
     } catch (error) {
-        return NextResponse.json(
-            {
-                error: "Failed to load admin workshops.",
-                details: String(error),
-            },
-            { status: 500 }
-        );
+        return handleApiError("Failed to load admin workshops.", error);
     }
 }
 
@@ -61,29 +50,20 @@ export async function POST(request: NextRequest) {
     if (!isSupabaseServiceConfigured) {
         return NextResponse.json(
             {
-                error:
-                    "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
+                error: "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
             },
             { status: 500 }
         );
     }
 
-    let body: unknown;
-    try {
-        body = await request.json();
-    } catch {
-        return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 });
-    }
-
-    const parsed = workshopCreateSchema.safeParse(body);
-    if (!parsed.success) {
-        return NextResponse.json(
-            {
-                error: "Workshop form validation failed.",
-                details: parsed.error.flatten(),
-            },
-            { status: 400 }
-        );
+    const parsed = await parseBody(
+        request,
+        workshopCreateSchema,
+        "Invalid JSON payload.",
+        "Workshop form validation failed."
+    );
+    if (!parsed.ok) {
+        return parsed.response;
     }
 
     try {
@@ -98,8 +78,7 @@ export async function POST(request: NextRequest) {
         if (error) {
             return NextResponse.json(
                 {
-                    error:
-                        "Unable to create workshop. Confirm the Supabase migration was applied.",
+                    error: "Unable to create workshop. Confirm the Supabase migration was applied.",
                     details: error.message,
                 },
                 { status: 500 }
@@ -108,19 +87,11 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(
             {
-                workshop: mapWorkshopRowToWorkshop(
-                    data as Record<string, unknown>
-                ),
+                workshop: mapWorkshopRowToWorkshop(data),
             },
             { status: 201 }
         );
     } catch (error) {
-        return NextResponse.json(
-            {
-                error: "Failed to publish workshop.",
-                details: String(error),
-            },
-            { status: 500 }
-        );
+        return handleApiError("Failed to publish workshop.", error);
     }
 }

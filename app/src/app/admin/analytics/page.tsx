@@ -5,6 +5,8 @@ import { Loader2, Users, Ticket, IndianRupee, Search } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import AdminShell from "@/components/admin/AdminShell";
+import { getAdminRegistrations, toApiErrorMessage } from "@/lib/api-client";
+import { Stat } from "@/components/ui";
 
 type Registration = {
     id: string;
@@ -48,25 +50,12 @@ export default function AdminAnalyticsPage() {
             setLoadingRegistrations(true);
             setError(null);
             try {
-                const params = new URLSearchParams({
-                    page: String(page),
-                    pageSize: String(pageSize),
+                const result = await getAdminRegistrations(session.access_token, {
+                    page,
+                    pageSize,
                     status: statusFilter,
+                    q: query.trim(),
                 });
-                if (query.trim()) {
-                    params.set("q", query.trim());
-                }
-
-                const response = await fetch(`/api/admin/registrations?${params.toString()}`, {
-                    headers: {
-                        Authorization: `Bearer ${session.access_token}`,
-                    },
-                    cache: "no-store",
-                });
-                const result = await response.json();
-                if (!response.ok) {
-                    throw new Error(result.error || "Failed to load analytics.");
-                }
                 if (!cancelled) {
                     const nextTotalPages = Number(result.totalPages || 1);
                     setTotal(Number(result.total || 0));
@@ -81,11 +70,7 @@ export default function AdminAnalyticsPage() {
                 }
             } catch (fetchError) {
                 if (!cancelled) {
-                    setError(
-                        fetchError instanceof Error
-                            ? fetchError.message
-                            : "Unable to load analytics."
-                    );
+                    setError(toApiErrorMessage(fetchError, "Unable to load analytics."));
                 }
             } finally {
                 if (!cancelled) {
@@ -189,33 +174,21 @@ export default function AdminAnalyticsPage() {
             {!loadingRegistrations && !error && (
                 <>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                        <div className="bg-white rounded-2xl shadow-soft p-5">
-                            <p className="text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-1">
-                                Registrations
-                            </p>
-                            <p className="font-playfair text-2xl font-bold text-dark inline-flex items-center gap-2">
-                                <Users className="w-5 h-5 text-terracotta" />
-                                {total}
-                            </p>
-                        </div>
-                        <div className="bg-white rounded-2xl shadow-soft p-5">
-                            <p className="text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-1">
-                                Guests (Page)
-                            </p>
-                            <p className="font-playfair text-2xl font-bold text-dark inline-flex items-center gap-2">
-                                <Ticket className="w-5 h-5 text-terracotta" />
-                                {pageSummary.totalGuests}
-                            </p>
-                        </div>
-                        <div className="bg-white rounded-2xl shadow-soft p-5">
-                            <p className="text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-1">
-                                Revenue (Page)
-                            </p>
-                            <p className="font-playfair text-2xl font-bold text-dark inline-flex items-center gap-2">
-                                <IndianRupee className="w-5 h-5 text-terracotta" />
-                                {formatCurrency(pageSummary.totalRevenue)}
-                            </p>
-                        </div>
+                        <Stat
+                            label="Registrations"
+                            value={total}
+                            icon={<Users className="w-5 h-5 text-terracotta" />}
+                        />
+                        <Stat
+                            label="Guests (Page)"
+                            value={pageSummary.totalGuests}
+                            icon={<Ticket className="w-5 h-5 text-terracotta" />}
+                        />
+                        <Stat
+                            label="Revenue (Page)"
+                            value={formatCurrency(pageSummary.totalRevenue)}
+                            icon={<IndianRupee className="w-5 h-5 text-terracotta" />}
+                        />
                     </div>
 
                     <div className="hidden lg:block bg-white rounded-2xl shadow-soft overflow-hidden">
@@ -243,9 +216,13 @@ export default function AdminAnalyticsPage() {
                                                 <p className="font-semibold text-dark">
                                                     {item.first_name} {item.last_name}
                                                 </p>
-                                                <p className="text-xs text-dark-muted">{item.email}</p>
+                                                <p className="text-xs text-dark-muted">
+                                                    {item.email}
+                                                </p>
                                                 {item.phone && (
-                                                    <p className="text-xs text-dark-muted">{item.phone}</p>
+                                                    <p className="text-xs text-dark-muted">
+                                                        {item.phone}
+                                                    </p>
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">
@@ -259,7 +236,9 @@ export default function AdminAnalyticsPage() {
                                                 </p>
                                             </td>
                                             <td className="px-4 py-3">{item.guests}</td>
-                                            <td className="px-4 py-3">{formatCurrency(item.total)}</td>
+                                            <td className="px-4 py-3">
+                                                {formatCurrency(item.total)}
+                                            </td>
                                             <td className="px-4 py-3 capitalize">{item.status}</td>
                                             <td className="px-4 py-3">
                                                 {formatDate(item.created_at.slice(0, 10))}
@@ -279,7 +258,9 @@ export default function AdminAnalyticsPage() {
                                 </p>
                                 <p className="text-xs font-inter text-dark-muted">{item.email}</p>
                                 {item.phone && (
-                                    <p className="text-xs font-inter text-dark-muted">{item.phone}</p>
+                                    <p className="text-xs font-inter text-dark-muted">
+                                        {item.phone}
+                                    </p>
                                 )}
                                 <div className="mt-3 text-sm font-inter text-dark-secondary space-y-1">
                                     <p>

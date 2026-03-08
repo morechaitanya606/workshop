@@ -1,10 +1,9 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import {
-    createSupabaseServiceClient,
-    isSupabaseServiceConfigured,
-} from "@/lib/supabase-server";
+import { handleApiError, parseQuery } from "@/lib/api-route";
+import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { requireAdminUser } from "@/lib/api-auth";
+import { adminFeedbackQuerySchema } from "@/lib/validators";
 
 type WorkshopInfo = {
     id: string;
@@ -77,14 +76,19 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        const params = request.nextUrl.searchParams;
-        const q = (params.get("q") || "").trim();
-        const workshopId = (params.get("workshopId") || "").trim();
-        const page = Math.max(1, Number.parseInt(params.get("page") || "1", 10));
-        const pageSize = Math.min(
-            50,
-            Math.max(1, Number.parseInt(params.get("pageSize") || "12", 10))
+        const parsedQuery = parseQuery(
+            request,
+            adminFeedbackQuerySchema,
+            "Invalid feedback query."
         );
+        if (!parsedQuery.ok) {
+            return parsedQuery.response;
+        }
+
+        const q = parsedQuery.data.q;
+        const workshopId = parsedQuery.data.workshopId;
+        const page = parsedQuery.data.page;
+        const pageSize = parsedQuery.data.pageSize;
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
 
@@ -121,10 +125,9 @@ export async function GET(request: NextRequest) {
             const fallbackQuery = applyFeedbackFilters(
                 serviceClient
                     .from("workshop_feedback")
-                    .select(
-                        "id,user_id,workshop_id,comment,created_at,updated_at",
-                        { count: "exact" }
-                    ),
+                    .select("id,user_id,workshop_id,comment,created_at,updated_at", {
+                        count: "exact",
+                    }),
                 q,
                 workshopId
             );
@@ -147,12 +150,8 @@ export async function GET(request: NextRequest) {
 
         const rows = (Array.isArray(data) ? data : []) as FeedbackDbRow[];
 
-        const userIds = Array.from(
-            new Set(rows.map((row) => row.user_id).filter(Boolean))
-        );
-        const workshopIds = Array.from(
-            new Set(rows.map((row) => row.workshop_id).filter(Boolean))
-        );
+        const userIds = Array.from(new Set(rows.map((row) => row.user_id).filter(Boolean)));
+        const workshopIds = Array.from(new Set(rows.map((row) => row.workshop_id).filter(Boolean)));
 
         const workshopById = new Map<string, WorkshopInfo>();
         if (workshopIds.length > 0) {
@@ -233,13 +232,8 @@ export async function GET(request: NextRequest) {
                 workshopId: wId,
                 rating,
                 comment: String(row.comment || ""),
-                photos: Array.isArray(row.photos)
-                    ? row.photos.map((value) => String(value))
-                    : [],
-                videoUrl:
-                    typeof row.video_url === "string" && row.video_url
-                        ? row.video_url
-                        : null,
+                photos: Array.isArray(row.photos) ? row.photos.map((value) => String(value)) : [],
+                videoUrl: typeof row.video_url === "string" && row.video_url ? row.video_url : null,
                 createdAt: String(row.created_at || ""),
                 updatedAt: String(row.updated_at || ""),
                 workshop: workshopById.get(wId) || null,
@@ -264,9 +258,6 @@ export async function GET(request: NextRequest) {
             },
         });
     } catch (error) {
-        return NextResponse.json(
-            { error: "Failed to load feedback.", details: String(error) },
-            { status: 500 }
-        );
+        return handleApiError("Failed to load feedback.", error);
     }
 }

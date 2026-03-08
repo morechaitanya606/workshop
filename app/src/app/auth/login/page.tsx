@@ -5,16 +5,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import {
-    Mail,
-    Lock,
-    ArrowRight,
-    Eye,
-    EyeOff,
-    Loader2,
-    AlertCircle,
-} from "lucide-react";
+import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { getAuthMe } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
 
 function LoginContent() {
@@ -56,14 +49,8 @@ function LoginContent() {
                     data: { session },
                 } = await supabase.auth.getSession();
                 const accessToken = session?.access_token;
-                const res = await fetch("/api/auth/me", {
-                    headers: accessToken
-                        ? { Authorization: `Bearer ${accessToken}` }
-                        : undefined,
-                    cache: "no-store",
-                });
-                if (res.ok && accessToken) {
-                    const data = await res.json();
+                if (accessToken) {
+                    const data = await getAuthMe(accessToken);
                     if (data.role === "admin") {
                         router.push("/admin/dashboard");
                         return;

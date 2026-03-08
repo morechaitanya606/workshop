@@ -1,21 +1,16 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
-import {
-    createSupabaseServiceClient,
-    isSupabaseServiceConfigured,
-} from "@/lib/supabase-server";
+import { parseBody } from "@/lib/api-route";
+import type { DbTable } from "@/lib/database.types";
+import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { workshopFeedbackSchema } from "@/lib/validators";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 
-type FeedbackRow = {
-    rating: number;
-    comment: string;
-    photos: string[];
-    video_url: string;
-    created_at: string;
-    updated_at: string;
-};
+type FeedbackRow = Pick<
+    DbTable<"workshop_feedback">,
+    "rating" | "comment" | "photos" | "video_url" | "created_at" | "updated_at"
+>;
 
 function isWorkshopPast(date: string, time: string | null) {
     const today = new Date().toISOString().slice(0, 10);
@@ -27,10 +22,7 @@ function isWorkshopPast(date: string, time: string | null) {
     return workshopDateTime.getTime() < Date.now();
 }
 
-export async function GET(
-    request: NextRequest,
-    { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -61,7 +53,10 @@ export async function GET(
             .limit(1);
 
         if (bookingError || !bookingData || bookingData.length === 0) {
-            return jsonError("You must have a confirmed booking to leave or view feedback for this workshop.", 403);
+            return jsonError(
+                "You must have a confirmed booking to leave or view feedback for this workshop.",
+                403
+            );
         }
 
         const { data, error } = await serviceClient
@@ -75,18 +70,13 @@ export async function GET(
             return jsonError("Unable to load feedback.", 500, error);
         }
 
-        return NextResponse.json({
-            feedback: (data as FeedbackRow | null) || null,
-        });
+        return NextResponse.json({ feedback: (data as FeedbackRow | null) || null });
     } catch (error) {
         return jsonError("Unable to load feedback.", 500, String(error));
     }
 }
 
-export async function POST(
-    request: NextRequest,
-    { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -99,16 +89,14 @@ export async function POST(
         );
     }
 
-    let body: unknown;
-    try {
-        body = await request.json();
-    } catch {
-        return jsonError("Invalid JSON payload.", 400);
-    }
-
-    const parsed = workshopFeedbackSchema.safeParse(body);
-    if (!parsed.success) {
-        return jsonError("Invalid feedback payload.", 400, parsed.error.flatten());
+    const parsed = await parseBody(
+        request,
+        workshopFeedbackSchema,
+        "Invalid JSON payload.",
+        "Invalid feedback payload."
+    );
+    if (!parsed.ok) {
+        return parsed.response;
     }
 
     const workshopId = params.id;
@@ -143,7 +131,10 @@ export async function POST(
             .limit(1);
 
         if (bookingError || !bookingData || bookingData.length === 0) {
-            return jsonError("You must have a confirmed booking to submit feedback for this workshop.", 403);
+            return jsonError(
+                "You must have a confirmed booking to submit feedback for this workshop.",
+                403
+            );
         }
 
         const { data: saved, error: saveError } = await serviceClient

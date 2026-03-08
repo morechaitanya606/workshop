@@ -1,24 +1,14 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import {
-    createSupabaseServiceClient,
-    isSupabaseServiceConfigured,
-} from "@/lib/supabase-server";
-import {
-    ensureWorkshopSeededFromMock,
-    mapWorkshopRowToWorkshop,
-} from "@/lib/workshop-utils";
+import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
+import { ensureWorkshopSeededFromMock, mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import { mockWorkshops } from "@/lib/data";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
 import WorkshopClient from "./WorkshopClient";
 
-export async function generateMetadata({
-    params,
-}: {
-    params: { id: string };
-}): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
     const workshop = await getWorkshop(params.id);
     if (!workshop) {
         return { title: "Workshop Not Found | Only Workshop" };
@@ -46,7 +36,7 @@ async function getWorkshop(id: string) {
                 .maybeSingle();
 
             if (!error && data) {
-                return mapWorkshopRowToWorkshop(data as Record<string, unknown>);
+                return mapWorkshopRowToWorkshop(data);
             }
         } catch {
             // fallback
@@ -55,11 +45,7 @@ async function getWorkshop(id: string) {
     return mockWorkshops.find((w) => w.id === id) || null;
 }
 
-export default async function WorkshopDetailPage({
-    params,
-}: {
-    params: { id: string };
-}) {
+export default async function WorkshopDetailPage({ params }: { params: { id: string } }) {
     const workshop = await getWorkshop(params.id);
 
     if (!workshop) {

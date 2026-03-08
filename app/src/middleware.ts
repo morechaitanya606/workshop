@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import type { Database, DbTable } from "@/lib/database.types";
+import { getPublicSupabaseConfig } from "@/lib/env";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabasePublicKey =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabasePublicConfig = getPublicSupabaseConfig();
 
 const PUBLIC_ROUTES = [
     "/",
@@ -23,6 +22,8 @@ const PUBLIC_ROUTES = [
     "/legal",
     "/cancellations",
     "/sitemap",
+    "/sitemap.xml",
+    "/robots.txt",
 ];
 
 const PROTECTED_ROUTES: string[] = [];
@@ -52,7 +53,7 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    if (!supabaseUrl || !supabasePublicKey) {
+    if (!supabasePublicConfig) {
         return NextResponse.next();
     }
 
@@ -62,18 +63,16 @@ export async function middleware(request: NextRequest) {
         },
     });
 
-    const supabase = createServerClient(
-        supabaseUrl,
-        supabasePublicKey,
+    const supabase = createServerClient<Database>(
+        supabasePublicConfig.url,
+        supabasePublicConfig.key,
         {
             cookies: {
                 getAll() {
                     return request.cookies.getAll();
                 },
                 setAll(cookiesToSet: { name: string; value: string; options: any }[]) {
-                    cookiesToSet.forEach(({ name, value }) =>
-                        request.cookies.set(name, value)
-                    );
+                    cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
                     response = NextResponse.next({
                         request,
                     });
@@ -85,7 +84,9 @@ export async function middleware(request: NextRequest) {
         }
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
 
     if (!user) {
         if (isProtectedRoute(pathname) || isAdminRoute(pathname)) {
@@ -96,11 +97,13 @@ export async function middleware(request: NextRequest) {
     }
 
     if (user && isAdminRoute(pathname)) {
-        const { data: profile } = await supabase
+        const profileResult = await supabase
             .from("profiles")
             .select("role")
             .eq("id", user.id)
             .maybeSingle();
+
+        const profile = profileResult.data as Pick<DbTable<"profiles">, "role"> | null;
 
         if (profile?.role !== "admin") {
             return NextResponse.redirect(new URL("/", request.url));

@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import Script from "next/script";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
     ArrowLeft,
     Calendar,
@@ -19,10 +19,19 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { useToast } from "@/components/ToastProvider";
 import { mockWorkshops } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
+import {
+    confirmCheckoutPayment,
+    createCheckoutOrder,
+    getWorkshopById,
+    toApiErrorMessage,
+} from "@/lib/api-client";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { trackEvent } from "@/lib/analytics";
+import { scaleIn, standardTransition } from "@/lib/motion-presets";
 
 const SERVICE_FEE = 99;
 
@@ -92,15 +101,16 @@ declare global {
 function BookingContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const prefersReducedMotion = useReducedMotion();
     const { user, session, loading } = useAuth();
+    const toast = useToast();
 
     const workshopId = searchParams.get("workshop") || "";
     const holdId = searchParams.get("hold") || "";
     const guestsParam = Number.parseInt(searchParams.get("guests") || "1", 10);
     const guests = Number.isFinite(guestsParam) ? Math.max(1, guestsParam) : 1;
 
-    const fallbackWorkshop =
-        mockWorkshops.find((item) => item.id === workshopId) || null;
+    const fallbackWorkshop = mockWorkshops.find((item) => item.id === workshopId) || null;
     const [workshop, setWorkshop] = useState<Workshop | null>(fallbackWorkshop);
     const [workshopLoading, setWorkshopLoading] = useState(Boolean(workshopId));
     const [isRazorpayReady, setIsRazorpayReady] = useState(false);
@@ -108,9 +118,7 @@ function BookingContent() {
     const [step, setStep] = useState(1);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [confirmedBooking, setConfirmedBooking] = useState<ConfirmedBooking | null>(
-        null
-    );
+    const [confirmedBooking, setConfirmedBooking] = useState<ConfirmedBooking | null>(null);
     const [formData, setFormData] = useState({
         firstName: "",
         lastName: "",
@@ -155,12 +163,9 @@ function BookingContent() {
             }
 
             try {
-                const response = await fetch(`/api/workshops/${workshopId}`, {
-                    cache: "no-store",
-                });
-                const result = await response.json();
-                if (!cancelled && response.ok && result.workshop) {
-                    setWorkshop(result.workshop as Workshop);
+                const result = await getWorkshopById(workshopId);
+                if (!cancelled && result.workshop) {
+                    setWorkshop(result.workshop);
                 }
             } catch {
                 // fallback workshop is already set if available
@@ -185,23 +190,32 @@ function BookingContent() {
         setError(null);
 
         if (!holdId) {
-            setError(
-                "Seat hold is missing or expired. Please go back and reserve seats again."
-            );
+            const message =
+                "Seat hold is missing or expired. Please go back and reserve seats again.";
+            setError(message);
+            toast.error("Seat hold missing", message);
             return;
         }
 
         if (!session?.access_token) {
-            setError("Your session expired. Please log in again.");
+            const message = "Your session expired. Please log in again.";
+            setError(message);
+            toast.error("Session expired", message);
             return;
         }
 
         if (!isRazorpayReady || !window.Razorpay) {
-            setError("Payment gateway is still loading. Please try again in a moment.");
+            const message = "Payment gateway is still loading. Please try again in a moment.";
+            setError(message);
+            toast.info("Payment loading", message);
             return;
         }
 
         setSubmitting(true);
+        trackEvent("checkout_started", {
+            workshopId: workshop.id,
+            guests,
+        });
 
         const checkoutPayload = {
             holdId,
@@ -214,32 +228,22 @@ function BookingContent() {
         };
 
         try {
-            const orderResponse = await fetch("/api/bookings/checkout", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${session.access_token}`,
-                },
-                body: JSON.stringify(checkoutPayload),
-            });
-
-            const orderResult = await orderResponse.json();
-            if (!orderResponse.ok) {
-                setError(orderResult.error || "Unable to initialize payment.");
-                setSubmitting(false);
-                return;
-            }
+            const orderResult = await createCheckoutOrder(session.access_token, checkoutPayload);
 
             const order = orderResult.order as RazorpayOrderResponse | undefined;
             if (!order?.id || !order?.keyId) {
-                setError("Payment order was not created correctly.");
+                const message = "Payment order was not created correctly.";
+                setError(message);
+                toast.error("Checkout failed", message);
                 setSubmitting(false);
                 return;
             }
 
             const RazorpayCheckout = window.Razorpay;
             if (!RazorpayCheckout) {
-                setError("Razorpay checkout is unavailable right now.");
+                const message = "Razorpay checkout is unavailable right now.";
+                setError(message);
+                toast.error("Checkout unavailable", message);
                 setSubmitting(false);
                 return;
             }
@@ -254,35 +258,29 @@ function BookingContent() {
                 prefill: order.prefill,
                 handler: async (payment) => {
                     try {
-                        const confirmResponse = await fetch("/api/bookings/checkout", {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                Authorization: `Bearer ${session.access_token}`,
-                            },
-                            body: JSON.stringify({
-                                ...checkoutPayload,
-                                razorpayOrderId: payment.razorpay_order_id,
-                                razorpayPaymentId: payment.razorpay_payment_id,
-                                razorpaySignature: payment.razorpay_signature,
-                            }),
+                        const confirmResult = await confirmCheckoutPayment(session.access_token, {
+                            ...checkoutPayload,
+                            razorpayOrderId: payment.razorpay_order_id,
+                            razorpayPaymentId: payment.razorpay_payment_id,
+                            razorpaySignature: payment.razorpay_signature,
                         });
 
-                        const confirmResult = await confirmResponse.json();
-                        if (!confirmResponse.ok) {
-                            setError(
-                                confirmResult.error ||
-                                    "Payment succeeded, but booking confirmation failed."
-                            );
-                            return;
-                        }
-
                         setConfirmedBooking(confirmResult.booking || null);
+                        trackEvent("booking_completed", {
+                            workshopId: workshop.id,
+                            bookingId: confirmResult.booking?.id || null,
+                            total,
+                        });
+                        toast.success(
+                            "Booking confirmed",
+                            "Payment verified and your workshop booking is confirmed."
+                        );
                         setStep(3);
                     } catch {
-                        setError(
-                            "Payment succeeded, but booking confirmation could not be completed."
-                        );
+                        const message =
+                            "Payment succeeded, but booking confirmation could not be completed.";
+                        setError(message);
+                        toast.error("Verification pending", message);
                     } finally {
                         setSubmitting(false);
                     }
@@ -298,13 +296,20 @@ function BookingContent() {
             });
 
             checkout.on("payment.failed", () => {
-                setError("Payment failed. Please try again.");
+                const message = "Payment failed. Please try again.";
+                setError(message);
+                toast.error("Payment failed", message);
                 setSubmitting(false);
             });
 
             checkout.open();
-        } catch {
-            setError("Unable to start checkout right now. Please try again.");
+        } catch (error) {
+            const message = toApiErrorMessage(
+                error,
+                "Unable to start checkout right now. Please try again."
+            );
+            setError(message);
+            toast.error("Checkout failed", message);
             setSubmitting(false);
         }
     };
@@ -315,9 +320,9 @@ function BookingContent() {
             strategy="afterInteractive"
             onLoad={() => setIsRazorpayReady(true)}
             onError={() => {
-                setError(
-                    "Failed to load Razorpay checkout. Refresh the page and try again."
-                );
+                const message = "Failed to load Razorpay checkout. Refresh the page and try again.";
+                setError(message);
+                toast.error("Razorpay failed to load", message);
             }}
         />
     );
@@ -358,8 +363,7 @@ function BookingContent() {
         const bookingWorkshopTitle = confirmedBooking?.workshop?.title || workshop.title;
         const bookingWorkshopDate = confirmedBooking?.workshop?.date || workshop.date;
         const bookingWorkshopTime = confirmedBooking?.workshop?.time || workshop.time;
-        const bookingCover =
-            confirmedBooking?.workshop?.cover_image || workshop.coverImage;
+        const bookingCover = confirmedBooking?.workshop?.cover_image || workshop.coverImage;
 
         return (
             <>
@@ -368,8 +372,10 @@ function BookingContent() {
                     <Navbar />
                     <div className="pt-28 pb-16 section-padding">
                         <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
+                            variants={prefersReducedMotion ? undefined : scaleIn}
+                            initial={prefersReducedMotion ? undefined : "hidden"}
+                            animate={prefersReducedMotion ? undefined : "visible"}
+                            transition={prefersReducedMotion ? { duration: 0 } : standardTransition}
                             className="max-w-lg mx-auto text-center"
                         >
                             <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -396,12 +402,10 @@ function BookingContent() {
                                         </h3>
                                         <p className="text-sm font-inter text-dark-muted mt-1">
                                             {formatDate(bookingWorkshopDate)}{" "}
-                                            <span aria-hidden>&middot;</span>{" "}
-                                            {bookingWorkshopTime}
+                                            <span aria-hidden>&middot;</span> {bookingWorkshopTime}
                                         </p>
                                         <p className="text-sm font-inter text-dark-muted">
-                                            {guests} guests{" "}
-                                            <span aria-hidden>&middot;</span>{" "}
+                                            {guests} guests <span aria-hidden>&middot;</span>{" "}
                                             {formatCurrency(confirmedBooking?.total || total)}
                                         </p>
                                     </div>
@@ -438,8 +442,8 @@ function BookingContent() {
 
                     {!holdId && (
                         <div className="mb-6 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-inter">
-                            Seat hold is missing. Please go back and click
-                            &quot;Reserve Spot&quot; again.
+                            Seat hold is missing. Please go back and click &quot;Reserve Spot&quot;
+                            again.
                         </div>
                     )}
                     {error && (
@@ -570,8 +574,7 @@ function BookingContent() {
                                     <div className="flex items-center gap-2 text-sm font-inter text-dark-secondary">
                                         <Calendar className="w-4 h-4 text-dark-muted" />
                                         {formatDate(workshop.date)}{" "}
-                                        <span aria-hidden>&middot;</span>{" "}
-                                        {workshop.time}
+                                        <span aria-hidden>&middot;</span> {workshop.time}
                                     </div>
                                     <div className="flex items-center gap-2 text-sm font-inter text-dark-secondary">
                                         <Clock className="w-4 h-4 text-dark-muted" />
@@ -603,9 +606,7 @@ function BookingContent() {
                                     </div>
                                     <div className="flex justify-between text-base font-inter font-bold pt-3 border-t border-gray-100">
                                         <span className="text-dark">Total</span>
-                                        <span className="text-dark">
-                                            {formatCurrency(total)}
-                                        </span>
+                                        <span className="text-dark">{formatCurrency(total)}</span>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 bg-cream-100 rounded-xl px-4 py-3 mt-4">

@@ -1,6 +1,8 @@
 import type { User } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
+import type { DbTable } from "@/lib/database.types";
 import {
     createSupabaseAnonServerClient,
     createSupabaseServiceClient,
@@ -20,6 +22,7 @@ type AuthFailure = {
 };
 
 export type AuthResult = AuthSuccess | AuthFailure;
+export type AppUserRole = DbTable<"profiles">["role"];
 
 function getBearerToken(request: NextRequest) {
     const authHeader = request.headers.get("authorization");
@@ -30,6 +33,14 @@ function getBearerToken(request: NextRequest) {
 }
 
 export function jsonError(message: string, status = 400, details?: unknown) {
+    if (status >= 500) {
+        Sentry.captureMessage(message, {
+            level: "error",
+            extra: { details: details ?? null, status },
+            tags: { layer: "api" },
+        });
+    }
+
     return NextResponse.json(
         {
             error: message,
@@ -39,9 +50,7 @@ export function jsonError(message: string, status = 400, details?: unknown) {
     );
 }
 
-export async function requireAuthenticatedUser(
-    request: NextRequest
-): Promise<AuthResult> {
+export async function requireAuthenticatedUser(request: NextRequest): Promise<AuthResult> {
     const token = getBearerToken(request);
     if (!token) {
         return {
@@ -53,10 +62,7 @@ export async function requireAuthenticatedUser(
     if (!isSupabasePublicConfigured) {
         return {
             ok: false,
-            response: jsonError(
-                "Supabase public env vars are missing on the server.",
-                500
-            ),
+            response: jsonError("Supabase public env vars are missing on the server.", 500),
         };
     }
 
@@ -83,7 +89,7 @@ export async function requireAuthenticatedUser(
     }
 }
 
-export async function getUserRole(userId: string) {
+export async function getUserRole(userId: string): Promise<AppUserRole> {
     if (!isSupabaseServiceConfigured) {
         return "user";
     }
@@ -125,7 +131,7 @@ export async function ensureUserProfile(user: User) {
 
 export async function requireAdminUser(
     request: NextRequest
-): Promise<(AuthSuccess & { role: string }) | AuthFailure> {
+): Promise<(AuthSuccess & { role: AppUserRole }) | AuthFailure> {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth;
@@ -135,10 +141,7 @@ export async function requireAdminUser(
     if (role !== "admin") {
         return {
             ok: false,
-            response: jsonError(
-                "Admin access is required for this action.",
-                403
-            ),
+            response: jsonError("Admin access is required for this action.", 403),
         };
     }
 

@@ -1,16 +1,15 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { parseBody } from "@/lib/api-route";
 import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
-import {
-    createSupabaseServiceClient,
-    isSupabaseServiceConfigured,
-} from "@/lib/supabase-server";
+import type { DbTable } from "@/lib/database.types";
+import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { workshopNotificationSchema } from "@/lib/validators";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 
 type NotificationRow = {
-    notify_similar: boolean | null;
-    notify_creator: boolean | null;
+    notify_similar: DbTable<"workshop_notification_preferences">["notify_similar"] | null;
+    notify_creator: DbTable<"workshop_notification_preferences">["notify_creator"] | null;
 };
 
 function mapNotificationState(record: NotificationRow | null | undefined) {
@@ -20,10 +19,7 @@ function mapNotificationState(record: NotificationRow | null | undefined) {
     };
 }
 
-export async function GET(
-    request: NextRequest,
-    { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -60,18 +56,11 @@ export async function GET(
             subscriptions: mapNotificationState(data as NotificationRow | null),
         });
     } catch (error) {
-        return jsonError(
-            "Unable to load notification preferences.",
-            500,
-            String(error)
-        );
+        return jsonError("Unable to load notification preferences.", 500, String(error));
     }
 }
 
-export async function POST(
-    request: NextRequest,
-    { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -84,16 +73,14 @@ export async function POST(
         );
     }
 
-    let body: unknown;
-    try {
-        body = await request.json();
-    } catch {
-        return jsonError("Invalid JSON payload.", 400);
-    }
-
-    const parsed = workshopNotificationSchema.safeParse(body);
-    if (!parsed.success) {
-        return jsonError("Invalid notification request.", 400, parsed.error.flatten());
+    const parsed = await parseBody(
+        request,
+        workshopNotificationSchema,
+        "Invalid JSON payload.",
+        "Invalid notification request."
+    );
+    if (!parsed.ok) {
+        return parsed.response;
     }
 
     const workshopId = params.id;
@@ -152,10 +139,6 @@ export async function POST(
                     : "Notification enabled for creator's next event.",
         });
     } catch (error) {
-        return jsonError(
-            "Unable to save notification preference.",
-            500,
-            String(error)
-        );
+        return jsonError("Unable to save notification preference.", 500, String(error));
     }
 }

@@ -1,20 +1,18 @@
 import crypto from "crypto";
 import Razorpay from "razorpay";
+import { getRazorpayConfig, getRazorpayWebhookSecret } from "@/lib/env";
 
-const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
-const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+const razorpayConfig = getRazorpayConfig();
+const razorpayKeyId = razorpayConfig?.keyId;
+const razorpayKeySecret = razorpayConfig?.keySecret;
 
-export const isRazorpayConfigured = Boolean(
-    razorpayKeyId && razorpayKeySecret
-);
+export const isRazorpayConfigured = Boolean(razorpayKeyId && razorpayKeySecret);
 
 let razorpayInstance: Razorpay | null = null;
 
 export function getRazorpayServerClient() {
     if (!razorpayKeyId || !razorpayKeySecret) {
-        throw new Error(
-            "RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be configured."
-        );
+        throw new Error("RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be configured.");
     }
 
     if (!razorpayInstance) {
@@ -62,17 +60,9 @@ export function verifyRazorpayOrderSignature(params: {
     return safeCompare(expected, params.signature);
 }
 
-export function verifyRazorpayWebhookSignature(params: {
-    rawBody: string;
-    signature: string;
-}) {
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-    if (!webhookSecret) {
-        throw new Error("RAZORPAY_WEBHOOK_SECRET must be configured.");
-    }
-
+export function verifyRazorpayWebhookSignature(params: { rawBody: string; signature: string }) {
     const expected = crypto
-        .createHmac("sha256", webhookSecret)
+        .createHmac("sha256", getRazorpayWebhookSecret())
         .update(params.rawBody)
         .digest("hex");
 

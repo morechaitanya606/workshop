@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./supabase";
+import { getAuthMe } from "@/lib/api-client";
 
 type UserRole = "admin" | "user";
 
@@ -13,7 +14,11 @@ interface AuthContextType {
     roleLoading: boolean;
     loading: boolean;
     signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-    signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
+    signUp: (
+        email: string,
+        password: string,
+        fullName: string
+    ) => Promise<{ error: string | null }>;
     signInWithGoogle: (redirectPath?: string) => Promise<{ error: string | null }>;
     signOut: () => Promise<void>;
 }
@@ -27,7 +32,7 @@ const AuthContext = createContext<AuthContextType>({
     signIn: async () => ({ error: null }),
     signUp: async () => ({ error: null }),
     signInWithGoogle: async () => ({ error: null }),
-    signOut: async () => { },
+    signOut: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -49,18 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const loadRole = async (accessToken: string) => {
             try {
-                const response = await fetch("/api/auth/me", {
-                    headers: {
-                        Authorization: `Bearer ${accessToken}`,
-                    },
-                    cache: "no-store",
-                });
-
-                if (!response.ok) {
-                    return "user" as UserRole;
-                }
-
-                const result = await response.json();
+                const result = await getAuthMe(accessToken);
                 return result.role === "admin" ? "admin" : "user";
             } catch {
                 return "user" as UserRole;
@@ -114,8 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const signIn = async (email: string, password: string) => {
         if (!isSupabaseConfigured) {
             return {
-                error:
-                    "Authentication is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).",
+                error: "Authentication is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).",
             };
         }
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -125,8 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const signUp = async (email: string, password: string, fullName: string) => {
         if (!isSupabaseConfigured) {
             return {
-                error:
-                    "Authentication is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).",
+                error: "Authentication is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).",
             };
         }
         const { error } = await supabase.auth.signUp({
@@ -140,8 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const signInWithGoogle = async (redirectPath = "/") => {
         if (!isSupabaseConfigured) {
             return {
-                error:
-                    "Authentication is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).",
+                error: "Authentication is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).",
             };
         }
 

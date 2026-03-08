@@ -1,11 +1,10 @@
 import { createBrowserClient } from "@supabase/ssr";
+import type { Database } from "@/lib/database.types";
+import { getPublicSupabaseConfig } from "@/lib/env";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabasePublicKey =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabasePublicConfig = getPublicSupabaseConfig();
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabasePublicKey);
+export const isSupabaseConfigured = Boolean(supabasePublicConfig);
 
 const fallbackUrl = "https://placeholder.supabase.co";
 const fallbackAnonKey = "placeholder-anon-key";
@@ -16,9 +15,9 @@ if (!isSupabaseConfigured && typeof window !== "undefined") {
     );
 }
 
-export const supabase = createBrowserClient(
-    isSupabaseConfigured ? supabaseUrl! : fallbackUrl,
-    isSupabaseConfigured ? supabasePublicKey! : fallbackAnonKey,
+export const supabase = createBrowserClient<Database>(
+    isSupabaseConfigured ? supabasePublicConfig!.url : fallbackUrl,
+    isSupabaseConfigured ? supabasePublicConfig!.key : fallbackAnonKey,
     {
         auth: {
             persistSession: isSupabaseConfigured,
