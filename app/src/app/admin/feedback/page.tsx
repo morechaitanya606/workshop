@@ -1,18 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-    Loader2,
-    MessageSquare,
-    Search,
-    PencilLine,
-    Trash2,
-    Save,
-    X,
-} from "lucide-react";
+import { Loader2, MessageSquare, Search, PencilLine, Trash2, Save, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/utils";
 import AdminShell from "@/components/admin/AdminShell";
+import {
+    deleteAdminFeedback,
+    getAdminFeedback,
+    toApiErrorMessage,
+    updateAdminFeedback,
+} from "@/lib/api-client";
 
 type FeedbackItem = {
     id: string;
@@ -73,24 +71,11 @@ export default function AdminFeedbackPage() {
             setLoadingFeedback(true);
             setError(null);
             try {
-                const params = new URLSearchParams({
-                    page: String(page),
-                    pageSize: String(PAGE_SIZE),
+                const result = await getAdminFeedback(session.access_token, {
+                    page,
+                    pageSize: PAGE_SIZE,
+                    q: query.trim(),
                 });
-                if (query.trim()) {
-                    params.set("q", query.trim());
-                }
-
-                const response = await fetch(`/api/admin/feedback?${params.toString()}`, {
-                    headers: {
-                        Authorization: `Bearer ${session.access_token}`,
-                    },
-                    cache: "no-store",
-                });
-                const result = await response.json();
-                if (!response.ok) {
-                    throw new Error(result.error || "Failed to load feedback.");
-                }
 
                 if (!cancelled) {
                     const nextTotalPages = Number(result.totalPages || 1);
@@ -104,11 +89,7 @@ export default function AdminFeedbackPage() {
                 }
             } catch (fetchError) {
                 if (!cancelled) {
-                    setError(
-                        fetchError instanceof Error
-                            ? fetchError.message
-                            : "Unable to load feedback."
-                    );
+                    setError(toApiErrorMessage(fetchError, "Unable to load feedback."));
                 }
             } finally {
                 if (!cancelled) {
@@ -167,21 +148,10 @@ export default function AdminFeedbackPage() {
         setSavingId(id);
         setError(null);
         try {
-            const response = await fetch(`/api/admin/feedback/${id}`, {
-                method: "PATCH",
-                headers: {
-                    Authorization: `Bearer ${session.access_token}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    rating: editDraft.rating,
-                    comment: editDraft.comment.trim(),
-                }),
+            const result = await updateAdminFeedback(session.access_token, id, {
+                rating: editDraft.rating,
+                comment: editDraft.comment.trim(),
             });
-            const result = await response.json();
-            if (!response.ok) {
-                throw new Error(result.error || "Failed to update feedback.");
-            }
 
             setFeedback((prev) =>
                 prev.map((item) =>
@@ -189,14 +159,14 @@ export default function AdminFeedbackPage() {
                         ? {
                               ...item,
                               rating:
-                                  typeof result.feedback?.rating === "number"
-                                      ? result.feedback.rating
+                                  typeof (result.feedback as any)?.rating === "number"
+                                      ? (result.feedback as any).rating
                                       : editDraft.rating,
                               comment: String(
-                                  result.feedback?.comment || editDraft.comment.trim()
+                                  (result.feedback as any)?.comment || editDraft.comment.trim()
                               ),
                               updatedAt: String(
-                                  result.feedback?.updated_at || new Date().toISOString()
+                                  (result.feedback as any)?.updated_at || new Date().toISOString()
                               ),
                           }
                         : item
@@ -204,11 +174,7 @@ export default function AdminFeedbackPage() {
             );
             cancelEdit();
         } catch (saveError) {
-            setError(
-                saveError instanceof Error
-                    ? saveError.message
-                    : "Unable to update feedback."
-            );
+            setError(toApiErrorMessage(saveError, "Unable to update feedback."));
         } finally {
             setSavingId(null);
         }
@@ -216,33 +182,18 @@ export default function AdminFeedbackPage() {
 
     const handleDelete = async (item: FeedbackItem) => {
         if (!session?.access_token) return;
-        const confirmed = window.confirm(
-            "Delete this feedback? This action cannot be undone."
-        );
+        const confirmed = window.confirm("Delete this feedback? This action cannot be undone.");
         if (!confirmed) return;
 
         setDeletingId(item.id);
         setError(null);
         try {
-            const response = await fetch(`/api/admin/feedback/${item.id}`, {
-                method: "DELETE",
-                headers: {
-                    Authorization: `Bearer ${session.access_token}`,
-                },
-            });
-            const result = await response.json();
-            if (!response.ok) {
-                throw new Error(result.error || "Failed to delete feedback.");
-            }
+            await deleteAdminFeedback(session.access_token, item.id);
 
             setFeedback((prev) => prev.filter((entry) => entry.id !== item.id));
             setTotal((prev) => Math.max(0, prev - 1));
         } catch (deleteError) {
-            setError(
-                deleteError instanceof Error
-                    ? deleteError.message
-                    : "Unable to delete feedback."
-            );
+            setError(toApiErrorMessage(deleteError, "Unable to delete feedback."));
         } finally {
             setDeletingId(null);
         }
@@ -385,7 +336,9 @@ export default function AdminFeedbackPage() {
                                                         prev
                                                             ? {
                                                                   ...prev,
-                                                                  rating: Number(event.target.value),
+                                                                  rating: Number(
+                                                                      event.target.value
+                                                                  ),
                                                               }
                                                             : prev
                                                     )
@@ -403,7 +356,10 @@ export default function AdminFeedbackPage() {
                                                 onChange={(event) =>
                                                     setEditDraft((prev) =>
                                                         prev
-                                                            ? { ...prev, comment: event.target.value }
+                                                            ? {
+                                                                  ...prev,
+                                                                  comment: event.target.value,
+                                                              }
                                                             : prev
                                                     )
                                                 }
@@ -482,9 +438,7 @@ export default function AdminFeedbackPage() {
                                 Page {page} of {totalPages}
                             </span>
                             <button
-                                onClick={() =>
-                                    setPage((prev) => Math.min(totalPages, prev + 1))
-                                }
+                                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
                                 disabled={page >= totalPages}
                                 className="btn-secondary !py-2 !px-4 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                             >

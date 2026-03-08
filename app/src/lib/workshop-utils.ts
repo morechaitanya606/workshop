@@ -1,6 +1,7 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Workshop } from "@/lib/data";
 import { mockWorkshops } from "@/lib/data";
+import type { DbInsert, DbTable, Json } from "@/lib/database.types";
+import type { SupabaseServerClient } from "@/lib/supabase-server";
 import type { WorkshopCreateInput, WorkshopQueryInput } from "@/lib/validators";
 import {
     normalizeWorkshopImageUrlInput,
@@ -36,64 +37,62 @@ function cleanUrlValue(value: unknown) {
     return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function cleanLinks(value: unknown) {
-    const links = typeof value === "object" && value ? value : {};
+function cleanLinks(value: Json | null | undefined) {
+    const links =
+        typeof value === "object" && value && !Array.isArray(value)
+            ? (value as Record<string, unknown>)
+            : {};
+
     return {
-        instagram: cleanUrlValue((links as Record<string, unknown>).instagram),
-        youtube: cleanUrlValue((links as Record<string, unknown>).youtube),
-        website: cleanUrlValue((links as Record<string, unknown>).website),
+        instagram: cleanUrlValue(links.instagram),
+        youtube: cleanUrlValue(links.youtube),
+        website: cleanUrlValue(links.website),
     };
 }
 
-export function mapWorkshopRowToWorkshop(row: Record<string, unknown>): Workshop {
+export function mapWorkshopRowToWorkshop(row: DbTable<"workshops">): Workshop {
     const socialLinks = cleanLinks(row.social_links);
     const hostSocialLinks = cleanLinks(row.host_social_links);
 
     return {
         id: String(row.id),
-        title: String(row.title || ""),
-        description: String(row.description || ""),
-        category: String(row.category || ""),
-        price: Number(row.price || 0),
-        location: String(row.location || ""),
-        city: String(row.city || ""),
-        duration: String(row.duration || ""),
-        date: String(row.date || ""),
-        time: normalizeTimeValue(String(row.time || "")),
-        maxSeats: Number(row.max_seats || 0),
-        seatsRemaining: Number(row.seats_remaining || 0),
+        title: String(row.title),
+        description: String(row.description),
+        category: String(row.category),
+        price: Number(row.price),
+        location: String(row.location),
+        city: String(row.city),
+        duration: String(row.duration),
+        date: String(row.date),
+        time: normalizeTimeValue(String(row.time)),
+        maxSeats: Number(row.max_seats),
+        seatsRemaining: Number(row.seats_remaining),
         coverImage: normalizeWorkshopImageUrl(row.cover_image),
-        galleryImages: Array.isArray(row.gallery_images)
-            ? (row.gallery_images as unknown[])
-                .map((img) => normalizeWorkshopImageUrl(img))
-                .filter((img) => img.length > 0)
-            : [],
+        galleryImages: row.gallery_images
+            .map((img) => normalizeWorkshopImageUrl(img))
+            .filter((img) => img.length > 0),
         videoUrl: cleanUrlValue(row.video_url),
-        rating: Number(row.rating || 4.8),
-        reviewCount: Number(row.review_count || 0),
-        hostName: String(row.host_name || ""),
+        rating: 4.8,
+        reviewCount: 0,
+        hostName: String(row.host_name),
         hostAvatar:
             normalizeWorkshopImageUrl(cleanUrlValue(row.host_avatar)) ||
             "/images/workshops/IMG-20260306-WA0006.webp",
-        hostBio: String(row.host_bio || ""),
+        hostBio: String(row.host_bio),
         hostExperience: cleanUrlValue(row.host_experience),
         hostSocialLinks,
         socialLinks,
-        whatYouLearn: Array.isArray(row.what_you_learn)
-            ? (row.what_you_learn as string[])
-            : [],
-        materialsProvided: Array.isArray(row.materials_provided)
-            ? (row.materials_provided as string[])
-            : [],
-        isNew: Boolean(row.is_new),
-        isBestseller: Boolean(row.is_bestseller),
+        whatYouLearn: row.what_you_learn,
+        materialsProvided: row.materials_provided,
+        isNew: row.is_new,
+        isBestseller: row.is_bestseller,
     };
 }
 
 export function buildWorkshopInsertPayload(
     input: WorkshopCreateInput,
     createdBy: string
-) {
+): DbInsert<"workshops"> {
     const normalizedTitle = input.title.trim();
     const slug = normalizedTitle
         .toLowerCase()
@@ -103,14 +102,10 @@ export function buildWorkshopInsertPayload(
 
     const id = `${slug || "workshop"}-${Date.now()}`;
     const coverImage = normalizeWorkshopImageUrlInput(input.coverImage);
-    const galleryImages = input.galleryImages.map((item) =>
-        normalizeWorkshopImageUrlInput(item)
-    );
-    const videoUrl = input.videoUrl
-        ? normalizeWorkshopVideoUrlInput(input.videoUrl)
-        : "";
+    const galleryImages = input.galleryImages.map((item) => normalizeWorkshopImageUrlInput(item));
+    const videoUrl = input.videoUrl ? normalizeWorkshopVideoUrlInput(input.videoUrl) : "";
 
-    return {
+    const payload: DbInsert<"workshops"> = {
         id,
         title: input.title,
         description: input.description,
@@ -138,6 +133,8 @@ export function buildWorkshopInsertPayload(
         is_new: true,
         created_by: createdBy,
     };
+
+    return payload;
 }
 
 function matchesWorkshopQuery(workshop: Workshop, query: WorkshopQueryInput) {
@@ -151,15 +148,12 @@ function matchesWorkshopQuery(workshop: Workshop, query: WorkshopQueryInput) {
         workshop.description.toLowerCase().includes(q) ||
         workshop.location.toLowerCase().includes(q) ||
         workshop.city.toLowerCase().includes(q);
-    const matchesCategory =
-        !category || workshop.category.toLowerCase() === category;
+    const matchesCategory = !category || workshop.category.toLowerCase() === category;
     const matchesCity = !city || workshop.city.toLowerCase() === city;
 
     const price = workshop.price;
-    const matchesMinPrice =
-        typeof query.minPrice === "number" ? price >= query.minPrice : true;
-    const matchesMaxPrice =
-        typeof query.maxPrice === "number" ? price <= query.maxPrice : true;
+    const matchesMinPrice = typeof query.minPrice === "number" ? price >= query.minPrice : true;
+    const matchesMaxPrice = typeof query.maxPrice === "number" ? price <= query.maxPrice : true;
     const matchesDateFrom = query.dateFrom ? workshop.date >= query.dateFrom : true;
     const matchesDateTo = query.dateTo ? workshop.date <= query.dateTo : true;
 
@@ -174,10 +168,7 @@ function matchesWorkshopQuery(workshop: Workshop, query: WorkshopQueryInput) {
     );
 }
 
-export function sortWorkshops(
-    workshops: Workshop[],
-    sort: WorkshopQueryInput["sort"]
-) {
+export function sortWorkshops(workshops: Workshop[], sort: WorkshopQueryInput["sort"]) {
     const items = [...workshops];
     items.sort((a, b) => {
         if (sort === "date_desc") return b.date.localeCompare(a.date);
@@ -206,7 +197,7 @@ export function queryMockWorkshops(query: WorkshopQueryInput) {
 }
 
 export async function ensureWorkshopSeededFromMock(
-    serviceClient: SupabaseClient,
+    serviceClient: SupabaseServerClient,
     workshopId: string
 ) {
     const { data: existing } = await serviceClient
@@ -222,7 +213,7 @@ export async function ensureWorkshopSeededFromMock(
         return false;
     }
 
-    const insertPayload = {
+    const insertPayload: DbInsert<"workshops"> = {
         id: mockWorkshop.id,
         title: mockWorkshop.title,
         description: mockWorkshop.description,
@@ -240,7 +231,7 @@ export async function ensureWorkshopSeededFromMock(
         video_url: mockWorkshop.videoUrl || null,
         social_links: mockWorkshop.socialLinks || {},
         host_name: mockWorkshop.hostName,
-        host_avatar: mockWorkshop.hostAvatar,
+        host_avatar: mockWorkshop.hostAvatar || null,
         host_bio: mockWorkshop.hostBio,
         host_experience: mockWorkshop.hostExperience || null,
         host_social_links: mockWorkshop.hostSocialLinks || {},

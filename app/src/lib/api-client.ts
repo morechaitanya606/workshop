@@ -1,0 +1,475 @@
+import type { Workshop } from "@/lib/data";
+
+type Primitive = string | number | boolean | null | undefined;
+
+export class ApiClientError extends Error {
+    status: number;
+    details: unknown;
+
+    constructor(message: string, status: number, details?: unknown) {
+        super(message);
+        this.name = "ApiClientError";
+        this.status = status;
+        this.details = details ?? null;
+    }
+}
+
+type ApiRequestOptions = {
+    method?: "GET" | "POST" | "PATCH" | "DELETE";
+    accessToken?: string;
+    body?: unknown;
+    cache?: RequestCache;
+};
+
+async function apiRequest<T>(path: string, options: ApiRequestOptions = {}) {
+    const headers: Record<string, string> = {};
+    if (options.body !== undefined) {
+        headers["Content-Type"] = "application/json";
+    }
+    if (options.accessToken) {
+        headers.Authorization = `Bearer ${options.accessToken}`;
+    }
+
+    const response = await fetch(path, {
+        method: options.method ?? "GET",
+        headers,
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        cache: options.cache,
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new ApiClientError(
+            String(payload?.error || "Request failed."),
+            response.status,
+            payload?.details ?? payload
+        );
+    }
+
+    return payload as T;
+}
+
+export function isApiClientError(error: unknown): error is ApiClientError {
+    return error instanceof ApiClientError;
+}
+
+export type GetWorkshopResponse = {
+    workshop: Workshop;
+    source: "supabase" | "mock";
+};
+
+export function getWorkshopById(workshopId: string) {
+    return apiRequest<GetWorkshopResponse>(`/api/workshops/${workshopId}`, {
+        cache: "no-store",
+    });
+}
+
+export type BookingHoldResponse = {
+    hold: {
+        id: string;
+        guests: number;
+        expires_at: string;
+        workshop?: {
+            id: string;
+            title: string;
+            price: number;
+            date: string;
+            time: string;
+            location: string;
+            city: string;
+            cover_image: string;
+        };
+    };
+    holdDurationMinutes: number;
+};
+
+export function createBookingHold(
+    accessToken: string,
+    payload: {
+        workshopId: string;
+        guests: number;
+    }
+) {
+    return apiRequest<BookingHoldResponse>("/api/bookings/hold", {
+        method: "POST",
+        accessToken,
+        body: payload,
+    });
+}
+
+export type WorkshopNotificationResponse = {
+    subscriptions: {
+        similar: boolean;
+        creator: boolean;
+    };
+    message?: string;
+};
+
+export function getWorkshopNotifications(workshopId: string, accessToken: string) {
+    return apiRequest<WorkshopNotificationResponse>(`/api/workshops/${workshopId}/notifications`, {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function updateWorkshopNotifications(
+    workshopId: string,
+    accessToken: string,
+    mode: "similar" | "creator"
+) {
+    return apiRequest<WorkshopNotificationResponse>(`/api/workshops/${workshopId}/notifications`, {
+        method: "POST",
+        accessToken,
+        body: { mode },
+    });
+}
+
+export type WorkshopFeedbackResponse = {
+    feedback: {
+        rating: number | null;
+        comment: string;
+        photos: string[];
+        video_url: string | null;
+        created_at: string;
+        updated_at: string;
+    } | null;
+    message?: string;
+};
+
+export function getWorkshopFeedback(workshopId: string, accessToken: string) {
+    return apiRequest<WorkshopFeedbackResponse>(`/api/workshops/${workshopId}/feedback`, {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function submitWorkshopFeedback(
+    workshopId: string,
+    accessToken: string,
+    payload: {
+        comment: string;
+        rating?: number;
+        photos?: string[];
+        videoUrl?: string;
+    }
+) {
+    return apiRequest<WorkshopFeedbackResponse>(`/api/workshops/${workshopId}/feedback`, {
+        method: "POST",
+        accessToken,
+        body: payload,
+    });
+}
+
+export type CheckoutOrderResponse = {
+    mode: "order_created" | "already_confirmed" | "confirmed";
+    order?: {
+        id: string;
+        amount: number;
+        currency: string;
+        keyId: string;
+        name?: string;
+        description?: string;
+        prefill?: {
+            name?: string;
+            email?: string;
+            contact?: string;
+        };
+    };
+    booking?: {
+        id: string;
+        total: number;
+        workshop?: {
+            title?: string;
+            date?: string;
+            time?: string;
+            cover_image?: string;
+        };
+    };
+};
+
+export type CheckoutPayload = {
+    holdId: string;
+    workshopId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    notes?: string;
+    razorpayOrderId?: string;
+    razorpayPaymentId?: string;
+    razorpaySignature?: string;
+};
+
+export function createCheckoutOrder(accessToken: string, payload: CheckoutPayload) {
+    return apiRequest<CheckoutOrderResponse>("/api/bookings/checkout", {
+        method: "POST",
+        accessToken,
+        body: payload,
+    });
+}
+
+export function confirmCheckoutPayment(
+    accessToken: string,
+    payload: CheckoutPayload & {
+        razorpayOrderId: string;
+        razorpayPaymentId: string;
+        razorpaySignature: string;
+    }
+) {
+    return apiRequest<CheckoutOrderResponse>("/api/bookings/checkout", {
+        method: "POST",
+        accessToken,
+        body: payload,
+    });
+}
+
+export function toApiErrorMessage(error: unknown, fallbackMessage: string) {
+    if (isApiClientError(error)) {
+        return error.message || fallbackMessage;
+    }
+    return fallbackMessage;
+}
+
+export type EventProperties = Record<string, Primitive>;
+
+export type AuthMeResponse = {
+    user: {
+        id: string;
+        email: string | null;
+        fullName: string | null;
+    };
+    role: "admin" | "user";
+};
+
+export function getAuthMe(accessToken: string) {
+    return apiRequest<AuthMeResponse>("/api/auth/me", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export type MyBookingsResponse = {
+    data: Array<{
+        id: string;
+        guests: number;
+        total: number;
+        status?: string;
+        created_at: string;
+        workshop?: {
+            id: string;
+            title: string;
+            date: string;
+            time: string;
+            location: string;
+            city: string;
+        };
+    }>;
+    source: "supabase" | "mock";
+};
+
+export function getMyBookings(accessToken: string) {
+    return apiRequest<MyBookingsResponse>("/api/bookings", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export async function uploadMedia(accessToken: string, file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch("/api/upload", {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+        },
+        body: formData,
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new ApiClientError(
+            String(payload?.error || "Upload failed."),
+            response.status,
+            payload?.details ?? payload
+        );
+    }
+
+    return payload as { url: string };
+}
+
+export type AdminRegistrationsResponse = {
+    registrations: Array<{
+        id: string;
+        first_name: string;
+        last_name: string;
+        email: string;
+        phone: string | null;
+        guests: number;
+        total: number;
+        status: string;
+        created_at: string;
+        workshop: {
+            id: string;
+            title: string;
+            date: string;
+            time: string;
+            city: string;
+            location: string;
+        } | null;
+    }>;
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+};
+
+export function getAdminRegistrations(
+    accessToken: string,
+    params: {
+        page: number;
+        pageSize: number;
+        status?: string;
+        q?: string;
+    }
+) {
+    const searchParams = new URLSearchParams({
+        page: String(params.page),
+        pageSize: String(params.pageSize),
+        status: params.status || "all",
+    });
+    if (params.q?.trim()) {
+        searchParams.set("q", params.q.trim());
+    }
+
+    return apiRequest<AdminRegistrationsResponse>(
+        `/api/admin/registrations?${searchParams.toString()}`,
+        {
+            accessToken,
+            cache: "no-store",
+        }
+    );
+}
+
+export type AdminFeedbackResponse = {
+    feedback: Array<{
+        id: string;
+        userId: string;
+        workshopId: string;
+        rating: number | null;
+        comment: string;
+        photos: string[];
+        videoUrl: string | null;
+        createdAt: string;
+        updatedAt: string;
+        workshop: {
+            id: string;
+            title: string;
+            date: string;
+            time: string | null;
+            city: string;
+            location: string;
+        } | null;
+        user: {
+            fullName: string | null;
+            firstName: string | null;
+            lastName: string | null;
+            email: string | null;
+        };
+    }>;
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+};
+
+export function getAdminFeedback(
+    accessToken: string,
+    params: {
+        page: number;
+        pageSize: number;
+        q?: string;
+        workshopId?: string;
+    }
+) {
+    const searchParams = new URLSearchParams({
+        page: String(params.page),
+        pageSize: String(params.pageSize),
+    });
+    if (params.q?.trim()) {
+        searchParams.set("q", params.q.trim());
+    }
+    if (params.workshopId?.trim()) {
+        searchParams.set("workshopId", params.workshopId.trim());
+    }
+
+    return apiRequest<AdminFeedbackResponse>(`/api/admin/feedback?${searchParams.toString()}`, {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function updateAdminFeedback(
+    accessToken: string,
+    feedbackId: string,
+    payload: { rating?: number; comment?: string }
+) {
+    return apiRequest<{ feedback: unknown }>(`/api/admin/feedback/${feedbackId}`, {
+        method: "PATCH",
+        accessToken,
+        body: payload,
+    });
+}
+
+export function deleteAdminFeedback(accessToken: string, feedbackId: string) {
+    return apiRequest<{ success: boolean }>(`/api/admin/feedback/${feedbackId}`, {
+        method: "DELETE",
+        accessToken,
+    });
+}
+
+export type AdminWorkshopsResponse = {
+    data: Workshop[];
+};
+
+export function getAdminWorkshops(accessToken: string) {
+    return apiRequest<AdminWorkshopsResponse>("/api/admin/workshops", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function deleteAdminWorkshop(accessToken: string, workshopId: string) {
+    return apiRequest<{ success: boolean }>(`/api/admin/workshops/${workshopId}`, {
+        method: "DELETE",
+        accessToken,
+    });
+}
+
+export type FavoritesResponse = {
+    favorites: string[];
+    source: "supabase" | "memory";
+};
+
+export function getFavorites(accessToken: string) {
+    return apiRequest<FavoritesResponse>("/api/favorites", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function addFavorite(accessToken: string, workshopId: string) {
+    return apiRequest<FavoritesResponse>("/api/favorites", {
+        method: "POST",
+        accessToken,
+        body: { workshopId },
+    });
+}
+
+export function removeFavorite(accessToken: string, workshopId: string) {
+    return apiRequest<FavoritesResponse>("/api/favorites", {
+        method: "DELETE",
+        accessToken,
+        body: { workshopId },
+    });
+}

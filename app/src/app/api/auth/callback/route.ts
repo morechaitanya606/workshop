@@ -2,6 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getUserRole } from "@/lib/api-auth";
+import type { Database } from "@/lib/database.types";
+import { getPublicSupabaseConfig } from "@/lib/env";
 
 export async function GET(request: Request) {
     const requestUrl = new URL(request.url);
@@ -12,12 +14,14 @@ export async function GET(request: Request) {
 
     if (code) {
         const cookieStore = cookies();
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabasePublicKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+        const supabasePublicConfig = getPublicSupabaseConfig();
+        if (!supabasePublicConfig) {
+            return NextResponse.redirect(new URL(next, request.url));
+        }
 
-        const supabase = createServerClient(
-            supabaseUrl,
-            supabasePublicKey,
+        const supabase = createServerClient<Database>(
+            supabasePublicConfig.url,
+            supabasePublicConfig.key,
             {
                 cookies: {
                     get(name: string) {
@@ -32,7 +36,7 @@ export async function GET(request: Request) {
                     },
                     remove(name: string, options: any) {
                         try {
-                            cookieStore.set({ name, value: '', ...options });
+                            cookieStore.set({ name, value: "", ...options });
                         } catch (error) {
                             // Ignored due to middleware refreshing session
                         }

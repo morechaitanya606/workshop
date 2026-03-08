@@ -49,7 +49,9 @@ async function getWorkshops(searchParams: { [key: string]: string | string[] | u
 
             if (query.q) {
                 const q = query.q.replace(/[%]/g, "");
-                dbQuery = dbQuery.or(`title.ilike.%${q}%,description.ilike.%${q}%,location.ilike.%${q}%,city.ilike.%${q}%`);
+                dbQuery = dbQuery.or(
+                    `title.ilike.%${q}%,description.ilike.%${q}%,location.ilike.%${q}%,city.ilike.%${q}%`
+                );
             }
             if (query.category) {
                 dbQuery = dbQuery.eq("category", query.category);
@@ -76,7 +78,7 @@ async function getWorkshops(searchParams: { [key: string]: string | string[] | u
 
             if (!error) {
                 return {
-                    data: (data || []).map((row) => mapWorkshopRowToWorkshop(row as Record<string, unknown>)),
+                    data: (data || []).map((row) => mapWorkshopRowToWorkshop(row)),
                     total: count || 0,
                     source: "supabase" as const,
                 };

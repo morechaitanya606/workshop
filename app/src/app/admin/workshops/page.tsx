@@ -3,18 +3,12 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import {
-    Loader2,
-    Plus,
-    PencilLine,
-    MapPin,
-    CalendarDays,
-    Trash2,
-} from "lucide-react";
+import { Loader2, Plus, PencilLine, MapPin, CalendarDays, Trash2 } from "lucide-react";
 import type { Workshop } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import AdminShell from "@/components/admin/AdminShell";
+import { deleteAdminWorkshop, getAdminWorkshops, toApiErrorMessage } from "@/lib/api-client";
 
 export default function AdminWorkshopsPage() {
     const { session } = useAuth();
@@ -32,26 +26,13 @@ export default function AdminWorkshopsPage() {
             setLoadingWorkshops(true);
             setError(null);
             try {
-                const response = await fetch("/api/admin/workshops", {
-                    headers: {
-                        Authorization: `Bearer ${session.access_token}`,
-                    },
-                    cache: "no-store",
-                });
-                const result = await response.json();
-                if (!response.ok) {
-                    throw new Error(result.error || "Failed to load workshops.");
-                }
+                const result = await getAdminWorkshops(session.access_token);
                 if (!cancelled) {
                     setWorkshops(Array.isArray(result.data) ? result.data : []);
                 }
             } catch (fetchError) {
                 if (!cancelled) {
-                    setError(
-                        fetchError instanceof Error
-                            ? fetchError.message
-                            : "Unable to load workshops."
-                    );
+                    setError(toApiErrorMessage(fetchError, "Unable to load workshops."));
                 }
             } finally {
                 if (!cancelled) {
@@ -68,32 +49,17 @@ export default function AdminWorkshopsPage() {
 
     const handleDeleteWorkshop = async (workshop: Workshop) => {
         if (!session?.access_token) return;
-        const confirmed = window.confirm(
-            `Delete "${workshop.title}"? This cannot be undone.`
-        );
+        const confirmed = window.confirm(`Delete "${workshop.title}"? This cannot be undone.`);
         if (!confirmed) return;
 
         setDeletingId(workshop.id);
         setError(null);
         try {
-            const response = await fetch(`/api/admin/workshops/${workshop.id}`, {
-                method: "DELETE",
-                headers: {
-                    Authorization: `Bearer ${session.access_token}`,
-                },
-            });
-            const result = await response.json();
-            if (!response.ok) {
-                throw new Error(result.error || "Failed to delete workshop.");
-            }
+            await deleteAdminWorkshop(session.access_token, workshop.id);
 
             setWorkshops((prev) => prev.filter((item) => item.id !== workshop.id));
         } catch (deleteError) {
-            setError(
-                deleteError instanceof Error
-                    ? deleteError.message
-                    : "Unable to delete workshop."
-            );
+            setError(toApiErrorMessage(deleteError, "Unable to delete workshop."));
         } finally {
             setDeletingId(null);
         }
@@ -191,9 +157,7 @@ export default function AdminWorkshopsPage() {
 
                     {workshops.length === 0 && (
                         <div className="col-span-full bg-white rounded-2xl p-8 text-center shadow-soft">
-                            <p className="text-body text-dark-muted mb-4">
-                                No workshops yet.
-                            </p>
+                            <p className="text-body text-dark-muted mb-4">No workshops yet.</p>
                             <Link href="/admin/workshops/new" className="btn-primary">
                                 <Plus className="w-4 h-4" />
                                 Create Workshop

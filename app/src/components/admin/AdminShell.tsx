@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { motion, useReducedMotion } from "framer-motion";
 import {
     LayoutDashboard,
     Calendar,
@@ -17,6 +18,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
 import { useAuth } from "@/lib/auth-context";
+import { fadeIn, quickTransition, useMotionProps } from "@/lib/motion-presets";
 
 type AdminShellProps = {
     children: ReactNode;
@@ -33,7 +35,11 @@ const navItems = [
 export default function AdminShell({ children }: AdminShellProps) {
     const pathname = usePathname();
     const router = useRouter();
+    const prefersReducedMotion = useReducedMotion();
     const { user, role, loading, roleLoading } = useAuth();
+    const sectionMotionProps = useMotionProps(prefersReducedMotion, fadeIn, quickTransition, {
+        whileInView: false,
+    });
 
     useEffect(() => {
         if (!loading && !user) {
@@ -79,8 +85,7 @@ export default function AdminShell({ children }: AdminShellProps) {
                         <nav className="space-y-2">
                             {navItems.map((item) => {
                                 const isActive =
-                                    pathname === item.href ||
-                                    pathname.startsWith(`${item.href}/`);
+                                    pathname === item.href || pathname.startsWith(`${item.href}/`);
                                 const Icon = item.icon;
 
                                 return (
@@ -101,7 +106,7 @@ export default function AdminShell({ children }: AdminShellProps) {
                         </nav>
                         <Link
                             href="/admin/workshops/new"
-                            className="mt-8 w-full inline-flex items-center justify-center gap-2 rounded-full bg-terracotta px-6 py-4 text-xl lg:text-base font-inter font-semibold text-white transition-colors hover:bg-terracotta-600"
+                            className="btn-primary mt-8 w-full !py-4 lg:!py-3.5 text-xl lg:text-base"
                         >
                             <Plus className="w-5 h-5" />
                             Create Workshop
@@ -109,9 +114,12 @@ export default function AdminShell({ children }: AdminShellProps) {
                     </div>
                 </aside>
 
-                <section className="flex-1 w-full p-4 sm:p-6 lg:p-10">
+                <motion.section
+                    {...sectionMotionProps}
+                    className="flex-1 w-full p-4 sm:p-6 lg:p-10"
+                >
                     {children}
-                </section>
+                </motion.section>
             </div>
 
             <Footer />

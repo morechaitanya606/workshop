@@ -3,11 +3,22 @@ import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import crypto from "crypto";
+import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
+    }
+
+    const rateLimitResult = assertRateLimit({
+        key: getRateLimitKey(request, "upload", auth.user.id),
+        limit: 30,
+        windowMs: 5 * 60_000,
+        message: "Upload rate limit exceeded. Please try again in a few minutes.",
+    });
+    if (!rateLimitResult.ok) {
+        return rateLimitResult.response;
     }
 
     try {
@@ -24,10 +35,7 @@ export async function POST(request: NextRequest) {
         const isVideo = videoTypes.includes(file.type);
 
         if (!isImage && !isVideo) {
-            return jsonError(
-                "Invalid file type. Allowed: JPEG, PNG, WebP, MP4, WebM, MOV.",
-                400
-            );
+            return jsonError("Invalid file type. Allowed: JPEG, PNG, WebP, MP4, WebM, MOV.", 400);
         }
 
         const maxBytes = isVideo ? 50 * 1024 * 1024 : 5 * 1024 * 1024;

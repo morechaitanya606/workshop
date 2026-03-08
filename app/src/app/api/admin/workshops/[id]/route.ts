@@ -1,9 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import {
-    createSupabaseServiceClient,
-    isSupabaseServiceConfigured,
-} from "@/lib/supabase-server";
+import { handleApiError, parseBody } from "@/lib/api-route";
+import type { DbUpdate } from "@/lib/database.types";
+import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { requireAdminUser } from "@/lib/api-auth";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import { workshopUpdateSchema } from "@/lib/validators";
@@ -41,20 +40,14 @@ export async function GET(request: NextRequest, { params }: Params) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
         if (!data) {
-            return NextResponse.json(
-                { error: "Workshop not found." },
-                { status: 404 }
-            );
+            return NextResponse.json({ error: "Workshop not found." }, { status: 404 });
         }
 
         return NextResponse.json({
-            workshop: mapWorkshopRowToWorkshop(data as Record<string, unknown>),
+            workshop: mapWorkshopRowToWorkshop(data),
         });
     } catch (error) {
-        return NextResponse.json(
-            { error: "Failed to load workshop.", details: String(error) },
-            { status: 500 }
-        );
+        return handleApiError("Failed to load workshop.", error);
     }
 }
 
@@ -71,22 +64,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         );
     }
 
-    let body: unknown;
-    try {
-        body = await request.json();
-    } catch {
-        return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 });
-    }
-
-    const parsed = workshopUpdateSchema.safeParse(body);
-    if (!parsed.success) {
-        return NextResponse.json(
-            {
-                error: "Workshop update validation failed.",
-                details: parsed.error.flatten(),
-            },
-            { status: 400 }
-        );
+    const parsed = await parseBody(
+        request,
+        workshopUpdateSchema,
+        "Invalid JSON payload.",
+        "Workshop update validation failed."
+    );
+    if (!parsed.ok) {
+        return parsed.response;
     }
 
     try {
@@ -98,20 +83,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             .maybeSingle();
 
         if (existingError) {
-            return NextResponse.json(
-                { error: existingError.message },
-                { status: 500 }
-            );
+            return NextResponse.json({ error: existingError.message }, { status: 500 });
         }
         if (!existing) {
-            return NextResponse.json(
-                { error: "Workshop not found." },
-                { status: 404 }
-            );
+            return NextResponse.json({ error: "Workshop not found." }, { status: 404 });
         }
 
         const input = parsed.data;
-        const patch: Record<string, unknown> = {};
+        const patch: DbUpdate<"workshops"> = {};
 
         if (typeof input.title === "string") patch.title = input.title;
         if (typeof input.description === "string") patch.description = input.description;
@@ -169,13 +148,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         }
 
         return NextResponse.json({
-            workshop: mapWorkshopRowToWorkshop(data as Record<string, unknown>),
+            workshop: mapWorkshopRowToWorkshop(data),
         });
     } catch (error) {
-        return NextResponse.json(
-            { error: "Failed to update workshop.", details: String(error) },
-            { status: 500 }
-        );
+        return handleApiError("Failed to update workshop.", error);
     }
 }
 
@@ -205,8 +181,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
             if (error.code === "23503") {
                 return NextResponse.json(
                     {
-                        error:
-                            "Cannot delete workshop because bookings exist for it.",
+                        error: "Cannot delete workshop because bookings exist for it.",
                     },
                     { status: 409 }
                 );
@@ -218,17 +193,11 @@ export async function DELETE(request: NextRequest, { params }: Params) {
         }
 
         if (!data) {
-            return NextResponse.json(
-                { error: "Workshop not found." },
-                { status: 404 }
-            );
+            return NextResponse.json({ error: "Workshop not found." }, { status: 404 });
         }
 
         return NextResponse.json({ success: true });
     } catch (error) {
-        return NextResponse.json(
-            { error: "Failed to delete workshop.", details: String(error) },
-            { status: 500 }
-        );
+        return handleApiError("Failed to delete workshop.", error);
     }
 }

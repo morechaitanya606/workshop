@@ -1,37 +1,75 @@
 {
-  "name": "onlyworkshop",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "dependencies": {
-    "@supabase/ssr": "^0.5.2",
-    "@supabase/supabase-js": "^2.45.0",
-    "clsx": "^2.1.1",
-    "framer-motion": "^11.15.0",
-    "lucide-react": "^0.460.0",
-    "next": "14.2.21",
-    "razorpay": "^2.9.6",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "sharp": "^0.34.5",
-    "tailwind-merge": "^2.6.0",
-    "zod": "^4.3.6",
-    "zustand": "^5.0.0"
-  },
-  "devDependencies": {
-    "@types/node": "^22.10.0",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "autoprefixer": "^10.4.20",
-    "eslint": "^8.57.0",
-    "eslint-config-next": "14.2.21",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.16",
-    "typescript": "^5.7.2"
-  }
+    "name": "onlyworkshop",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start",
+        "lint": "next lint",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:e2e": "playwright test",
+        "test:e2e:ui": "playwright test --ui",
+        "storybook": "storybook dev -p 6006",
+        "build-storybook": "storybook build",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "lint-staged": "lint-staged",
+        "gen:supabase-types": "npx supabase gen types typescript --schema public --linked > src/lib/database.types.ts",
+        "prepare": "cd .. && npx --prefix app husky .husky"
+    },
+    "dependencies": {
+        "@sentry/nextjs": "^10.22.0",
+        "@supabase/ssr": "^0.5.2",
+        "@supabase/supabase-js": "^2.45.0",
+        "clsx": "^2.1.1",
+        "framer-motion": "^11.15.0",
+        "lucide-react": "^0.460.0",
+        "next": "14.2.21",
+        "posthog-js": "^1.285.1",
+        "razorpay": "^2.9.6",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "sharp": "^0.34.5",
+        "tailwind-merge": "^2.6.0",
+        "zod": "^4.3.6",
+        "zustand": "^5.0.0"
+    },
+    "devDependencies": {
+        "@testing-library/jest-dom": "^6.9.1",
+        "@testing-library/react": "^16.3.0",
+        "@testing-library/user-event": "^14.6.1",
+        "@playwright/test": "^1.52.0",
+        "@storybook/addon-essentials": "8.6.18",
+        "@storybook/addon-interactions": "8.6.18",
+        "@storybook/nextjs": "8.6.18",
+        "@storybook/react": "8.6.18",
+        "@types/node": "^22.10.0",
+        "@types/react": "^18.3.12",
+        "@types/react-dom": "^18.3.1",
+        "autoprefixer": "^10.4.20",
+        "eslint": "^8.57.0",
+        "eslint-config-next": "14.2.21",
+        "eslint-config-prettier": "^10.1.8",
+        "husky": "^9.1.7",
+        "jsdom": "^27.0.0",
+        "lint-staged": "^16.2.3",
+        "postcss": "^8.4.49",
+        "prettier": "^3.6.2",
+        "storybook": "8.6.18",
+        "tailwindcss": "^3.4.16",
+        "typescript": "^5.7.2",
+        "vitest": "^4.0.0"
+    },
+    "lint-staged": {
+        "*.{js,jsx,ts,tsx}": [
+            "eslint --fix",
+            "prettier --write"
+        ],
+        "*.{json,md,css,scss}": [
+            "prettier --write"
+        ]
+    }
 }

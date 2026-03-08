@@ -1,17 +1,18 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { parseBody } from "@/lib/api-route";
 import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
-import {
-    createSupabaseServiceClient,
-    isSupabaseServiceConfigured,
-} from "@/lib/supabase-server";
+import type { DbTable } from "@/lib/database.types";
+import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { workshopNotificationSchema } from "@/lib/validators";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 
 type NotificationRow = {
-    notify_similar: boolean | null;
-    notify_creator: boolean | null;
+    notify_similar: DbTable<"workshop_notification_preferences">["notify_similar"] | null;
+    notify_creator: DbTable<"workshop_notification_preferences">["notify_creator"] | null;
 };
+
+const fallbackNotificationStore = new Map<string, { similar: boolean; creator: boolean }>();
 
 function mapNotificationState(record: NotificationRow | null | undefined) {
     return {
@@ -20,10 +21,50 @@ function mapNotificationState(record: NotificationRow | null | undefined) {
     };
 }
 
-export async function GET(
-    request: NextRequest,
-    { params }: { params: { id: string } }
+function notificationFallbackKey(userId: string, workshopId: string) {
+    return `${userId}:${workshopId}`;
+}
+
+function getFallbackNotificationState(userId: string, workshopId: string) {
+    return (
+        fallbackNotificationStore.get(notificationFallbackKey(userId, workshopId)) || {
+            similar: false,
+            creator: false,
+        }
+    );
+}
+
+function upsertFallbackNotificationState(
+    userId: string,
+    workshopId: string,
+    mode: "similar" | "creator"
 ) {
+    const current = getFallbackNotificationState(userId, workshopId);
+    const next = {
+        similar: mode === "similar" ? true : current.similar,
+        creator: mode === "creator" ? true : current.creator,
+    };
+    fallbackNotificationStore.set(notificationFallbackKey(userId, workshopId), next);
+    return next;
+}
+
+function isMissingNotificationPreferencesTableError(error: unknown) {
+    if (!error || typeof error !== "object") {
+        return false;
+    }
+
+    const code = String((error as { code?: string }).code || "").toUpperCase();
+    const message = String((error as { message?: string }).message || "").toLowerCase();
+
+    return (
+        code === "42P01" ||
+        code === "PGRST205" ||
+        message.includes("public.workshop_notification_preferences") ||
+        message.includes("workshop_notification_preferences")
+    );
+}
+
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -52,6 +93,12 @@ export async function GET(
             .eq("workshop_id", workshopId)
             .maybeSingle();
 
+        if (isMissingNotificationPreferencesTableError(error)) {
+            return NextResponse.json({
+                subscriptions: getFallbackNotificationState(auth.user.id, workshopId),
+            });
+        }
+
         if (error) {
             return jsonError("Unable to load notification preferences.", 500, error);
         }
@@ -60,18 +107,11 @@ export async function GET(
             subscriptions: mapNotificationState(data as NotificationRow | null),
         });
     } catch (error) {
-        return jsonError(
-            "Unable to load notification preferences.",
-            500,
-            String(error)
-        );
+        return jsonError("Unable to load notification preferences.", 500, String(error));
     }
 }
 
-export async function POST(
-    request: NextRequest,
-    { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -84,16 +124,14 @@ export async function POST(
         );
     }
 
-    let body: unknown;
-    try {
-        body = await request.json();
-    } catch {
-        return jsonError("Invalid JSON payload.", 400);
-    }
-
-    const parsed = workshopNotificationSchema.safeParse(body);
-    if (!parsed.success) {
-        return jsonError("Invalid notification request.", 400, parsed.error.flatten());
+    const parsed = await parseBody(
+        request,
+        workshopNotificationSchema,
+        "Invalid JSON payload.",
+        "Invalid notification request."
+    );
+    if (!parsed.ok) {
+        return parsed.response;
     }
 
     const workshopId = params.id;
@@ -111,6 +149,22 @@ export async function POST(
             .eq("user_id", auth.user.id)
             .eq("workshop_id", workshopId)
             .maybeSingle();
+
+        if (isMissingNotificationPreferencesTableError(existingError)) {
+            const subscriptions = upsertFallbackNotificationState(
+                auth.user.id,
+                workshopId,
+                parsed.data.mode
+            );
+
+            return NextResponse.json({
+                subscriptions,
+                message:
+                    parsed.data.mode === "similar"
+                        ? "Notification enabled for similar events."
+                        : "Notification enabled for creator's next event.",
+            });
+        }
 
         if (existingError) {
             return jsonError("Unable to load existing preferences.", 500, existingError);
@@ -140,6 +194,22 @@ export async function POST(
             .select("notify_similar, notify_creator")
             .single();
 
+        if (isMissingNotificationPreferencesTableError(saveError)) {
+            const subscriptions = upsertFallbackNotificationState(
+                auth.user.id,
+                workshopId,
+                parsed.data.mode
+            );
+
+            return NextResponse.json({
+                subscriptions,
+                message:
+                    parsed.data.mode === "similar"
+                        ? "Notification enabled for similar events."
+                        : "Notification enabled for creator's next event.",
+            });
+        }
+
         if (saveError) {
             return jsonError("Unable to save notification preference.", 500, saveError);
         }
@@ -152,10 +222,6 @@ export async function POST(
                     : "Notification enabled for creator's next event.",
         });
     } catch (error) {
-        return jsonError(
-            "Unable to save notification preference.",
-            500,
-            String(error)
-        );
+        return jsonError("Unable to save notification preference.", 500, String(error));
     }
 }

@@ -2,14 +2,20 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { motion, useReducedMotion } from "framer-motion";
 import { Loader2, Mail, CheckCircle, AlertCircle } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { cardReveal, standardTransition, useMotionProps } from "@/lib/motion-presets";
 
 export default function ForgotPasswordPage() {
+    const prefersReducedMotion = useReducedMotion();
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const cardMotionProps = useMotionProps(prefersReducedMotion, cardReveal, standardTransition, {
+        whileInView: false,
+    });
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -17,19 +23,14 @@ export default function ForgotPasswordPage() {
         setSuccess(false);
 
         if (!isSupabaseConfigured) {
-            setError(
-                "Authentication is not configured. Add Supabase env vars first."
-            );
+            setError("Authentication is not configured. Add Supabase env vars first.");
             return;
         }
 
         setLoading(true);
-        const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-            email,
-            {
-                redirectTo: `${window.location.origin}/auth/reset-password`,
-            }
-        );
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/auth/reset-password`,
+        });
         setLoading(false);
 
         if (resetError) {
@@ -42,7 +43,10 @@ export default function ForgotPasswordPage() {
 
     return (
         <main className="min-h-screen bg-cream flex items-center justify-center px-6 py-12">
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-soft p-6 sm:p-8">
+            <motion.div
+                {...cardMotionProps}
+                className="w-full max-w-md bg-white rounded-2xl shadow-soft p-6 sm:p-8"
+            >
                 <h1 className="heading-md mb-2">Reset your password</h1>
                 <p className="text-body text-dark-muted mb-6">
                     Enter your account email and we will send you a reset link.
@@ -92,11 +96,14 @@ export default function ForgotPasswordPage() {
 
                 <p className="text-sm font-inter text-dark-muted mt-6">
                     Remembered your password?{" "}
-                    <Link href="/auth/login" className="text-terracotta font-semibold hover:underline">
+                    <Link
+                        href="/auth/login"
+                        className="text-terracotta font-semibold hover:underline"
+                    >
                         Back to login
                     </Link>
                 </p>
-            </div>
+            </motion.div>
         </main>
     );
 }

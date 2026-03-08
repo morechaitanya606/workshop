@@ -5,10 +5,7 @@ const urlOrEmpty = z
     .trim()
     .optional()
     .transform((value) => value || "")
-    .refine(
-        (value) => value === "" || /^https?:\/\/.+/i.test(value),
-        "Must be a valid URL."
-    );
+    .refine((value) => value === "" || /^https?:\/\/.+/i.test(value), "Must be a valid URL.");
 
 const mediaUrl = z
     .string()
@@ -24,10 +21,7 @@ const mediaUrlOrEmpty = z
     .optional()
     .transform((value) => value || "")
     .refine(
-        (value) =>
-            value === "" ||
-            value.startsWith("/") ||
-            /^https?:\/\/.+/i.test(value),
+        (value) => value === "" || value.startsWith("/") || /^https?:\/\/.+/i.test(value),
         "Must be a valid URL."
     );
 
@@ -64,14 +58,8 @@ export const workshopCreateSchema = z.object({
         youtube: "",
         website: "",
     }),
-    whatYouLearn: z
-        .array(z.string().trim().min(1).max(240))
-        .min(1)
-        .max(20),
-    materialsProvided: z
-        .array(z.string().trim().min(1).max(240))
-        .min(1)
-        .max(20),
+    whatYouLearn: z.array(z.string().trim().min(1).max(240)).min(1).max(20),
+    materialsProvided: z.array(z.string().trim().min(1).max(240)).min(1).max(20),
 });
 
 export type WorkshopCreateInput = z.infer<typeof workshopCreateSchema>;
@@ -105,32 +93,34 @@ export const bookingHoldSchema = z.object({
 
 export type BookingHoldInput = z.infer<typeof bookingHoldSchema>;
 
-export const bookingCheckoutSchema = z.object({
-    holdId: z.string().uuid(),
-    workshopId: z.string().trim().min(1).max(120),
-    firstName: z.string().trim().min(1).max(120),
-    lastName: z.string().trim().min(1).max(120),
-    email: z.string().trim().email().max(320),
-    phone: z.string().trim().max(32).optional().default(""),
-    notes: z.string().trim().max(2000).optional().default(""),
-    razorpayOrderId: z.string().trim().min(1).max(80).optional(),
-    razorpayPaymentId: z.string().trim().min(1).max(80).optional(),
-    razorpaySignature: z.string().trim().min(1).max(256).optional(),
-}).superRefine((value, ctx) => {
-    const hasOrderId = Boolean(value.razorpayOrderId);
-    const hasPaymentId = Boolean(value.razorpayPaymentId);
-    const hasSignature = Boolean(value.razorpaySignature);
-    const providedCount = Number(hasOrderId) + Number(hasPaymentId) + Number(hasSignature);
+export const bookingCheckoutSchema = z
+    .object({
+        holdId: z.string().uuid(),
+        workshopId: z.string().trim().min(1).max(120),
+        firstName: z.string().trim().min(1).max(120),
+        lastName: z.string().trim().min(1).max(120),
+        email: z.string().trim().email().max(320),
+        phone: z.string().trim().max(32).optional().default(""),
+        notes: z.string().trim().max(2000).optional().default(""),
+        razorpayOrderId: z.string().trim().min(1).max(80).optional(),
+        razorpayPaymentId: z.string().trim().min(1).max(80).optional(),
+        razorpaySignature: z.string().trim().min(1).max(256).optional(),
+    })
+    .superRefine((value, ctx) => {
+        const hasOrderId = Boolean(value.razorpayOrderId);
+        const hasPaymentId = Boolean(value.razorpayPaymentId);
+        const hasSignature = Boolean(value.razorpaySignature);
+        const providedCount = Number(hasOrderId) + Number(hasPaymentId) + Number(hasSignature);
 
-    if (providedCount !== 0 && providedCount !== 3) {
-        ctx.addIssue({
-            code: "custom",
-            message:
-                "Provide all Razorpay fields (razorpayOrderId, razorpayPaymentId, razorpaySignature) together.",
-            path: ["razorpayOrderId"],
-        });
-    }
-});
+        if (providedCount !== 0 && providedCount !== 3) {
+            ctx.addIssue({
+                code: "custom",
+                message:
+                    "Provide all Razorpay fields (razorpayOrderId, razorpayPaymentId, razorpaySignature) together.",
+                path: ["razorpayOrderId"],
+            });
+        }
+    });
 
 export type BookingCheckoutInput = z.infer<typeof bookingCheckoutSchema>;
 
@@ -138,12 +128,10 @@ export const workshopNotificationSchema = z.object({
     mode: z.enum(["similar", "creator"]),
 });
 
-export type WorkshopNotificationInput = z.infer<
-    typeof workshopNotificationSchema
->;
+export type WorkshopNotificationInput = z.infer<typeof workshopNotificationSchema>;
 
 export const workshopFeedbackSchema = z.object({
-    rating: z.coerce.number().int().min(1).max(5),
+    rating: z.coerce.number().int().min(1).max(5).optional().default(5),
     comment: z.string().trim().min(3).max(2000),
     photos: z.array(mediaUrl).optional().default([]),
     videoUrl: mediaUrlOrEmpty.optional(),
@@ -160,9 +148,7 @@ export const adminFeedbackUpdateSchema = z
         message: "Provide at least one field to update.",
     });
 
-export type AdminFeedbackUpdateInput = z.infer<
-    typeof adminFeedbackUpdateSchema
->;
+export type AdminFeedbackUpdateInput = z.infer<typeof adminFeedbackUpdateSchema>;
 
 export const workshopQuerySchema = z.object({
     q: z.string().trim().max(120).optional().default(""),
@@ -173,16 +159,28 @@ export const workshopQuerySchema = z.object({
     minPrice: z.coerce.number().int().min(0).max(1000000).optional(),
     maxPrice: z.coerce.number().int().min(0).max(1000000).optional(),
     sort: z
-        .enum([
-            "date_asc",
-            "date_desc",
-            "price_asc",
-            "price_desc",
-            "rating_desc",
-        ])
+        .enum(["date_asc", "date_desc", "price_asc", "price_desc", "rating_desc"])
         .default("date_asc"),
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(24).default(8),
 });
 
 export type WorkshopQueryInput = z.infer<typeof workshopQuerySchema>;
+
+export const adminRegistrationsQuerySchema = z.object({
+    q: z.string().trim().max(120).optional().default(""),
+    status: z.string().trim().max(32).optional().default("all"),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(50).default(12),
+});
+
+export type AdminRegistrationsQueryInput = z.infer<typeof adminRegistrationsQuerySchema>;
+
+export const adminFeedbackQuerySchema = z.object({
+    q: z.string().trim().max(120).optional().default(""),
+    workshopId: z.string().trim().max(120).optional().default(""),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(50).default(12),
+});
+
+export type AdminFeedbackQueryInput = z.infer<typeof adminFeedbackQuerySchema>;

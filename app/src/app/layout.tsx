@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
+import AnalyticsProvider from "@/components/AnalyticsProvider";
+import ToastProvider from "@/components/ToastProvider";
 import { AuthProvider } from "@/lib/auth-context";
 
 const playfair = Playfair_Display({
@@ -32,8 +34,7 @@ export const metadata: Metadata = {
     ],
     openGraph: {
         title: "Only Workshop | A Better Weekend Awaits",
-        description:
-            "Discover creative workshops and experiences happening in your city.",
+        description: "Discover creative workshops and experiences happening in your city.",
         type: "website",
     },
 };
@@ -46,9 +47,11 @@ export default function RootLayout({
     return (
         <html lang="en" className={`${playfair.variable} ${inter.variable}`}>
             <body className="min-h-screen bg-cream antialiased">
-                <AuthProvider>
-                    {children}
-                </AuthProvider>
+                <AnalyticsProvider>
+                    <ToastProvider>
+                        <AuthProvider>{children}</AuthProvider>
+                    </ToastProvider>
+                </AnalyticsProvider>
             </body>
         </html>
     );

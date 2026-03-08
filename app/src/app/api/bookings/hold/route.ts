@@ -1,8 +1,10 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { handleApiError, parseBody } from "@/lib/api-route";
 import { bookingHoldSchema } from "@/lib/validators";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { requireAuthenticatedUser } from "@/lib/api-auth";
+import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 
 const HOLD_DURATION_MINUTES = 15;
@@ -13,29 +15,33 @@ export async function POST(request: NextRequest) {
         return auth.response;
     }
 
+    const rateLimitResult = assertRateLimit({
+        key: getRateLimitKey(request, "bookings-hold", auth.user.id),
+        limit: 20,
+        windowMs: 60_000,
+        message: "Too many hold attempts. Please wait and try again.",
+    });
+    if (!rateLimitResult.ok) {
+        return rateLimitResult.response;
+    }
+
     if (!isSupabaseServiceConfigured) {
         return NextResponse.json(
             {
-                error:
-                    "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
+                error: "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
             },
             { status: 500 }
         );
     }
 
-    let body: unknown;
-    try {
-        body = await request.json();
-    } catch {
-        return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 });
-    }
-
-    const parsed = bookingHoldSchema.safeParse(body);
-    if (!parsed.success) {
-        return NextResponse.json(
-            { error: "Invalid hold request.", details: parsed.error.flatten() },
-            { status: 400 }
-        );
+    const parsed = await parseBody(
+        request,
+        bookingHoldSchema,
+        "Invalid JSON payload.",
+        "Invalid hold request."
+    );
+    if (!parsed.ok) {
+        return parsed.response;
     }
 
     const { workshopId, guests } = parsed.data;
@@ -46,8 +52,7 @@ export async function POST(request: NextRequest) {
         if (!seeded) {
             return NextResponse.json(
                 {
-                    error:
-                        "Workshop not found in database and no mock seed exists for this id.",
+                    error: "Workshop not found in database and no mock seed exists for this id.",
                 },
                 { status: 404 }
             );
@@ -84,10 +89,7 @@ export async function POST(request: NextRequest) {
                 .single();
 
             if (workshopError || !workshop) {
-                return NextResponse.json(
-                    { error: "Workshop not found." },
-                    { status: 404 }
-                );
+                return NextResponse.json({ error: "Workshop not found." }, { status: 404 });
             }
 
             const { data: activeHolds } = await serviceClient
@@ -103,10 +105,7 @@ export async function POST(request: NextRequest) {
             );
             const available = Number(workshop.seats_remaining) - heldSeats;
             if (available < guests) {
-                return NextResponse.json(
-                    { error: "Not enough seats available." },
-                    { status: 409 }
-                );
+                return NextResponse.json({ error: "Not enough seats available." }, { status: 409 });
             }
 
             const expiresAt = new Date(
@@ -127,8 +126,7 @@ export async function POST(request: NextRequest) {
             if (insertError || !insertedHold?.id) {
                 return NextResponse.json(
                     {
-                        error:
-                            "Failed to create seat hold. Apply the SQL migration for transactional holds.",
+                        error: "Failed to create seat hold. Apply the SQL migration for transactional holds.",
                         details: insertError?.message || rpcError?.message || null,
                     },
                     { status: 500 }
@@ -173,12 +171,6 @@ export async function POST(request: NextRequest) {
             holdDurationMinutes: HOLD_DURATION_MINUTES,
         });
     } catch (error) {
-        return NextResponse.json(
-            {
-                error: "Failed to create seat hold.",
-                details: String(error),
-            },
-            { status: 500 }
-        );
+        return handleApiError("Failed to create seat hold.", error);
     }
 }

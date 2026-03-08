@@ -4,7 +4,8 @@ import HomePageClient from "./HomePageClient";
 
 export const metadata = {
     title: "Only Workshop | Creative experiences in your city",
-    description: "Discover creative workshops and experiences happening in your city. Book pottery, painting, cooking, and more.",
+    description:
+        "Discover creative workshops and experiences happening in your city. Book pottery, painting, cooking, and more.",
 };
 
 async function getLiveWorkshops() {
@@ -18,7 +19,7 @@ async function getLiveWorkshops() {
                 .limit(12);
 
             if (!error && data) {
-                return data.map((row) => mapWorkshopRowToWorkshop(row as Record<string, unknown>));
+                return data.map((row) => mapWorkshopRowToWorkshop(row));
             }
         } catch (e) {
             console.error("Failed to fetch live workshops:", e);
@@ -33,7 +34,7 @@ async function getLiveWorkshops() {
         dateTo: "",
         sort: "date_asc",
         page: 1,
-        pageSize: 12
+        pageSize: 12,
     }).data;
 }
 
