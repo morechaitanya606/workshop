@@ -3,14 +3,8 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import {
-    Loader2,
-    CalendarDays,
-    Users,
-    IndianRupee,
-    Star,
-    ArrowRight,
-} from "lucide-react";
+import { motion } from "framer-motion";
+import { Loader2, CalendarDays, Users, IndianRupee, Star, ArrowRight } from "lucide-react";
 import type { Workshop } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -85,7 +79,11 @@ export default function AdminDashboardPage() {
                     Loading dashboard data...
                 </div>
             ) : (
-                <>
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                >
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
                         <div className="bg-white rounded-2xl p-5 shadow-soft">
                             <p className="text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-1">
@@ -139,7 +137,7 @@ export default function AdminDashboardPage() {
                             {workshops.slice(0, 6).map((workshop) => (
                                 <div
                                     key={workshop.id}
-                                    className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-4"
+                                    className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-cream-100 transition-colors duration-200"
                                 >
                                     <div className="relative w-full sm:w-16 h-40 sm:h-16 rounded-xl overflow-hidden flex-shrink-0">
                                         <Image
@@ -160,7 +158,8 @@ export default function AdminDashboardPage() {
                                             </span>
                                             <span className="inline-flex items-center gap-1">
                                                 <Users className="w-3.5 h-3.5" />
-                                                {workshop.seatsRemaining}/{workshop.maxSeats} seats left
+                                                {workshop.seatsRemaining}/{workshop.maxSeats} seats
+                                                left
                                             </span>
                                             <span className="inline-flex items-center gap-1">
                                                 <IndianRupee className="w-3.5 h-3.5" />
@@ -188,7 +187,7 @@ export default function AdminDashboardPage() {
                             )}
                         </div>
                     </div>
-                </>
+                </motion.div>
             )}
         </AdminShell>
     );

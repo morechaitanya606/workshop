@@ -378,9 +378,19 @@ function BookingContent() {
                             transition={prefersReducedMotion ? { duration: 0 } : standardTransition}
                             className="max-w-lg mx-auto text-center"
                         >
-                            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <motion.div
+                                variants={prefersReducedMotion ? undefined : scaleIn}
+                                initial={prefersReducedMotion ? undefined : "hidden"}
+                                animate={prefersReducedMotion ? undefined : "visible"}
+                                transition={
+                                    prefersReducedMotion
+                                        ? { duration: 0 }
+                                        : { ...standardTransition, delay: 0.1 }
+                                }
+                                className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6"
+                            >
                                 <Check className="w-10 h-10 text-emerald-600" />
-                            </div>
+                            </motion.div>
                             <h1 className="heading-lg mb-3">Booking Confirmed</h1>
                             <p className="text-body text-dark-muted mb-8">
                                 Your booking for <strong>{bookingWorkshopTitle}</strong> is
@@ -541,7 +551,9 @@ function BookingContent() {
                             </button>
                         </div>
 
-                        <div className="hidden lg:block">
+                        <div
+                            className={`hidden lg:block transition-opacity duration-300 ${submitting ? "opacity-50 pointer-events-none" : ""}`}
+                        >
                             <div className="sticky top-28 bg-white rounded-2xl shadow-soft p-6 border border-gray-100">
                                 <h3 className="text-sm font-inter font-bold text-dark-muted uppercase tracking-wider mb-4">
                                     Order Summary

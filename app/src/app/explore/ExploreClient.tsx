@@ -2,8 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { Search, SlidersHorizontal, X, Loader2 } from "lucide-react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { Search, SlidersHorizontal, X, Loader2, Info } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
@@ -11,6 +11,13 @@ import WorkshopCard from "@/components/WorkshopCard";
 import { categories } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
 import { trackEvent } from "@/lib/analytics";
+import {
+    fadeInUp,
+    fadeIn,
+    standardTransition,
+    quickTransition,
+    useMotionProps,
+} from "@/lib/motion-presets";
 
 type SortOption = "date_asc" | "date_desc" | "price_asc" | "price_desc" | "rating_desc";
 
@@ -25,6 +32,24 @@ const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
 const CITY_OPTIONS = ["", "Pune", "Mumbai", "Bangalore", "Delhi", "Hyderabad"];
 const PAGE_SIZE = 8;
 
+/* ─── Skeleton card for loading state ─── */
+function SkeletonCard() {
+    return (
+        <div className="card-workshop">
+            <div className="aspect-[4/3] shimmer" />
+            <div className="p-4 space-y-3">
+                <div className="h-3 shimmer rounded w-2/3" />
+                <div className="h-4 shimmer rounded w-full" />
+                <div className="h-3 shimmer rounded w-1/2" />
+                <div className="flex justify-between pt-2 border-t border-gray-100">
+                    <div className="h-4 shimmer rounded w-12" />
+                    <div className="h-5 shimmer rounded w-16" />
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function ExploreClient({
     workshops,
     total,
@@ -37,6 +62,7 @@ export default function ExploreClient({
     const router = useRouter();
     const searchParams = useSearchParams();
     const [isPending, startTransition] = useTransition();
+    const prefersReducedMotion = useReducedMotion();
 
     const parsedQuery = useMemo(() => {
         const urlSort = searchParams.get("sort") as SortOption | null;
@@ -70,6 +96,52 @@ export default function ExploreClient({
     const [sort, setSort] = useState<SortOption>(parsedQuery.sort);
 
     const totalPages = Math.max(1, Math.ceil(total / parsedQuery.pageSize));
+
+    /* Count active filters for badge */
+    const activeFilterCount = [
+        selectedCategory,
+        selectedCity,
+        dateFrom,
+        dateTo,
+        minPrice,
+        maxPrice,
+    ].filter(Boolean).length;
+
+    /* Collect active filter chips for display */
+    const activeChips: Array<{ label: string; clear: () => void }> = [];
+    if (selectedCategory)
+        activeChips.push({ label: selectedCategory, clear: () => setSelectedCategory("") });
+    if (selectedCity) activeChips.push({ label: selectedCity, clear: () => setSelectedCity("") });
+    if (minPrice || maxPrice) {
+        const priceLabel =
+            minPrice && maxPrice
+                ? `₹${minPrice} – ₹${maxPrice}`
+                : minPrice
+                  ? `Min ₹${minPrice}`
+                  : `Max ₹${maxPrice}`;
+        activeChips.push({
+            label: priceLabel,
+            clear: () => {
+                setMinPrice("");
+                setMaxPrice("");
+            },
+        });
+    }
+    if (dateFrom || dateTo) {
+        const dateLabel =
+            dateFrom && dateTo
+                ? `${dateFrom} → ${dateTo}`
+                : dateFrom
+                  ? `From ${dateFrom}`
+                  : `Until ${dateTo}`;
+        activeChips.push({
+            label: dateLabel,
+            clear: () => {
+                setDateFrom("");
+                setDateTo("");
+            },
+        });
+    }
 
     const pushFilters = (overrides?: Partial<typeof parsedQuery>) => {
         const next = {
@@ -131,17 +203,31 @@ export default function ExploreClient({
         .filter((item) => item.id !== "trending")
         .map((item) => item.label);
 
+    /* Serialised filter key for AnimatePresence */
+    const gridKey = `${parsedQuery.q}-${parsedQuery.category}-${parsedQuery.city}-${parsedQuery.sort}-${parsedQuery.page}`;
+    const headingMotionProps = useMotionProps(prefersReducedMotion, fadeInUp, standardTransition, {
+        whileInView: false,
+    });
+    const filterBarMotionProps = useMotionProps(
+        prefersReducedMotion,
+        fadeInUp,
+        standardTransition,
+        { whileInView: false, delay: 0.1 }
+    );
+    const filterPanelMotionProps = useMotionProps(prefersReducedMotion, fadeInUp, quickTransition, {
+        whileInView: false,
+    });
+    const gridMotionProps = useMotionProps(prefersReducedMotion, fadeIn, quickTransition, {
+        whileInView: false,
+    });
+
     return (
         <main className="min-h-screen pb-20 md:pb-0">
             <Navbar />
 
             <div className="pt-24 sm:pt-28">
                 <div className="section-padding">
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.6 }}
-                    >
+                    <motion.div {...headingMotionProps}>
                         <h1 className="heading-xl mb-2">Explore Workshops</h1>
                         <p className="text-body text-dark-muted">
                             Find your next creative adventure
@@ -149,9 +235,7 @@ export default function ExploreClient({
                     </motion.div>
 
                     <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.6, delay: 0.1 }}
+                        {...filterBarMotionProps}
                         className="mt-8 flex flex-col lg:flex-row gap-3"
                     >
                         <div className="flex-1 flex items-center gap-3 bg-white rounded-xl px-4 py-3 shadow-soft border border-gray-100">
@@ -169,7 +253,10 @@ export default function ExploreClient({
                                 className="flex-1 bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted/60"
                             />
                             {searchQuery && (
-                                <button onClick={() => setSearchQuery("")}>
+                                <button
+                                    onClick={() => setSearchQuery("")}
+                                    aria-label="Clear search"
+                                >
                                     <X className="w-4 h-4 text-dark-muted" />
                                 </button>
                             )}
@@ -186,6 +273,11 @@ export default function ExploreClient({
                             >
                                 <SlidersHorizontal className="w-4 h-4" />
                                 <span>Filters</span>
+                                {activeFilterCount > 0 && (
+                                    <span className="ml-1 w-5 h-5 rounded-full bg-white/20 text-[11px] font-bold flex items-center justify-center">
+                                        {activeFilterCount}
+                                    </span>
+                                )}
                             </button>
 
                             <select
@@ -213,10 +305,36 @@ export default function ExploreClient({
                         </div>
                     </motion.div>
 
+                    {/* ─── Active filter chips ─── */}
+                    {activeChips.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="inline-flex items-center rounded-full bg-cream-100 px-3 py-1.5 text-xs font-inter font-semibold text-dark-muted">
+                                Active filters ({activeFilterCount})
+                            </span>
+                            {activeChips.map((chip) => (
+                                <span
+                                    key={chip.label}
+                                    className="inline-flex items-center gap-1.5 bg-terracotta/10 text-terracotta text-xs font-inter font-semibold px-3 py-1.5 rounded-full"
+                                >
+                                    {chip.label}
+                                    <button
+                                        onClick={() => {
+                                            chip.clear();
+                                            pushFilters({ page: 1 });
+                                        }}
+                                        aria-label={`Remove ${chip.label} filter`}
+                                        className="hover:text-terracotta-700"
+                                    >
+                                        <X className="w-3 h-3" />
+                                    </button>
+                                </span>
+                            ))}
+                        </div>
+                    )}
+
                     {showFilters && (
                         <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
+                            {...filterPanelMotionProps}
                             className="mt-4 bg-white rounded-2xl border border-gray-100 shadow-soft p-4 sm:p-5"
                         >
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -304,6 +422,13 @@ export default function ExploreClient({
                                 ? "Updating..."
                                 : `${total} workshop${total === 1 ? "" : "s"} found`}
                         </p>
+
+                        {source === "mock" && !isPending && total > 0 && (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-inter text-dark-muted bg-cream-200 px-3 py-1 rounded-full">
+                                <Info className="w-3.5 h-3.5" />
+                                Showing demo workshops
+                            </span>
+                        )}
                     </div>
 
                     {!isPending && workshops.length === 0 && (
@@ -318,17 +443,34 @@ export default function ExploreClient({
                         </div>
                     )}
 
-                    <div
-                        className={`grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 ${isPending ? "opacity-50" : ""}`}
-                    >
-                        {workshops.map((workshop, index) => (
-                            <WorkshopCard
-                                key={`${workshop.id}-${index}`}
-                                workshop={workshop}
-                                index={index}
-                            />
-                        ))}
-                    </div>
+                    {/* Skeleton loading state */}
+                    {isPending && (
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                            {Array.from({ length: 8 }).map((_, i) => (
+                                <SkeletonCard key={i} />
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Workshop grid with AnimatePresence */}
+                    {!isPending && workshops.length > 0 && (
+                        <AnimatePresence mode="wait">
+                            <motion.div
+                                key={gridKey}
+                                {...gridMotionProps}
+                                exit={prefersReducedMotion ? undefined : { opacity: 0 }}
+                                className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6"
+                            >
+                                {workshops.map((workshop, index) => (
+                                    <WorkshopCard
+                                        key={`${workshop.id}-${index}`}
+                                        workshop={workshop}
+                                        index={index}
+                                    />
+                                ))}
+                            </motion.div>
+                        </AnimatePresence>
+                    )}
 
                     {totalPages > 1 && (
                         <div className="flex items-center justify-center gap-3 mt-10">

@@ -100,7 +100,11 @@ function LoginContent() {
                     </p>
 
                     {error && (
-                        <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm font-inter rounded-xl px-4 py-3 mb-6">
+                        <div
+                            id="login-error"
+                            role="alert"
+                            className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm font-inter rounded-xl px-4 py-3 mb-6"
+                        >
                             <AlertCircle className="w-4 h-4 flex-shrink-0" />
                             {error}
                         </div>
@@ -119,6 +123,8 @@ function LoginContent() {
                                     onChange={(event) => setEmail(event.target.value)}
                                     placeholder="your@email.com"
                                     required
+                                    aria-invalid={error ? "true" : undefined}
+                                    aria-describedby={error ? "login-error" : undefined}
                                     className="w-full bg-white border border-gray-200 rounded-xl pl-12 pr-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta focus:ring-2 focus:ring-terracotta/10 transition-all"
                                 />
                             </div>
@@ -136,6 +142,8 @@ function LoginContent() {
                                     onChange={(event) => setPassword(event.target.value)}
                                     placeholder="********"
                                     required
+                                    aria-invalid={error ? "true" : undefined}
+                                    aria-describedby={error ? "login-error" : undefined}
                                     className="w-full bg-white border border-gray-200 rounded-xl pl-12 pr-12 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta focus:ring-2 focus:ring-terracotta/10 transition-all"
                                 />
                                 <button

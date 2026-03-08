@@ -41,10 +41,44 @@ const config: Config = {
                     secondary: "#4A4A4A",
                     muted: "#7A7A7A",
                 },
+                /**
+                 * Additional semantic colors used in profile/admin screens.
+                 * These map onto the existing warm, neutral palette.
+                 */
+                forest: {
+                    DEFAULT: "#1F1F1F", // reuse dark.text
+                    50: "#F5EFE6",
+                    100: "#E7DED1",
+                    200: "#CFC0AA",
+                    300: "#B3A082",
+                    400: "#8F7B5A",
+                    500: "#6B573E",
+                    600: "#524331",
+                    700: "#3A3024",
+                    800: "#261F18",
+                    900: "#17130F",
+                },
+                sand: {
+                    DEFAULT: "#F5EFE6", // matches README "Cream" background
+                    50: "#FFFBF5",
+                    100: "#F5EFE6",
+                    200: "#E5DBC6",
+                    300: "#D4C3A4",
+                    400: "#C4AF8B",
+                    500: "#AF956D",
+                    600: "#8C7450",
+                    700: "#6A573A",
+                    800: "#473A26",
+                    900: "#2C2417",
+                },
             },
             fontFamily: {
                 playfair: ["var(--font-playfair)", "serif"],
                 inter: ["var(--font-inter)", "sans-serif"],
+                /**
+                 * Alias used in profile/admin pages (font-display -> Playfair).
+                 */
+                display: ["var(--font-playfair)", "serif"],
             },
             borderRadius: {
                 "2xl": "1rem",

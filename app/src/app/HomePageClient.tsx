@@ -32,6 +32,8 @@ import {
     quickTransition,
     revealViewport,
     standardTransition,
+    slowBounce,
+    staggerContainer,
 } from "@/lib/motion-presets";
 import { formatDate } from "@/lib/utils";
 
@@ -281,14 +283,11 @@ export default function HomePageClient({ initialWorkshops }: { initialWorkshops:
                         prefersReducedMotion ? { duration: 0 } : { ...quickTransition, delay: 1.5 }
                     }
                     className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10"
+                    aria-label="Scroll down"
                 >
                     <motion.div
                         animate={prefersReducedMotion ? undefined : { y: [0, 8, 0] }}
-                        transition={
-                            prefersReducedMotion
-                                ? undefined
-                                : { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
-                        }
+                        transition={prefersReducedMotion ? undefined : slowBounce}
                         className="w-6 h-10 rounded-full border-2 border-white/40 flex items-start justify-center p-2"
                     >
                         <motion.div className="w-1.5 h-1.5 bg-white rounded-full" />
@@ -483,7 +482,8 @@ export default function HomePageClient({ initialWorkshops }: { initialWorkshops:
                             href="https://chat.whatsapp.com/Cwk12c9wUJy6AnRhg3dUMc"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] text-white font-inter font-semibold px-6 py-3 rounded-full transition-colors shadow-lg shadow-[#25D366]/20"
+                            aria-label="Join WhatsApp Community"
+                            className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] hover:scale-[1.02] text-white font-inter font-semibold px-6 py-3 rounded-full transition-all duration-300 shadow-lg shadow-[#25D366]/20"
                         >
                             <svg
                                 className="w-5 h-5"
@@ -536,9 +536,9 @@ export default function HomePageClient({ initialWorkshops }: { initialWorkshops:
             {/* ═════════ OUR PARTNERS (MARQUEE) ═════════ */}
             <section className="section-padding overflow-hidden mt-16 mb-4">
                 <div className="max-w-7xl mx-auto mb-10 text-center px-4">
-                    <h3 className="font-playfair text-3xl font-bold text-dark mb-4">
+                    <h2 className="font-playfair text-3xl font-bold text-dark mb-4">
                         Our Cafe Partners
-                    </h3>
+                    </h2>
                     <p className="text-body text-dark-muted max-w-2xl mx-auto">
                         We host our experiences at the finest cafes across the city.
                     </p>
@@ -623,7 +623,7 @@ export default function HomePageClient({ initialWorkshops }: { initialWorkshops:
                         ].map((partner, i) => (
                             <div
                                 key={i}
-                                className="flex items-center gap-4 bg-white px-6 py-4 rounded-2xl shadow-sm border border-clay/30 min-w-[240px]"
+                                className="flex items-center gap-4 bg-white px-6 py-4 rounded-2xl shadow-sm border border-clay/30 min-w-[240px] hover:scale-[1.03] hover:shadow-hover transition-all duration-300"
                             >
                                 <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 bg-cream border border-clay/50">
                                     <img
@@ -644,21 +644,26 @@ export default function HomePageClient({ initialWorkshops }: { initialWorkshops:
             {/* ═════════ COMMUNITY GALLERY ═════════ */}
             <section className="section-padding mt-24">
                 <SectionHeader title="From Our Community" reduceMotion={shouldReduceMotion} />
-                <div className="columns-2 sm:columns-3 lg:columns-4 gap-3 sm:gap-4">
+                <motion.div
+                    variants={prefersReducedMotion ? undefined : staggerContainer}
+                    initial={prefersReducedMotion ? undefined : "hidden"}
+                    whileInView={prefersReducedMotion ? undefined : "visible"}
+                    viewport={prefersReducedMotion ? undefined : revealViewport}
+                    className="columns-2 sm:columns-3 lg:columns-4 gap-3 sm:gap-4"
+                >
                     {galleryImages.map((img, i) => (
                         <motion.div
                             key={i}
-                            initial={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.9 }}
-                            whileInView={
-                                prefersReducedMotion ? undefined : { opacity: 1, scale: 1 }
-                            }
-                            viewport={prefersReducedMotion ? undefined : revealViewport}
-                            transition={
+                            variants={
                                 prefersReducedMotion
-                                    ? { duration: 0 }
-                                    : { ...quickTransition, delay: i * 0.04 }
+                                    ? undefined
+                                    : {
+                                          hidden: { opacity: 0, scale: 0.9 },
+                                          visible: { opacity: 1, scale: 1 },
+                                      }
                             }
-                            className="relative mb-3 sm:mb-4 rounded-xl overflow-hidden group break-inside-avoid"
+                            transition={prefersReducedMotion ? { duration: 0 } : quickTransition}
+                            className="relative mb-3 sm:mb-4 rounded-xl overflow-hidden group break-inside-avoid cursor-zoom-in"
                         >
                             <Image
                                 src={img}
@@ -666,12 +671,17 @@ export default function HomePageClient({ initialWorkshops }: { initialWorkshops:
                                 width={400}
                                 height={i % 3 === 0 ? 500 : i % 3 === 1 ? 350 : 400}
                                 className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-105"
+                                sizes="(max-width: 640px) 48vw, (max-width: 1024px) 31vw, (max-width: 1440px) 23vw, 320px"
                                 loading="lazy"
                             />
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-500" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/10 opacity-70 group-hover:opacity-100 transition-opacity duration-500 flex items-center justify-center">
+                                <span className="text-white font-inter font-semibold text-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                    View photo
+                                </span>
+                            </div>
                         </motion.div>
                     ))}
-                </div>
+                </motion.div>
             </section>
 
             {/* ═════════ WANT TO HOST SECTION ═════════ */}

@@ -4,8 +4,19 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Loader2, AlertCircle, CheckCircle } from "lucide-react";
+import {
+    Mail,
+    Lock,
+    User,
+    ArrowRight,
+    Eye,
+    EyeOff,
+    Loader2,
+    AlertCircle,
+    CheckCircle,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { quickTransition, scaleIn } from "@/lib/motion-presets";
 
 export default function SignupPage() {
     const { signUp, signInWithGoogle } = useAuth();
@@ -50,16 +61,24 @@ export default function SignupPage() {
         return (
             <main className="min-h-screen bg-cream flex items-center justify-center px-6">
                 <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
+                    initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
                     className="text-center max-w-md"
                 >
-                    <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <motion.div
+                        variants={scaleIn}
+                        initial="hidden"
+                        animate="visible"
+                        transition={{ ...quickTransition, delay: 0.1 }}
+                        className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6"
+                    >
                         <CheckCircle className="w-8 h-8 text-emerald-600" />
-                    </div>
+                    </motion.div>
                     <h1 className="heading-lg mb-3">Check your email!</h1>
                     <p className="text-body text-dark-muted mb-8">
-                        We have sent a confirmation link to <strong>{email}</strong>. Click it to activate your account.
+                        We have sent a confirmation link to <strong>{email}</strong>. Click it to
+                        activate your account.
                     </p>
                     <Link href="/auth/login" className="btn-primary">
                         Back to Login
@@ -123,7 +142,11 @@ export default function SignupPage() {
                     </p>
 
                     {error && (
-                        <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm font-inter rounded-xl px-4 py-3 mb-6">
+                        <div
+                            id="signup-error"
+                            role="alert"
+                            className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm font-inter rounded-xl px-4 py-3 mb-6"
+                        >
                             <AlertCircle className="w-4 h-4 flex-shrink-0" />
                             {error}
                         </div>
@@ -142,6 +165,8 @@ export default function SignupPage() {
                                     onChange={(e) => setFullName(e.target.value)}
                                     placeholder="Your full name"
                                     required
+                                    aria-invalid={error ? "true" : undefined}
+                                    aria-describedby={error ? "signup-error" : undefined}
                                     className="w-full bg-white border border-gray-200 rounded-xl pl-12 pr-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta focus:ring-2 focus:ring-terracotta/10 transition-all"
                                 />
                             </div>
@@ -159,6 +184,8 @@ export default function SignupPage() {
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="your@email.com"
                                     required
+                                    aria-invalid={error ? "true" : undefined}
+                                    aria-describedby={error ? "signup-error" : undefined}
                                     className="w-full bg-white border border-gray-200 rounded-xl pl-12 pr-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta focus:ring-2 focus:ring-terracotta/10 transition-all"
                                 />
                             </div>
@@ -176,6 +203,8 @@ export default function SignupPage() {
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="Minimum 6 characters"
                                     required
+                                    aria-invalid={error ? "true" : undefined}
+                                    aria-describedby={error ? "signup-error" : undefined}
                                     className="w-full bg-white border border-gray-200 rounded-xl pl-12 pr-12 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta focus:ring-2 focus:ring-terracotta/10 transition-all"
                                 />
                                 <button
@@ -200,9 +229,19 @@ export default function SignupPage() {
                             />
                             <span className="text-sm font-inter text-dark-muted leading-snug">
                                 I agree to the{" "}
-                                <Link href="/legal/terms" className="text-terracotta hover:underline">Terms of Service</Link>{" "}
+                                <Link
+                                    href="/legal/terms"
+                                    className="text-terracotta hover:underline"
+                                >
+                                    Terms of Service
+                                </Link>{" "}
                                 and{" "}
-                                <Link href="/legal/privacy" className="text-terracotta hover:underline">Privacy Policy</Link>
+                                <Link
+                                    href="/legal/privacy"
+                                    className="text-terracotta hover:underline"
+                                >
+                                    Privacy Policy
+                                </Link>
                             </span>
                         </label>
 
@@ -238,10 +277,22 @@ export default function SignupPage() {
                         className="w-full flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-xl py-3.5 text-sm font-inter font-medium text-dark hover:border-terracotta/40 transition-colors"
                     >
                         <svg className="w-5 h-5" viewBox="0 0 24 24">
-                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
-                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                            <path
+                                fill="#4285F4"
+                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+                            />
+                            <path
+                                fill="#34A853"
+                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                            />
+                            <path
+                                fill="#FBBC05"
+                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                            />
+                            <path
+                                fill="#EA4335"
+                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                            />
                         </svg>
                         Continue with Google
                     </button>

@@ -197,21 +197,28 @@ export default function AdminAnalyticsPage() {
                                 User Registrations
                             </h2>
                         </div>
-                        <div className="overflow-x-auto">
+                        <div className="max-h-[65vh] overflow-x-auto overflow-y-auto">
                             <table className="w-full text-sm font-inter">
-                                <thead className="bg-cream-100 text-dark-muted">
+                                <thead className="sticky top-0 z-10 bg-cream-100 text-dark-muted">
                                     <tr>
-                                        <th className="text-left px-4 py-3">User</th>
-                                        <th className="text-left px-4 py-3">Workshop</th>
-                                        <th className="text-left px-4 py-3">Guests</th>
-                                        <th className="text-left px-4 py-3">Total</th>
-                                        <th className="text-left px-4 py-3">Status</th>
-                                        <th className="text-left px-4 py-3">Booked At</th>
+                                        <th className="bg-cream-100 text-left px-4 py-3">User</th>
+                                        <th className="bg-cream-100 text-left px-4 py-3">
+                                            Workshop
+                                        </th>
+                                        <th className="bg-cream-100 text-left px-4 py-3">Guests</th>
+                                        <th className="bg-cream-100 text-left px-4 py-3">Total</th>
+                                        <th className="bg-cream-100 text-left px-4 py-3">Status</th>
+                                        <th className="bg-cream-100 text-left px-4 py-3">
+                                            Booked At
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {registrations.map((item) => (
-                                        <tr key={item.id} className="border-b border-gray-100">
+                                        <tr
+                                            key={item.id}
+                                            className="border-b border-gray-100 transition-colors hover:bg-cream-50"
+                                        >
                                             <td className="px-4 py-3">
                                                 <p className="font-semibold text-dark">
                                                     {item.first_name} {item.last_name}

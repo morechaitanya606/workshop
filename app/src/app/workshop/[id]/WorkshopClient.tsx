@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -81,6 +81,7 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
     const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
     const [feedbackLoading, setFeedbackLoading] = useState(false);
     const [canLeaveFeedback, setCanLeaveFeedback] = useState(false);
+    const videoModalRef = useRef<HTMLDivElement | null>(null);
 
     const today = new Date().toISOString().slice(0, 10);
     const workshopDateTime = new Date(`${workshop.date}T${workshop.time || "00:00"}:00`);
@@ -93,6 +94,7 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
     })();
     const isDirectVideoFile = isDirectVideoFileUrl(workshop.videoUrl);
     const accessToken = session?.access_token ?? null;
+    const closeVideoModal = () => setShowVideo(false);
 
     useEffect(() => {
         if (!accessToken) {
@@ -157,6 +159,65 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
             cancelled = true;
         };
     }, [accessToken, isPastWorkshop, workshop]);
+
+    useEffect(() => {
+        if (!showVideo) {
+            return;
+        }
+
+        const previousActive = document.activeElement as HTMLElement | null;
+        const modalNode = videoModalRef.current;
+        if (!modalNode) {
+            return;
+        }
+
+        const getFocusableElements = () =>
+            Array.from(
+                modalNode.querySelectorAll<HTMLElement>(
+                    'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+                )
+            );
+
+        const focusable = getFocusableElements();
+        (focusable[0] || modalNode).focus();
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                setShowVideo(false);
+                return;
+            }
+
+            if (event.key !== "Tab") return;
+            const focusableElements = getFocusableElements();
+            if (focusableElements.length === 0) {
+                event.preventDefault();
+                modalNode.focus();
+                return;
+            }
+
+            const first = focusableElements[0];
+            const last = focusableElements[focusableElements.length - 1];
+
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        document.addEventListener("keydown", handleKeyDown);
+
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            document.removeEventListener("keydown", handleKeyDown);
+            previousActive?.focus();
+        };
+    }, [showVideo]);
 
     const serviceFee = 99;
     const subtotal = workshop.price * guests;
@@ -440,7 +501,7 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
                                         prefersReducedMotion ? { duration: 0 } : quickTransition
                                     }
                                     className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4"
-                                    onClick={() => setShowVideo(false)}
+                                    onClick={closeVideoModal}
                                 >
                                     <motion.div
                                         initial={
@@ -458,6 +519,11 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
                                         }
                                         className="relative w-full max-w-4xl aspect-video rounded-2xl overflow-hidden"
                                         onClick={(e) => e.stopPropagation()}
+                                        role="dialog"
+                                        aria-modal="true"
+                                        aria-label={`${workshop.title} video preview`}
+                                        tabIndex={-1}
+                                        ref={videoModalRef}
                                     >
                                         {isDirectVideoFile ? (
                                             <video
@@ -476,10 +542,11 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
                                             />
                                         )}
                                         <button
-                                            onClick={() => setShowVideo(false)}
+                                            onClick={closeVideoModal}
                                             className="absolute -top-12 right-0 text-white text-sm font-inter hover:text-terracotta transition-colors"
+                                            aria-label="Close video"
                                         >
-                                            Close ×
+                                            Close X
                                         </button>
                                     </motion.div>
                                 </motion.div>

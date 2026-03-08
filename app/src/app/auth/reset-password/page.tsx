@@ -2,15 +2,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { motion, useReducedMotion } from "framer-motion";
 import { AlertCircle, CheckCircle, Loader2, Lock } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { cardReveal, standardTransition, useMotionProps } from "@/lib/motion-presets";
 
 export default function ResetPasswordPage() {
+    const prefersReducedMotion = useReducedMotion();
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const cardMotionProps = useMotionProps(prefersReducedMotion, cardReveal, standardTransition, {
+        whileInView: false,
+    });
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -18,9 +24,7 @@ export default function ResetPasswordPage() {
         setSuccess(false);
 
         if (!isSupabaseConfigured) {
-            setError(
-                "Authentication is not configured. Add Supabase env vars first."
-            );
+            setError("Authentication is not configured. Add Supabase env vars first.");
             return;
         }
 
@@ -49,7 +53,10 @@ export default function ResetPasswordPage() {
 
     return (
         <main className="min-h-screen bg-cream flex items-center justify-center px-6 py-12">
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-soft p-6 sm:p-8">
+            <motion.div
+                {...cardMotionProps}
+                className="w-full max-w-md bg-white rounded-2xl shadow-soft p-6 sm:p-8"
+            >
                 <h1 className="heading-md mb-2">Set new password</h1>
                 <p className="text-body text-dark-muted mb-6">
                     Enter a new password for your account.
@@ -109,11 +116,14 @@ export default function ResetPasswordPage() {
                 </form>
 
                 <p className="text-sm font-inter text-dark-muted mt-6">
-                    <Link href="/auth/login" className="text-terracotta font-semibold hover:underline">
+                    <Link
+                        href="/auth/login"
+                        className="text-terracotta font-semibold hover:underline"
+                    >
                         Back to login
                     </Link>
                 </p>
-            </div>
+            </motion.div>
         </main>
     );
 }

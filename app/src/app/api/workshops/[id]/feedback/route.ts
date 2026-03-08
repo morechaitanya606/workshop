@@ -6,6 +6,12 @@ import type { DbTable } from "@/lib/database.types";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { workshopFeedbackSchema } from "@/lib/validators";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
+import {
+    getFallbackFeedback,
+    isMissingFeedbackTableError,
+    saveFallbackFeedback,
+    toFallbackWorkshopFeedbackResponse,
+} from "@/lib/feedback-fallback";
 
 type FeedbackRow = Pick<
     DbTable<"workshop_feedback">,
@@ -65,6 +71,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
             .eq("user_id", auth.user.id)
             .eq("workshop_id", workshopId)
             .maybeSingle();
+
+        if (isMissingFeedbackTableError(error)) {
+            const fallback = getFallbackFeedback(auth.user.id, workshopId);
+            return NextResponse.json({
+                feedback: fallback ? toFallbackWorkshopFeedbackResponse(fallback) : null,
+            });
+        }
 
         if (error) {
             return jsonError("Unable to load feedback.", 500, error);
@@ -152,6 +165,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             )
             .select("rating, comment, photos, video_url, created_at, updated_at")
             .single();
+
+        if (isMissingFeedbackTableError(saveError)) {
+            const savedFallback = saveFallbackFeedback(auth.user.id, workshopId, {
+                rating: parsed.data.rating ?? null,
+                comment: parsed.data.comment,
+                photos: parsed.data.photos || [],
+                videoUrl: parsed.data.videoUrl || null,
+            });
+
+            return NextResponse.json({
+                feedback: toFallbackWorkshopFeedbackResponse(savedFallback),
+                message: "Thanks for sharing your feedback.",
+            });
+        }
 
         if (saveError) {
             return jsonError("Unable to save feedback.", 500, saveError);

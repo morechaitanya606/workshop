@@ -4,6 +4,13 @@ import { handleApiError, parseQuery } from "@/lib/api-route";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { requireAdminUser } from "@/lib/api-auth";
 import { adminFeedbackQuerySchema } from "@/lib/validators";
+import {
+    getFallbackFeedback,
+    getFallbackWorkshopInfo,
+    isMissingFeedbackTableError,
+    matchesFallbackFeedbackFilters,
+    SAMPLE_FEEDBACK_WORKSHOP_ID,
+} from "@/lib/feedback-fallback";
 
 type WorkshopInfo = {
     id: string;
@@ -109,14 +116,53 @@ export async function GET(request: NextRequest) {
             .order("updated_at", { ascending: false })
             .range(from, to);
 
-        if (error?.code === "42P01") {
-            // Feedback table not available yet in this environment.
+        if (isMissingFeedbackTableError(error)) {
+            const fallbackRecord = getFallbackFeedback(auth.user.id, SAMPLE_FEEDBACK_WORKSHOP_ID);
+            const filteredFallback = fallbackRecord
+                ? [fallbackRecord].filter((record) =>
+                      matchesFallbackFeedbackFilters(record, q, workshopId)
+                  )
+                : [];
+
+            const pagedFallback = filteredFallback
+                .slice(from, to + 1)
+                .map<FeedbackResponseItem>((record) => {
+                    const workshopInfo = getFallbackWorkshopInfo(record.workshopId);
+                    const fullName =
+                        typeof auth.user.user_metadata?.full_name === "string"
+                            ? auth.user.user_metadata.full_name
+                            : null;
+
+                    return {
+                        id:
+                            record.userId && record.workshopId
+                                ? `${record.userId}-${record.workshopId}`
+                                : "",
+                        userId: record.userId,
+                        workshopId: record.workshopId,
+                        rating: record.rating,
+                        comment: record.comment,
+                        photos: record.photos,
+                        videoUrl: record.videoUrl,
+                        createdAt: record.createdAt,
+                        updatedAt: record.updatedAt,
+                        workshop: workshopInfo,
+                        user: {
+                            fullName,
+                            firstName: null,
+                            lastName: null,
+                            email: auth.user.email || null,
+                        },
+                    };
+                });
+
+            const fallbackTotal = filteredFallback.length;
             return NextResponse.json({
-                feedback: [],
-                total: 0,
+                feedback: pagedFallback,
+                total: fallbackTotal,
                 page,
                 pageSize,
-                totalPages: 1,
+                totalPages: Math.max(1, Math.ceil(fallbackTotal / pageSize)),
                 filters: { q, workshopId },
             });
         }
