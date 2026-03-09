@@ -211,6 +211,10 @@ RAZORPAY_KEY_ID=your-razorpay-key-id
 RAZORPAY_KEY_SECRET=your-razorpay-key-secret
 RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
 
+# Optional internal post-payment notifications webhook
+# PAYMENT_NOTIFICATIONS_WEBHOOK_URL=https://your-domain.com/api/internal/payments/events
+# PAYMENT_NOTIFICATIONS_WEBHOOK_SECRET=shared-signing-secret
+
 # Optional Mappls (Workshop location/maps)
 # NEXT_PUBLIC_MAPPLS_API_KEY=your-mappls-public-key
 # MAPPLS_CLIENT_ID=your-mappls-client-id
@@ -224,6 +228,34 @@ RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
 ```
 
 > Get these from your Supabase project: **Settings → API → Project URL & anon/public key**
+
+### 3.1 Payment Notification Receiver Template
+
+An internal receiver endpoint is available at:
+
+- `POST /api/internal/payments/events`
+
+It validates:
+
+- `X-OnlyWorkshop-Signature` (HMAC SHA256 over raw body using `PAYMENT_NOTIFICATIONS_WEBHOOK_SECRET`)
+- `X-OnlyWorkshop-Idempotency-Key`
+- `X-OnlyWorkshop-Event` (must match payload `event`, if present)
+
+It then stores events in `payment_notification_events` (if table exists), otherwise falls back to in-memory storage.
+
+Optional Supabase table:
+
+```sql
+create table if not exists public.payment_notification_events (
+  id uuid primary key default gen_random_uuid(),
+  idempotency_key text unique not null,
+  event_name text not null,
+  event_source text not null,
+  event_payload jsonb not null,
+  received_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+```
 
 ### 4. Configure Supabase Auth (Optional)
 

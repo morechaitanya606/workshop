@@ -1,9 +1,13 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
-import { parseQuery } from "@/lib/api-route";
+import { requireSupabaseService } from "@/lib/api-helpers";
+import { handleApiError, parseQuery } from "@/lib/api-route";
 import { workshopQuerySchema } from "@/lib/validators";
 import { mapWorkshopRowToWorkshop, queryMockWorkshops } from "@/lib/workshop-utils";
+
+const WORKSHOP_LIST_CACHE_HEADERS = {
+    "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
+};
 
 function getSortConfig(sort: string) {
     if (sort === "date_desc") return { column: "date", ascending: false };
@@ -22,63 +26,83 @@ export async function GET(request: NextRequest) {
     const query = parsed.data;
     const from = (query.page - 1) * query.pageSize;
     const to = from + query.pageSize - 1;
+    const allowMockFallback = process.env.NODE_ENV !== "production";
 
-    if (isSupabaseServiceConfigured) {
-        try {
-            const serviceClient = createSupabaseServiceClient();
-            const sortConfig = getSortConfig(query.sort);
-            let dbQuery = serviceClient.from("workshops").select("*", { count: "exact" });
+    const service = requireSupabaseService();
+    if (!service.ok) {
+        if (!allowMockFallback) {
+            return service.response;
+        }
+        const fallback = queryMockWorkshops(query);
+        return NextResponse.json(fallback, {
+            headers: WORKSHOP_LIST_CACHE_HEADERS,
+        });
+    }
 
-            if (query.q) {
-                const q = query.q.replace(/[%]/g, "");
-                dbQuery = dbQuery.or(
-                    `title.ilike.%${q}%,description.ilike.%${q}%,location.ilike.%${q}%,city.ilike.%${q}%`
-                );
-            }
-            if (query.category) {
-                dbQuery = dbQuery.eq("category", query.category);
-            }
-            if (query.city) {
-                dbQuery = dbQuery.eq("city", query.city);
-            }
-            if (query.dateFrom) {
-                dbQuery = dbQuery.gte("date", query.dateFrom);
-            }
-            if (query.dateTo) {
-                dbQuery = dbQuery.lte("date", query.dateTo);
-            }
-            if (typeof query.minPrice === "number") {
-                dbQuery = dbQuery.gte("price", query.minPrice);
-            }
-            if (typeof query.maxPrice === "number") {
-                dbQuery = dbQuery.lte("price", query.maxPrice);
-            }
+    try {
+        const serviceClient = service.client;
+        const sortConfig = getSortConfig(query.sort);
+        let dbQuery = serviceClient.from("workshops").select("*", { count: "exact" });
 
-            const { data, error, count } = await dbQuery
-                .order(sortConfig.column, { ascending: sortConfig.ascending })
-                .range(from, to);
+        if (query.q) {
+            const q = query.q.replace(/[%]/g, "");
+            dbQuery = dbQuery.or(
+                `title.ilike.%${q}%,description.ilike.%${q}%,location.ilike.%${q}%,city.ilike.%${q}%`
+            );
+        }
+        if (query.category) {
+            dbQuery = dbQuery.eq("category", query.category);
+        }
+        if (query.city) {
+            dbQuery = dbQuery.eq("city", query.city);
+        }
+        if (query.dateFrom) {
+            dbQuery = dbQuery.gte("date", query.dateFrom);
+        }
+        if (query.dateTo) {
+            dbQuery = dbQuery.lte("date", query.dateTo);
+        }
+        if (typeof query.minPrice === "number") {
+            dbQuery = dbQuery.gte("price", query.minPrice);
+        }
+        if (typeof query.maxPrice === "number") {
+            dbQuery = dbQuery.lte("price", query.maxPrice);
+        }
 
-            if (error) {
-                throw error;
-            }
+        const { data, error, count } = await dbQuery
+            .order(sortConfig.column, { ascending: sortConfig.ascending })
+            .range(from, to);
 
-            return NextResponse.json({
+        if (error) {
+            throw error;
+        }
+
+        return NextResponse.json(
+            {
                 data: (data || []).map((row) => mapWorkshopRowToWorkshop(row)),
                 total: count || 0,
                 page: query.page,
                 pageSize: query.pageSize,
                 source: "supabase",
-            });
-        } catch (error) {
+            },
+            {
+                headers: WORKSHOP_LIST_CACHE_HEADERS,
+            }
+        );
+    } catch (error) {
+        if (allowMockFallback) {
             const fallback = queryMockWorkshops(query);
-            return NextResponse.json({
-                ...fallback,
-                warning: "Falling back to mock workshops because Supabase query failed.",
-                error: String(error),
-            });
+            return NextResponse.json(
+                {
+                    ...fallback,
+                    warning: "Falling back to mock workshops because Supabase query failed.",
+                    error: String(error),
+                },
+                {
+                    headers: WORKSHOP_LIST_CACHE_HEADERS,
+                }
+            );
         }
+        return handleApiError("Failed to load workshops.", error);
     }
-
-    const fallback = queryMockWorkshops(query);
-    return NextResponse.json(fallback);
 }

@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import * as Sentry from "@sentry/nextjs";
+import * as Sentry from "@sentry/core";
 import { handleApiError, parseBody } from "@/lib/api-route";
 import { bookingCheckoutSchema } from "@/lib/validators";
-import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
+import { requireSupabaseService } from "@/lib/api-helpers";
 import { requireAuthenticatedUser } from "@/lib/api-auth";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import {
@@ -12,7 +12,9 @@ import {
     isRazorpayConfigured,
     verifyRazorpayOrderSignature,
 } from "@/lib/razorpay-server";
+import type { SupabaseServerClient } from "@/lib/supabase-server";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
+import { sendPaymentNotification } from "@/lib/payment-notifications";
 
 const SERVICE_FEE = 99;
 const PAYMENT_CURRENCY = "INR";
@@ -61,18 +63,21 @@ function paymentError(message: string, status: number, context: Record<string, u
     );
 }
 
-async function loadBookingById(
-    serviceClient: ReturnType<typeof createSupabaseServiceClient>,
-    bookingId: string
-) {
+async function loadBookingById(serviceClient: SupabaseServerClient, bookingId: string) {
     const { data: booking } = await serviceClient
         .from("bookings")
         .select(
             `
             id,
+            user_id,
             guests,
             total,
             status,
+            payment_intent_id,
+            first_name,
+            last_name,
+            email,
+            phone,
             created_at,
             workshop:workshops (
                 id,
@@ -91,13 +96,45 @@ async function loadBookingById(
     return booking;
 }
 
+async function sendConfirmedBookingNotification(
+    booking: Awaited<ReturnType<typeof loadBookingById>>,
+    context: { holdId: string; workshopId: string }
+) {
+    if (!booking || booking.status !== "confirmed") return;
+
+    await sendPaymentNotification({
+        event: "booking.confirmed",
+        source: "bookings_checkout",
+        idempotencyKey: `booking-confirmed:${booking.id}`,
+        data: {
+            booking: {
+                id: booking.id,
+                userId: booking.user_id,
+                status: booking.status,
+                guests: booking.guests,
+                total: booking.total,
+                paymentIntentId: booking.payment_intent_id,
+                createdAt: booking.created_at,
+                customer: {
+                    firstName: booking.first_name,
+                    lastName: booking.last_name,
+                    email: booking.email,
+                    phone: booking.phone,
+                },
+                workshop: booking.workshop || null,
+            },
+            context,
+        },
+    });
+}
+
 export async function POST(request: NextRequest) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
     }
 
-    const rateLimitResult = assertRateLimit({
+    const rateLimitResult = await assertRateLimit({
         key: getRateLimitKey(request, "bookings-checkout", auth.user.id),
         limit: 30,
         windowMs: 60_000,
@@ -107,14 +144,9 @@ export async function POST(request: NextRequest) {
         return rateLimitResult.response;
     }
 
-    if (!isSupabaseServiceConfigured) {
-        return NextResponse.json(
-            {
-                error: "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
-            },
-            { status: 500 }
-        );
-    }
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+    const serviceClient = service.client;
 
     if (!isRazorpayConfigured) {
         return NextResponse.json(
@@ -142,7 +174,6 @@ export async function POST(request: NextRequest) {
         Boolean(payload.razorpaySignature);
 
     try {
-        const serviceClient = createSupabaseServiceClient();
         await ensureWorkshopSeededFromMock(serviceClient, payload.workshopId);
 
         const { data: holdData, error: holdError } = await serviceClient
@@ -362,6 +393,10 @@ export async function POST(request: NextRequest) {
 
         if (existingBooking?.id) {
             const booking = await loadBookingById(serviceClient, existingBooking.id);
+            await sendConfirmedBookingNotification(booking, {
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+            });
             return NextResponse.json({
                 mode: "already_confirmed",
                 booking,
@@ -475,6 +510,10 @@ export async function POST(request: NextRequest) {
         }
 
         const booking = await loadBookingById(serviceClient, bookingId);
+        await sendConfirmedBookingNotification(booking, {
+            holdId: payload.holdId,
+            workshopId: payload.workshopId,
+        });
 
         return NextResponse.json({
             mode: "confirmed",

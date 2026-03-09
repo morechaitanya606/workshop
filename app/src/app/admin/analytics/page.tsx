@@ -5,7 +5,7 @@ import { Loader2, Users, Ticket, IndianRupee, Search } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import AdminShell from "@/components/admin/AdminShell";
-import { getAdminRegistrations, toApiErrorMessage } from "@/lib/api-client";
+import { getAdminRegistrations } from "@/lib/api-client";
 import { Stat } from "@/components/ui";
 
 type Registration = {
@@ -33,6 +33,7 @@ export default function AdminAnalyticsPage() {
     const [registrations, setRegistrations] = useState<Registration[]>([]);
     const [loadingRegistrations, setLoadingRegistrations] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [reloadKey, setReloadKey] = useState(0);
     const [searchInput, setSearchInput] = useState("");
     const [query, setQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
@@ -68,9 +69,9 @@ export default function AdminAnalyticsPage() {
                         Array.isArray(result.registrations) ? result.registrations : []
                     );
                 }
-            } catch (fetchError) {
+            } catch {
                 if (!cancelled) {
-                    setError(toApiErrorMessage(fetchError, "Unable to load analytics."));
+                    setError("Unable to load analytics right now. Please try again.");
                 }
             } finally {
                 if (!cancelled) {
@@ -83,7 +84,7 @@ export default function AdminAnalyticsPage() {
         return () => {
             cancelled = true;
         };
-    }, [session, page, pageSize, query, statusFilter]);
+    }, [session, page, pageSize, query, statusFilter, reloadKey]);
 
     const pageSummary = useMemo(() => {
         return registrations.reduce(
@@ -106,6 +107,11 @@ export default function AdminAnalyticsPage() {
         setQuery("");
         setStatusFilter("all");
         setPage(1);
+    };
+
+    const handleRetry = () => {
+        setError(null);
+        setReloadKey((prev) => prev + 1);
     };
 
     return (
@@ -167,7 +173,16 @@ export default function AdminAnalyticsPage() {
 
             {!loadingRegistrations && error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-inter">
-                    {error}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <span>{error}</span>
+                        <button
+                            type="button"
+                            onClick={handleRetry}
+                            className="inline-flex items-center justify-center rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                        >
+                            Try again
+                        </button>
+                    </div>
                 </div>
             )}
 

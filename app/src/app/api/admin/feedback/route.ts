@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError, parseQuery } from "@/lib/api-route";
-import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
-import { requireAdminUser } from "@/lib/api-auth";
+import { requireSupabaseService } from "@/lib/api-helpers";
+import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { adminFeedbackQuerySchema } from "@/lib/validators";
 import {
     getFallbackFeedback,
@@ -75,12 +75,9 @@ export async function GET(request: NextRequest) {
         return auth.response;
     }
 
-    if (!isSupabaseServiceConfigured) {
-        return NextResponse.json(
-            { error: "Supabase service role is not configured." },
-            { status: 500 }
-        );
-    }
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+    const serviceClient = service.client;
 
     try {
         const parsedQuery = parseQuery(
@@ -98,8 +95,6 @@ export async function GET(request: NextRequest) {
         const pageSize = parsedQuery.data.pageSize;
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
-
-        const serviceClient = createSupabaseServiceClient();
 
         const queryWithOptionalCols = applyFeedbackFilters(
             serviceClient
@@ -188,10 +183,7 @@ export async function GET(request: NextRequest) {
         }
 
         if (error) {
-            return NextResponse.json(
-                { error: "Failed to load feedback.", details: error.message },
-                { status: 500 }
-            );
+            return jsonError("Failed to load feedback.", 500, error.message);
         }
 
         const rows = (Array.isArray(data) ? data : []) as FeedbackDbRow[];

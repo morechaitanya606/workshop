@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError, parseBody } from "@/lib/api-route";
+import { jsonError, requireAuthenticatedUser } from "@/lib/api-auth";
 import { bookingHoldSchema } from "@/lib/validators";
-import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
-import { requireAuthenticatedUser } from "@/lib/api-auth";
+import { requireSupabaseService } from "@/lib/api-helpers";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
         return auth.response;
     }
 
-    const rateLimitResult = assertRateLimit({
+    const rateLimitResult = await assertRateLimit({
         key: getRateLimitKey(request, "bookings-hold", auth.user.id),
         limit: 20,
         windowMs: 60_000,
@@ -25,14 +25,9 @@ export async function POST(request: NextRequest) {
         return rateLimitResult.response;
     }
 
-    if (!isSupabaseServiceConfigured) {
-        return NextResponse.json(
-            {
-                error: "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
-            },
-            { status: 500 }
-        );
-    }
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+    const serviceClient = service.client;
 
     const parsed = await parseBody(
         request,
@@ -47,16 +42,22 @@ export async function POST(request: NextRequest) {
     const { workshopId, guests } = parsed.data;
 
     try {
-        const serviceClient = createSupabaseServiceClient();
         const seeded = await ensureWorkshopSeededFromMock(serviceClient, workshopId);
         if (!seeded) {
-            return NextResponse.json(
-                {
-                    error: "Workshop not found in database and no mock seed exists for this id.",
-                },
-                { status: 404 }
+            return jsonError(
+                "Workshop not found in database and no mock seed exists for this id.",
+                404
             );
         }
+
+        // Release any existing active holds by the SAME user for THIS workshop
+        // To prevent the user from locking themselves out if they press back and retry.
+        await serviceClient
+            .from("booking_holds")
+            .update({ status: "released" })
+            .eq("status", "active")
+            .eq("user_id", auth.user.id)
+            .eq("workshop_id", workshopId);
 
         let holdId: string | null = null;
 
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
                 .single();
 
             if (workshopError || !workshop) {
-                return NextResponse.json({ error: "Workshop not found." }, { status: 404 });
+                return jsonError("Workshop not found.", 404);
             }
 
             const { data: activeHolds } = await serviceClient
@@ -104,8 +105,23 @@ export async function POST(request: NextRequest) {
                 0
             );
             const available = Number(workshop.seats_remaining) - heldSeats;
+            if (available <= 0) {
+                return jsonError("This workshop is sold out. All spots are taken.", 409, {
+                    code: "WORKSHOP_SOLD_OUT",
+                    availableSeats: 0,
+                    requestedSeats: guests,
+                });
+            }
             if (available < guests) {
-                return NextResponse.json({ error: "Not enough seats available." }, { status: 409 });
+                return jsonError(
+                    `Only ${available} seat${available === 1 ? "" : "s"} left for this workshop.`,
+                    409,
+                    {
+                        code: "INSUFFICIENT_SEATS",
+                        availableSeats: available,
+                        requestedSeats: guests,
+                    }
+                );
             }
 
             const expiresAt = new Date(
@@ -124,12 +140,10 @@ export async function POST(request: NextRequest) {
                 .single();
 
             if (insertError || !insertedHold?.id) {
-                return NextResponse.json(
-                    {
-                        error: "Failed to create seat hold. Apply the SQL migration for transactional holds.",
-                        details: insertError?.message || rpcError?.message || null,
-                    },
-                    { status: 500 }
+                return jsonError(
+                    "Failed to create seat hold. Apply the SQL migration for transactional holds.",
+                    500,
+                    insertError?.message || rpcError?.message || null
                 );
             }
 
@@ -160,10 +174,7 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (holdError || !holdRecord) {
-            return NextResponse.json(
-                { error: "Seat hold created but could not be loaded." },
-                { status: 500 }
-            );
+            return jsonError("Seat hold created but could not be loaded.", 500);
         }
 
         return NextResponse.json({

@@ -2,8 +2,8 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError, parseQuery } from "@/lib/api-route";
 import type { DbTable } from "@/lib/database.types";
-import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
-import { requireAdminUser } from "@/lib/api-auth";
+import { requireSupabaseService } from "@/lib/api-helpers";
+import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { adminRegistrationsQuerySchema } from "@/lib/validators";
 
 const BOOKING_STATUSES: DbTable<"bookings">["status"][] = ["confirmed", "cancelled", "refunded"];
@@ -14,12 +14,9 @@ export async function GET(request: NextRequest) {
         return auth.response;
     }
 
-    if (!isSupabaseServiceConfigured) {
-        return NextResponse.json(
-            { error: "Supabase service role is not configured." },
-            { status: 500 }
-        );
-    }
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+    const serviceClient = service.client;
 
     try {
         const parsedQuery = parseQuery(
@@ -38,7 +35,6 @@ export async function GET(request: NextRequest) {
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
 
-        const serviceClient = createSupabaseServiceClient();
         let query = serviceClient.from("bookings").select(
             `
                 id,
@@ -82,10 +78,11 @@ export async function GET(request: NextRequest) {
             .range(from, to);
 
         if (error) {
-            return NextResponse.json(
-                { error: "Failed to load registrations.", details: error.message },
-                { status: 500 }
-            );
+            throw error;
+        }
+
+        if (!Array.isArray(data)) {
+            return jsonError("Failed to load registrations.", 500);
         }
 
         return NextResponse.json({

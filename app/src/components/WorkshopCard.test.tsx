@@ -12,6 +12,11 @@ describe("WorkshopCard", () => {
         expect(screen.getByText(workshop.title)).toBeInTheDocument();
         expect(screen.getByText(`${workshop.location}, ${workshop.city}`)).toBeInTheDocument();
         expect(screen.getByText(/₹/)).toBeInTheDocument();
+        expect(
+            screen.getByText(
+                `${workshop.seatsRemaining} seat${workshop.seatsRemaining === 1 ? "" : "s"} available`
+            )
+        ).toBeInTheDocument();
     });
 
     it("links to the workshop detail page", () => {
@@ -20,5 +25,16 @@ describe("WorkshopCard", () => {
 
         const link = screen.getByRole("link");
         expect(link).toHaveAttribute("href", `/workshop/${workshop.id}`);
+    });
+
+    it("shows sold out when seats are not available", () => {
+        const soldOutWorkshop = {
+            ...mockWorkshops[0],
+            id: "sold-out-card",
+            seatsRemaining: 0,
+        };
+        render(<WorkshopCard workshop={soldOutWorkshop} />);
+
+        expect(screen.getByText("Sold out")).toBeInTheDocument();
     });
 });

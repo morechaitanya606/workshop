@@ -1,68 +1,62 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { Loader2, CalendarDays, Users, IndianRupee, Star, ArrowRight } from "lucide-react";
-import type { Workshop } from "@/lib/data";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import { useAuth } from "@/lib/auth-context";
+import { ArrowRight, CalendarDays, IndianRupee, Star, Users } from "lucide-react";
 import AdminShell from "@/components/admin/AdminShell";
+import type { Workshop } from "@/lib/data";
+import { loadAdminDashboardData, type AdminDashboardStats } from "@/lib/admin-dashboard-data";
+import { requireAdminSupabaseRscClient } from "@/lib/supabase-rsc";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
-type AdminStats = {
-    activeWorkshops: number;
-    totalBookedSeats: number;
-    revenue: number;
-    avgRating: string;
-};
+export default async function AdminDashboardPage() {
+    const supabase = await requireAdminSupabaseRscClient("/admin/dashboard");
 
-export default function AdminDashboardPage() {
-    const { session } = useAuth();
-    const [loadingData, setLoadingData] = useState(true);
-    const [stats, setStats] = useState<AdminStats | null>(null);
-    const [workshops, setWorkshops] = useState<Workshop[]>([]);
+    let stats: AdminDashboardStats = {
+        activeWorkshops: 0,
+        totalBookedSeats: 0,
+        revenue: 0,
+        avgRating: "-",
+    };
+    let workshops: Workshop[] = [];
+    let error: string | null = null;
 
-    useEffect(() => {
-        let cancelled = false;
+    try {
+        const loaded = await loadAdminDashboardData(supabase);
+        stats = loaded.stats;
+        workshops = loaded.workshops;
+    } catch {
+        error = "Unable to load dashboard right now. Please try again.";
+    }
 
-        const loadData = async () => {
-            if (!session?.access_token) return;
-
-            setLoadingData(true);
-            try {
-                const [statsRes, workshopsRes] = await Promise.all([
-                    fetch("/api/admin/stats", {
-                        headers: { Authorization: `Bearer ${session.access_token}` },
-                        cache: "no-store",
-                    }),
-                    fetch("/api/admin/workshops", {
-                        headers: { Authorization: `Bearer ${session.access_token}` },
-                        cache: "no-store",
-                    }),
-                ]);
-
-                if (!cancelled && statsRes.ok) {
-                    const result = await statsRes.json();
-                    setStats(result.stats || null);
-                }
-
-                if (!cancelled && workshopsRes.ok) {
-                    const result = await workshopsRes.json();
-                    setWorkshops(Array.isArray(result.data) ? result.data : []);
-                }
-            } finally {
-                if (!cancelled) {
-                    setLoadingData(false);
-                }
-            }
-        };
-
-        loadData();
-        return () => {
-            cancelled = true;
-        };
-    }, [session]);
+    const statCards = [
+        {
+            label: "Active Workshops",
+            value: String(stats.activeWorkshops),
+            icon: CalendarDays,
+            iconClass: "text-terracotta",
+            iconBg: "bg-terracotta/10",
+        },
+        {
+            label: "Booked Seats",
+            value: String(stats.totalBookedSeats),
+            icon: Users,
+            iconClass: "text-emerald-700",
+            iconBg: "bg-emerald-100",
+        },
+        {
+            label: "Revenue",
+            value: formatCurrency(stats.revenue),
+            icon: IndianRupee,
+            iconClass: "text-blue-700",
+            iconBg: "bg-blue-100",
+        },
+        {
+            label: "Avg Rating",
+            value: String(stats.avgRating),
+            icon: Star,
+            iconClass: "text-amber-700",
+            iconBg: "bg-amber-100",
+        },
+    ];
 
     return (
         <AdminShell>
@@ -73,50 +67,44 @@ export default function AdminDashboardPage() {
                 <h1 className="heading-md">Overview</h1>
             </div>
 
-            {loadingData ? (
-                <div className="flex items-center gap-2 text-sm font-inter text-dark-muted">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading dashboard data...
+            {error ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-inter text-red-700">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <span>{error}</span>
+                        <Link
+                            href="/admin/dashboard"
+                            className="inline-flex items-center justify-center rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                        >
+                            Try again
+                        </Link>
+                    </div>
                 </div>
             ) : (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                >
+                <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
-                        <div className="bg-white rounded-2xl p-5 shadow-soft">
-                            <p className="text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-1">
-                                Active Workshops
-                            </p>
-                            <p className="font-playfair text-2xl font-bold text-dark">
-                                {stats?.activeWorkshops ?? workshops.length}
-                            </p>
-                        </div>
-                        <div className="bg-white rounded-2xl p-5 shadow-soft">
-                            <p className="text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-1">
-                                Booked Seats
-                            </p>
-                            <p className="font-playfair text-2xl font-bold text-dark">
-                                {stats?.totalBookedSeats ?? 0}
-                            </p>
-                        </div>
-                        <div className="bg-white rounded-2xl p-5 shadow-soft">
-                            <p className="text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-1">
-                                Revenue
-                            </p>
-                            <p className="font-playfair text-2xl font-bold text-dark">
-                                {formatCurrency(stats?.revenue ?? 0)}
-                            </p>
-                        </div>
-                        <div className="bg-white rounded-2xl p-5 shadow-soft">
-                            <p className="text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-1">
-                                Avg Rating
-                            </p>
-                            <p className="font-playfair text-2xl font-bold text-dark">
-                                {stats?.avgRating ?? "-"}
-                            </p>
-                        </div>
+                        {statCards.map((card) => {
+                            const Icon = card.icon;
+                            return (
+                                <div
+                                    key={card.label}
+                                    className="rounded-2xl border border-gray-200 bg-white p-5 shadow-soft"
+                                >
+                                    <div className="mb-4 flex items-center justify-between gap-3">
+                                        <div
+                                            className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${card.iconBg}`}
+                                        >
+                                            <Icon className={`h-5 w-5 ${card.iconClass}`} />
+                                        </div>
+                                        <p className="text-[11px] font-inter font-bold uppercase tracking-wider text-dark-muted text-right">
+                                            {card.label}
+                                        </p>
+                                    </div>
+                                    <p className="font-playfair text-3xl font-bold text-dark leading-none">
+                                        {card.value}
+                                    </p>
+                                </div>
+                            );
+                        })}
                     </div>
 
                     <div className="bg-white rounded-2xl shadow-soft overflow-hidden">
@@ -144,6 +132,7 @@ export default function AdminDashboardPage() {
                                             src={workshop.coverImage}
                                             alt={workshop.title}
                                             fill
+                                            sizes="(max-width: 640px) 100vw, 64px"
                                             className="object-cover"
                                         />
                                     </div>
@@ -187,7 +176,7 @@ export default function AdminDashboardPage() {
                             )}
                         </div>
                     </div>
-                </motion.div>
+                </>
             )}
         </AdminShell>
     );

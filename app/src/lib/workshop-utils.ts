@@ -37,11 +37,18 @@ function cleanUrlValue(value: unknown) {
     return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+type WorkshopLinks = {
+    instagram?: string | null;
+    youtube?: string | null;
+    website?: string | null;
+};
+
+function isWorkshopLinks(value: Json | null | undefined): value is WorkshopLinks {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function cleanLinks(value: Json | null | undefined) {
-    const links =
-        typeof value === "object" && value && !Array.isArray(value)
-            ? (value as Record<string, unknown>)
-            : {};
+    const links = isWorkshopLinks(value) ? value : {};
 
     return {
         instagram: cleanUrlValue(links.instagram),
@@ -132,6 +139,7 @@ export function buildWorkshopInsertPayload(
         is_bestseller: false,
         is_new: true,
         created_by: createdBy,
+        host_user_id: createdBy,
     };
 
     return payload;

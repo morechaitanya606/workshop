@@ -32,6 +32,20 @@
     ::selection {
         @apply bg-terracotta/20 text-dark;
     }
+
+    :where(
+        a[href],
+        button,
+        input,
+        select,
+        textarea,
+        [role="button"],
+        [tabindex]:not([tabindex="-1"])
+    ):focus-visible {
+        outline: 2px solid theme("colors.terracotta.500") !important;
+        outline-offset: 2px;
+        box-shadow: 0 0 0 4px rgb(199 107 79 / 0.2) !important;
+    }
 }
 
 @layer components {
@@ -132,9 +146,36 @@
         animation: shimmer 2s linear infinite;
     }
 
+    @keyframes shimmer {
+        0% {
+            background-position: 200% 0;
+        }
+        100% {
+            background-position: -200% 0;
+        }
+    }
+
     /* Smooth image loading */
     .img-loading {
         @apply bg-clay/30 animate-pulse;
+    }
+
+    .partners-marquee-track {
+        animation: partners-marquee 40s linear infinite;
+        will-change: transform;
+    }
+
+    .partners-marquee-track:hover {
+        animation-play-state: paused;
+    }
+
+    @keyframes partners-marquee {
+        0% {
+            transform: translateX(0);
+        }
+        100% {
+            transform: translateX(-50%);
+        }
     }
 
     /* Scrollbar styling */
@@ -161,6 +202,18 @@
     .perspective-1000 {
         perspective: 1000px;
     }
+
+    .pulse-hover {
+        transition:
+            transform 200ms ease,
+            box-shadow 200ms ease;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .pulse-hover:hover {
+            transform: translateY(-1px);
+        }
+    }
 }
 
 /* Reduced motion */
@@ -173,7 +226,10 @@
     *::before,
     *::after {
         animation: none !important;
-        transition: none !important;
+        transition-property:
+            color, background-color, border-color, text-decoration-color, fill, stroke, opacity,
+            box-shadow !important;
+        transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
     }
 }

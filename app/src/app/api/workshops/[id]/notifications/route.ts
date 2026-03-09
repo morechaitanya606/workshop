@@ -3,9 +3,10 @@ import { NextResponse } from "next/server";
 import { parseBody } from "@/lib/api-route";
 import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
 import type { DbTable } from "@/lib/database.types";
-import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
+import { requireSupabaseService } from "@/lib/api-helpers";
 import { workshopNotificationSchema } from "@/lib/validators";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
+import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 
 type NotificationRow = {
     notify_similar: DbTable<"workshop_notification_preferences">["notify_similar"] | null;
@@ -70,17 +71,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         return auth.response;
     }
 
-    if (!isSupabaseServiceConfigured) {
-        return jsonError(
-            "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
-            500
-        );
-    }
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+    const serviceClient = service.client;
 
     const workshopId = params.id;
 
     try {
-        const serviceClient = createSupabaseServiceClient();
         const seeded = await ensureWorkshopSeededFromMock(serviceClient, workshopId);
         if (!seeded) {
             return jsonError("Workshop not found.", 404);
@@ -117,12 +114,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         return auth.response;
     }
 
-    if (!isSupabaseServiceConfigured) {
-        return jsonError(
-            "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
-            500
-        );
+    const rateLimitResult = await assertRateLimit({
+        key: getRateLimitKey(request, "workshop-notifications-write", auth.user.id),
+        limit: 20,
+        windowMs: 60_000,
+        message: "Too many notification updates. Please wait and try again.",
+    });
+    if (!rateLimitResult.ok) {
+        return rateLimitResult.response;
     }
+
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+    const serviceClient = service.client;
 
     const parsed = await parseBody(
         request,
@@ -137,7 +141,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const workshopId = params.id;
 
     try {
-        const serviceClient = createSupabaseServiceClient();
         const seeded = await ensureWorkshopSeededFromMock(serviceClient, workshopId);
         if (!seeded) {
             return jsonError("Workshop not found.", 404);

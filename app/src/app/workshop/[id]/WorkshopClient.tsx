@@ -52,11 +52,56 @@ import {
     quickTransition,
     revealViewport,
     slideInRight,
+    staggerContainer,
     standardTransition,
 } from "@/lib/motion-presets";
 import { isDirectVideoFileUrl } from "@/lib/workshop-media";
 
-export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
+function toFiniteNumberOrNull(value: unknown) {
+    if (typeof value !== "number" && typeof value !== "string") return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    return parsed;
+}
+
+function extractAvailableSeatsFromBookingError(error: unknown) {
+    if (!isApiClientError(error)) return null;
+
+    if (error.details && typeof error.details === "object") {
+        const details = error.details as Record<string, unknown>;
+        const fromDetails =
+            toFiniteNumberOrNull(details.availableSeats) ??
+            toFiniteNumberOrNull(details.available_seats) ??
+            toFiniteNumberOrNull(details.available);
+        if (fromDetails !== null) {
+            return Math.max(0, fromDetails);
+        }
+    }
+
+    const message = String(error.message || "");
+    const seatsMatch = message.match(/only\s+(\d+)\s+seat/i);
+    if (seatsMatch?.[1]) {
+        return Math.max(0, Number.parseInt(seatsMatch[1], 10));
+    }
+
+    const normalizedMessage = message.toLowerCase();
+    if (
+        normalizedMessage.includes("sold out") ||
+        normalizedMessage.includes("all spots are taken")
+    ) {
+        return 0;
+    }
+
+    return null;
+}
+
+export default function WorkshopClient({
+    workshop,
+    similarWorkshops = [],
+}: {
+    workshop: Workshop;
+    similarWorkshops?: Workshop[];
+}) {
     const router = useRouter();
     const prefersReducedMotion = useReducedMotion();
     const { user, session } = useAuth();
@@ -69,6 +114,7 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
     const [showVideo, setShowVideo] = useState(false);
     const [bookingLoading, setBookingLoading] = useState(false);
     const [holdError, setHoldError] = useState<string | null>(null);
+    const [liveAvailableSeatCount, setLiveAvailableSeatCount] = useState<number | null>(null);
     const [notifyState, setNotifyState] = useState({
         similar: false,
         creator: false,
@@ -92,6 +138,22 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
         }
         return workshopDateTime.getTime() < Date.now();
     })();
+    const availableSeatCount = Math.max(0, liveAvailableSeatCount ?? workshop.seatsRemaining);
+    const isSoldOut = !isPastWorkshop && availableSeatCount <= 0;
+    const seatAvailabilityLabel = isPastWorkshop
+        ? "Event completed"
+        : isSoldOut
+          ? "Sold out - all spots are taken"
+          : `${availableSeatCount} seat${availableSeatCount === 1 ? "" : "s"} available`;
+    const suggestedWorkshops = similarWorkshops
+        .filter(
+            (item) =>
+                item.id !== workshop.id &&
+                item.seatsRemaining > 0 &&
+                item.date >= today &&
+                (item.category === workshop.category || item.city === workshop.city)
+        )
+        .slice(0, 3);
     const isDirectVideoFile = isDirectVideoFileUrl(workshop.videoUrl);
     const accessToken = session?.access_token ?? null;
     const closeVideoModal = () => setShowVideo(false);
@@ -159,6 +221,21 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
             cancelled = true;
         };
     }, [accessToken, isPastWorkshop, workshop]);
+
+    useEffect(() => {
+        setLiveAvailableSeatCount(null);
+    }, [workshop.id]);
+
+    useEffect(() => {
+        if (isSoldOut) {
+            setGuests(1);
+            return;
+        }
+
+        setGuests((currentGuests) =>
+            Math.min(Math.max(1, currentGuests), Math.max(1, availableSeatCount))
+        );
+    }, [availableSeatCount, isSoldOut]);
 
     useEffect(() => {
         if (!showVideo) {
@@ -231,6 +308,12 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
 
     const handleBooking = async () => {
         setHoldError(null);
+        if (isSoldOut) {
+            const message = "This workshop is sold out. Please choose a similar workshop.";
+            setHoldError(message);
+            toast.info("Workshop sold out", message);
+            return;
+        }
         if (!user) {
             router.push(loginRedirectHref);
             toast.info("Log in required", "Please sign in to reserve your seat.");
@@ -256,6 +339,7 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
                 toast.error("Seat hold failed", message);
                 return;
             }
+            const holdExpiresAt = result?.hold?.expires_at || "";
             trackEvent("booking_started", {
                 workshopId: workshop.id,
                 guests,
@@ -265,8 +349,31 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
                 "Seat hold created",
                 "Your seats are reserved. Continue checkout to confirm booking."
             );
-            router.push(`/booking?workshop=${workshop.id}&guests=${guests}&hold=${holdId}`);
+            const bookingParams = new URLSearchParams({
+                workshop: workshop.id,
+                guests: String(guests),
+                hold: holdId,
+            });
+            if (holdExpiresAt) {
+                bookingParams.set("holdExpiresAt", holdExpiresAt);
+            }
+            router.push(`/booking?${bookingParams.toString()}`);
         } catch (error) {
+            const nextAvailableSeatCount = extractAvailableSeatsFromBookingError(error);
+            if (nextAvailableSeatCount !== null) {
+                setLiveAvailableSeatCount(nextAvailableSeatCount);
+                if (nextAvailableSeatCount <= 0) {
+                    setGuests(1);
+                    const message = "This workshop just sold out!";
+                    setHoldError(message);
+                    toast.error("Sold out", message);
+                    return;
+                } else {
+                    setGuests((currentGuests) =>
+                        Math.min(Math.max(1, currentGuests), Math.max(1, nextAvailableSeatCount))
+                    );
+                }
+            }
             const message = toApiErrorMessage(error, "Unable to reserve seats. Please try again.");
             setHoldError(message);
             toast.error("Could not reserve seats", message);
@@ -477,12 +584,21 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
                                     ))}
                                 </div>
                                 <div className="absolute top-4 right-4 flex gap-2 sm:hidden">
-                                    <button className="p-2.5 bg-white/90 backdrop-blur-sm rounded-full shadow-soft">
+                                    <button
+                                        type="button"
+                                        aria-label="Share workshop"
+                                        className="p-2.5 bg-white/90 backdrop-blur-sm rounded-full shadow-soft"
+                                    >
                                         <Share2 className="w-4 h-4 text-dark" />
                                     </button>
                                     <button
+                                        type="button"
                                         onClick={handleToggleFavorite}
                                         disabled={favoriteLoading}
+                                        aria-label={
+                                            isSaved ? "Remove from wishlist" : "Save to wishlist"
+                                        }
+                                        aria-pressed={isSaved}
                                         className="p-2.5 bg-white/90 backdrop-blur-sm rounded-full shadow-soft disabled:opacity-60"
                                     >
                                         <Heart
@@ -585,6 +701,19 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
                                         <Clock className="w-4 h-4 text-dark-muted" />{" "}
                                         {workshop.duration}
                                     </div>
+                                    <span
+                                        className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-inter font-semibold uppercase tracking-wider ${
+                                            isPastWorkshop
+                                                ? "bg-gray-100 text-dark-muted"
+                                                : isSoldOut
+                                                  ? "bg-red-100 text-red-700"
+                                                  : availableSeatCount <= 5
+                                                    ? "bg-terracotta/10 text-terracotta"
+                                                    : "bg-emerald-100 text-emerald-700"
+                                        }`}
+                                    >
+                                        {seatAvailabilityLabel}
+                                    </span>
                                 </div>
                                 {workshop.socialLinks && (
                                     <div className="flex items-center gap-3 mt-4">
@@ -628,184 +757,181 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
                             <hr className="my-8 border-clay/30" />
 
                             <motion.div
-                                variants={prefersReducedMotion ? undefined : fadeInUp}
+                                variants={prefersReducedMotion ? undefined : staggerContainer}
                                 initial={prefersReducedMotion ? undefined : "hidden"}
                                 whileInView={prefersReducedMotion ? undefined : "visible"}
                                 viewport={prefersReducedMotion ? undefined : revealViewport}
-                                transition={
-                                    prefersReducedMotion ? { duration: 0 } : quickTransition
-                                }
-                                className="bg-white rounded-2xl p-6 shadow-soft"
                             >
-                                <div className="flex items-start gap-4">
-                                    <div className="relative w-16 h-16 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-terracotta/20">
-                                        <Image
-                                            src={workshop.hostAvatar}
-                                            alt={workshop.hostName}
-                                            fill
-                                            className="object-cover"
-                                        />
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className="font-playfair text-lg font-semibold text-dark">
-                                            Hosted by {workshop.hostName}
-                                        </p>
-                                        {workshop.hostExperience && (
-                                            <p className="text-xs font-inter font-semibold text-terracotta mt-0.5">
-                                                {workshop.hostExperience}
+                                <motion.div
+                                    variants={prefersReducedMotion ? undefined : fadeInUp}
+                                    transition={
+                                        prefersReducedMotion ? { duration: 0 } : quickTransition
+                                    }
+                                    className="bg-white rounded-2xl p-6 shadow-soft"
+                                >
+                                    <div className="flex items-start gap-4">
+                                        <div className="relative w-16 h-16 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-terracotta/20">
+                                            <Image
+                                                src={workshop.hostAvatar}
+                                                alt={workshop.hostName}
+                                                fill
+                                                className="object-cover"
+                                            />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="font-playfair text-lg font-semibold text-dark">
+                                                Hosted by {workshop.hostName}
                                             </p>
-                                        )}
-                                        <p className="text-sm font-inter text-dark-muted mt-2 leading-relaxed">
-                                            {workshop.hostBio}
-                                        </p>
-                                        {workshop.hostSocialLinks && (
-                                            <div className="flex items-center gap-2 mt-3">
-                                                {workshop.hostSocialLinks.instagram && (
-                                                    <a
-                                                        href={workshop.hostSocialLinks.instagram}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="p-2 bg-cream-100 rounded-lg hover:bg-terracotta/10 transition-colors"
-                                                    >
-                                                        <Instagram className="w-4 h-4 text-dark-muted" />
-                                                    </a>
-                                                )}
-                                                {workshop.hostSocialLinks.youtube && (
-                                                    <a
-                                                        href={workshop.hostSocialLinks.youtube}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="p-2 bg-cream-100 rounded-lg hover:bg-terracotta/10 transition-colors"
-                                                    >
-                                                        <Youtube className="w-4 h-4 text-dark-muted" />
-                                                    </a>
-                                                )}
-                                                {workshop.hostSocialLinks.website && (
-                                                    <a
-                                                        href={workshop.hostSocialLinks.website}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="p-2 bg-cream-100 rounded-lg hover:bg-terracotta/10 transition-colors flex items-center gap-1"
-                                                    >
-                                                        <Globe className="w-4 h-4 text-dark-muted" />
-                                                    </a>
-                                                )}
-                                            </div>
-                                        )}
+                                            {workshop.hostExperience && (
+                                                <p className="text-xs font-inter font-semibold text-terracotta mt-0.5">
+                                                    {workshop.hostExperience}
+                                                </p>
+                                            )}
+                                            <p className="text-sm font-inter text-dark-muted mt-2 leading-relaxed">
+                                                {workshop.hostBio}
+                                            </p>
+                                            {workshop.hostSocialLinks && (
+                                                <div className="flex items-center gap-2 mt-3">
+                                                    {workshop.hostSocialLinks.instagram && (
+                                                        <a
+                                                            href={
+                                                                workshop.hostSocialLinks.instagram
+                                                            }
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="p-2 bg-cream-100 rounded-lg hover:bg-terracotta/10 transition-colors"
+                                                        >
+                                                            <Instagram className="w-4 h-4 text-dark-muted" />
+                                                        </a>
+                                                    )}
+                                                    {workshop.hostSocialLinks.youtube && (
+                                                        <a
+                                                            href={workshop.hostSocialLinks.youtube}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="p-2 bg-cream-100 rounded-lg hover:bg-terracotta/10 transition-colors"
+                                                        >
+                                                            <Youtube className="w-4 h-4 text-dark-muted" />
+                                                        </a>
+                                                    )}
+                                                    {workshop.hostSocialLinks.website && (
+                                                        <a
+                                                            href={workshop.hostSocialLinks.website}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="p-2 bg-cream-100 rounded-lg hover:bg-terracotta/10 transition-colors flex items-center gap-1"
+                                                        >
+                                                            <Globe className="w-4 h-4 text-dark-muted" />
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            </motion.div>
+                                </motion.div>
 
-                            <hr className="my-8 border-clay/30" />
+                                <hr className="my-8 border-clay/30" />
 
-                            <motion.div
-                                variants={prefersReducedMotion ? undefined : fadeInUp}
-                                initial={prefersReducedMotion ? undefined : "hidden"}
-                                whileInView={prefersReducedMotion ? undefined : "visible"}
-                                viewport={prefersReducedMotion ? undefined : revealViewport}
-                                transition={
-                                    prefersReducedMotion ? { duration: 0 } : quickTransition
-                                }
-                            >
-                                <h2 className="heading-sm mb-4">About this experience</h2>
-                                <div className="text-body whitespace-pre-line">
-                                    {workshop.description}
-                                </div>
-                            </motion.div>
+                                <motion.div
+                                    variants={prefersReducedMotion ? undefined : fadeInUp}
+                                    transition={
+                                        prefersReducedMotion ? { duration: 0 } : quickTransition
+                                    }
+                                >
+                                    <h2 className="heading-sm mb-4">About this experience</h2>
+                                    <div className="text-body whitespace-pre-line">
+                                        {workshop.description}
+                                    </div>
+                                </motion.div>
 
-                            <hr className="my-8 border-clay/30" />
+                                <hr className="my-8 border-clay/30" />
 
-                            <motion.div
-                                variants={prefersReducedMotion ? undefined : fadeInUp}
-                                initial={prefersReducedMotion ? undefined : "hidden"}
-                                whileInView={prefersReducedMotion ? undefined : "visible"}
-                                viewport={prefersReducedMotion ? undefined : revealViewport}
-                                transition={
-                                    prefersReducedMotion ? { duration: 0 } : quickTransition
-                                }
-                            >
-                                <h2 className="heading-sm mb-4">What you will learn</h2>
-                                <ul className="space-y-3">
-                                    {workshop.whatYouLearn.map((item, i) => (
-                                        <li key={i} className="flex items-start gap-3 text-body">
-                                            <Check className="w-5 h-5 text-terracotta flex-shrink-0 mt-0.5" />{" "}
-                                            {item}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </motion.div>
-
-                            <hr className="my-8 border-clay/30" />
-
-                            <motion.div
-                                variants={prefersReducedMotion ? undefined : fadeInUp}
-                                initial={prefersReducedMotion ? undefined : "hidden"}
-                                whileInView={prefersReducedMotion ? undefined : "visible"}
-                                viewport={prefersReducedMotion ? undefined : revealViewport}
-                                transition={
-                                    prefersReducedMotion ? { duration: 0 } : quickTransition
-                                }
-                            >
-                                <h2 className="heading-sm mb-4">{"What's included"}</h2>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    {workshop.materialsProvided.map((item, i) => (
-                                        <div
-                                            key={i}
-                                            className="flex items-center gap-3 bg-cream-200/50 rounded-xl px-4 py-3"
-                                        >
-                                            <div className="w-8 h-8 bg-terracotta/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                <Check className="w-4 h-4 text-terracotta" />
-                                            </div>
-                                            <span className="text-sm font-inter text-dark-secondary">
+                                <motion.div
+                                    variants={prefersReducedMotion ? undefined : fadeInUp}
+                                    transition={
+                                        prefersReducedMotion ? { duration: 0 } : quickTransition
+                                    }
+                                >
+                                    <h2 className="heading-sm mb-4">What you will learn</h2>
+                                    <ul className="space-y-3">
+                                        {workshop.whatYouLearn.map((item, i) => (
+                                            <li
+                                                key={i}
+                                                className="flex items-start gap-3 text-body"
+                                            >
+                                                <Check className="w-5 h-5 text-terracotta flex-shrink-0 mt-0.5" />{" "}
                                                 {item}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </motion.div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </motion.div>
 
-                            <hr className="my-8 border-clay/30" />
+                                <hr className="my-8 border-clay/30" />
 
-                            <motion.div
-                                variants={prefersReducedMotion ? undefined : fadeInUp}
-                                initial={prefersReducedMotion ? undefined : "hidden"}
-                                whileInView={prefersReducedMotion ? undefined : "visible"}
-                                viewport={prefersReducedMotion ? undefined : revealViewport}
-                                transition={
-                                    prefersReducedMotion ? { duration: 0 } : quickTransition
-                                }
-                            >
-                                <h2 className="heading-sm mb-4">{"Where you'll be"}</h2>
-                                <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-soft">
-                                    <iframe
-                                        title={`Map for ${locationQuery}`}
-                                        src={mapEmbedUrl}
-                                        className="w-full h-72 border-0"
-                                        loading="lazy"
-                                        referrerPolicy="no-referrer-when-downgrade"
-                                    />
-                                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
-                                    <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-3 rounded-xl bg-white/95 p-3 shadow-soft">
-                                        <div className="min-w-0">
-                                            <p className="text-sm font-inter font-semibold text-dark truncate">
-                                                {workshop.location}
-                                            </p>
-                                            <p className="text-xs font-inter text-dark-muted truncate">
-                                                {workshop.city} &bull; Exact address sent upon
-                                                booking
-                                            </p>
-                                        </div>
-                                        <a
-                                            href={mapOpenUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-inter font-semibold text-dark hover:border-terracotta hover:text-terracotta transition-colors"
-                                        >
-                                            <MapPin className="w-3.5 h-3.5" />
-                                            Open
-                                        </a>
+                                <motion.div
+                                    variants={prefersReducedMotion ? undefined : fadeInUp}
+                                    transition={
+                                        prefersReducedMotion ? { duration: 0 } : quickTransition
+                                    }
+                                >
+                                    <h2 className="heading-sm mb-4">{"What's included"}</h2>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        {workshop.materialsProvided.map((item, i) => (
+                                            <div
+                                                key={i}
+                                                className="flex items-center gap-3 bg-cream-200/50 rounded-xl px-4 py-3"
+                                            >
+                                                <div className="w-8 h-8 bg-terracotta/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                    <Check className="w-4 h-4 text-terracotta" />
+                                                </div>
+                                                <span className="text-sm font-inter text-dark-secondary">
+                                                    {item}
+                                                </span>
+                                            </div>
+                                        ))}
                                     </div>
-                                </div>
+                                </motion.div>
+
+                                <hr className="my-8 border-clay/30" />
+
+                                <motion.div
+                                    variants={prefersReducedMotion ? undefined : fadeInUp}
+                                    transition={
+                                        prefersReducedMotion ? { duration: 0 } : quickTransition
+                                    }
+                                >
+                                    <h2 className="heading-sm mb-4">{"Where you'll be"}</h2>
+                                    <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-soft">
+                                        <iframe
+                                            title={`Map for ${locationQuery}`}
+                                            src={mapEmbedUrl}
+                                            className="w-full h-72 border-0"
+                                            loading="lazy"
+                                            referrerPolicy="no-referrer-when-downgrade"
+                                        />
+                                        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
+                                        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-3 rounded-xl bg-white/95 p-3 shadow-soft">
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-inter font-semibold text-dark truncate">
+                                                    {workshop.location}
+                                                </p>
+                                                <p className="text-xs font-inter text-dark-muted truncate">
+                                                    {workshop.city} &bull; Exact address sent upon
+                                                    booking
+                                                </p>
+                                            </div>
+                                            <a
+                                                href={mapOpenUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-inter font-semibold text-dark hover:border-terracotta hover:text-terracotta transition-colors"
+                                            >
+                                                <MapPin className="w-3.5 h-3.5" />
+                                                Open
+                                            </a>
+                                        </div>
+                                    </div>
+                                </motion.div>
                             </motion.div>
                         </div>
 
@@ -946,10 +1072,16 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
                                                 </span>
                                             </div>
                                         </div>
-                                        {workshop.seatsRemaining <= 5 && (
-                                            <span className="text-xs font-inter font-bold text-terracotta flex items-center gap-1 bg-terracotta/10 px-2.5 py-1 rounded-full">
-                                                🔥 Selling Fast
+                                        {isSoldOut ? (
+                                            <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-inter font-bold text-red-700">
+                                                Sold Out
                                             </span>
+                                        ) : (
+                                            availableSeatCount <= 5 && (
+                                                <span className="rounded-full bg-terracotta/10 px-2.5 py-1 text-xs font-inter font-bold text-terracotta">
+                                                    Selling Fast
+                                                </span>
+                                            )
                                         )}
                                     </div>
 
@@ -969,61 +1101,85 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
                                         </div>
                                     </div>
 
-                                    <div className="mb-6">
-                                        <label className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                            Guests
-                                        </label>
-                                        <div className="bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between">
-                                            <button
-                                                onClick={() => setGuests(Math.max(1, guests - 1))}
-                                                className="w-9 h-9 rounded-lg border border-gray-300 flex items-center justify-center hover:border-terracotta hover:text-terracotta transition-colors"
-                                            >
-                                                <Minus className="w-4 h-4" />
-                                            </button>
-                                            <span className="text-lg font-inter font-bold text-dark">
-                                                {guests}
-                                            </span>
-                                            <button
-                                                onClick={() =>
-                                                    setGuests(
-                                                        Math.min(
-                                                            workshop.seatsRemaining,
-                                                            guests + 1
+                                    <div
+                                        className={`mb-6 rounded-xl border px-4 py-3 text-sm font-inter ${
+                                            isSoldOut
+                                                ? "border-red-200 bg-red-50 text-red-700"
+                                                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                        }`}
+                                    >
+                                        {seatAvailabilityLabel}
+                                    </div>
+
+                                    {!isSoldOut && (
+                                        <div className="mb-6">
+                                            <label className="mb-2 block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted">
+                                                Guests
+                                            </label>
+                                            <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-cream-100 px-4 py-3">
+                                                <button
+                                                    onClick={() =>
+                                                        setGuests(Math.max(1, guests - 1))
+                                                    }
+                                                    disabled={guests <= 1}
+                                                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 transition-colors hover:border-terracotta hover:text-terracotta disabled:cursor-not-allowed disabled:opacity-40"
+                                                >
+                                                    <Minus className="h-4 w-4" />
+                                                </button>
+                                                <span className="text-lg font-inter font-bold text-dark">
+                                                    {guests}
+                                                </span>
+                                                <button
+                                                    onClick={() =>
+                                                        setGuests(
+                                                            Math.min(availableSeatCount, guests + 1)
                                                         )
-                                                    )
-                                                }
-                                                className="w-9 h-9 rounded-lg border border-gray-300 flex items-center justify-center hover:border-terracotta hover:text-terracotta transition-colors"
-                                            >
-                                                <Plus className="w-4 h-4" />
-                                            </button>
+                                                    }
+                                                    disabled={guests >= availableSeatCount}
+                                                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 transition-colors hover:border-terracotta hover:text-terracotta disabled:cursor-not-allowed disabled:opacity-40"
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
 
-                                    <div className="border-t border-gray-100 pt-4 space-y-3 mb-6">
-                                        <div className="flex justify-between text-sm font-inter">
-                                            <span className="text-dark-secondary">
-                                                {formatCurrency(workshop.price)} &times; {guests}{" "}
-                                                guests
-                                            </span>
-                                            <span className="text-dark font-medium">
-                                                {formatCurrency(subtotal)}
-                                            </span>
+                                    {!isSoldOut && (
+                                        <div className="mb-6 space-y-3 border-t border-gray-100 pt-4">
+                                            <div className="flex justify-between text-sm font-inter">
+                                                <span className="text-dark-secondary">
+                                                    {formatCurrency(workshop.price)} &times;{" "}
+                                                    {guests} guests
+                                                </span>
+                                                <span className="font-medium text-dark">
+                                                    {formatCurrency(subtotal)}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between text-sm font-inter">
+                                                <span className="text-dark-secondary">
+                                                    Service fee
+                                                </span>
+                                                <span className="font-medium text-dark">
+                                                    {formatCurrency(serviceFee)}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between border-t border-gray-100 pt-3 text-base font-inter font-bold">
+                                                <span className="text-dark">Total</span>
+                                                <span className="text-dark">
+                                                    {formatCurrency(total)}
+                                                </span>
+                                            </div>
                                         </div>
-                                        <div className="flex justify-between text-sm font-inter">
-                                            <span className="text-dark-secondary">Service fee</span>
-                                            <span className="text-dark font-medium">
-                                                {formatCurrency(serviceFee)}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between text-base font-inter font-bold pt-3 border-t border-gray-100">
-                                            <span className="text-dark">Total</span>
-                                            <span className="text-dark">
-                                                {formatCurrency(total)}
-                                            </span>
-                                        </div>
-                                    </div>
+                                    )}
 
-                                    {user ? (
+                                    {isSoldOut ? (
+                                        <button
+                                            disabled
+                                            className="w-full cursor-not-allowed rounded-full bg-gray-100 py-4 text-center text-base font-inter font-semibold text-dark-muted"
+                                        >
+                                            Sold Out
+                                        </button>
+                                    ) : user ? (
                                         <button
                                             onClick={handleBooking}
                                             disabled={bookingLoading}
@@ -1047,9 +1203,11 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
                                         </Link>
                                     )}
                                     <p className="text-center text-xs font-inter text-dark-muted mt-3">
-                                        {user
-                                            ? "You won't be charged yet."
-                                            : "You need to be logged in to book."}
+                                        {isSoldOut
+                                            ? "All spots are taken. Explore similar workshops below."
+                                            : user
+                                              ? "You won't be charged yet."
+                                              : "You need to be logged in to book."}
                                     </p>
                                     {holdError && (
                                         <p className="text-center text-xs font-inter text-red-600 mt-2">
@@ -1075,6 +1233,64 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
             </div>
 
             {/* ═══ MOBILE STICKY BOOKING BAR ═══ */}
+            {isSoldOut && (
+                <div className="section-padding mt-8">
+                    <motion.div
+                        variants={prefersReducedMotion ? undefined : fadeInUp}
+                        initial={prefersReducedMotion ? undefined : "hidden"}
+                        animate={prefersReducedMotion ? undefined : "visible"}
+                        transition={
+                            prefersReducedMotion
+                                ? { duration: 0 }
+                                : { ...quickTransition, delay: 0.2 }
+                        }
+                        className="rounded-2xl border border-red-200 bg-red-50 p-6"
+                    >
+                        <h2 className="heading-sm text-red-800">
+                            All spots are taken for this workshop
+                        </h2>
+                        <p className="mt-2 text-sm font-inter text-red-700">
+                            Booking is closed for this event. Try one of these similar workshops
+                            with seats available.
+                        </p>
+
+                        {suggestedWorkshops.length > 0 ? (
+                            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {suggestedWorkshops.map((suggestion) => (
+                                    <Link
+                                        key={suggestion.id}
+                                        href={`/workshop/${suggestion.id}`}
+                                        className="rounded-xl border border-red-100 bg-white p-4 transition-colors hover:border-terracotta/40"
+                                    >
+                                        <p className="line-clamp-2 text-sm font-inter font-semibold text-dark">
+                                            {suggestion.title}
+                                        </p>
+                                        <p className="mt-1 text-xs font-inter text-dark-muted">
+                                            {formatDate(suggestion.date)} &bull; {suggestion.time}
+                                        </p>
+                                        <p className="mt-2 text-xs font-inter text-emerald-700">
+                                            {suggestion.seatsRemaining} seat
+                                            {suggestion.seatsRemaining === 1 ? "" : "s"} available
+                                        </p>
+                                    </Link>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="mt-4 text-sm font-inter text-dark-secondary">
+                                No similar workshops with open seats are available right now.
+                            </p>
+                        )}
+
+                        <Link
+                            href="/explore"
+                            className="btn-secondary mt-5 inline-flex !py-2.5 !px-5 text-sm"
+                        >
+                            Explore All Workshops
+                        </Link>
+                    </motion.div>
+                </div>
+            )}
+
             {isPastWorkshop ? (
                 <div className="section-padding mt-8 lg:hidden">
                     <motion.div
@@ -1182,8 +1398,22 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
                                 {formatCurrency(workshop.price)}
                             </span>
                             <span className="text-sm font-inter text-dark-muted"> / person</span>
+                            <p
+                                className={`mt-1 text-xs font-inter ${
+                                    isSoldOut ? "text-red-700" : "text-emerald-700"
+                                }`}
+                            >
+                                {seatAvailabilityLabel}
+                            </p>
                         </div>
-                        {user ? (
+                        {isSoldOut ? (
+                            <button
+                                disabled
+                                className="cursor-not-allowed rounded-full bg-gray-100 px-6 py-3 text-sm font-inter font-semibold text-dark-muted"
+                            >
+                                Sold Out
+                            </button>
+                        ) : user ? (
                             <button
                                 onClick={handleBooking}
                                 disabled={bookingLoading}
@@ -1207,6 +1437,11 @@ export default function WorkshopClient({ workshop }: { workshop: Workshop }) {
                     {holdError && (
                         <p className="text-center text-xs font-inter text-red-600 mt-2">
                             {holdError}
+                        </p>
+                    )}
+                    {isSoldOut && (
+                        <p className="mt-2 text-center text-xs font-inter text-dark-secondary">
+                            This workshop is full. Scroll up for similar workshops.
                         </p>
                     )}
                 </div>

@@ -1,9 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import {
-    createSupabaseServiceClient,
-    isSupabaseServiceConfigured,
-} from "@/lib/supabase-server";
+import { handleApiError } from "@/lib/api-route";
+import { requireSupabaseService } from "@/lib/api-helpers";
 import { requireAdminUser } from "@/lib/api-auth";
 
 export async function GET(request: NextRequest) {
@@ -12,16 +10,11 @@ export async function GET(request: NextRequest) {
         return auth.response;
     }
 
-    if (!isSupabaseServiceConfigured) {
-        return NextResponse.json(
-            { error: "Supabase service role is not configured." },
-            { status: 500 }
-        );
-    }
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+    const serviceClient = service.client;
 
     try {
-        const serviceClient = createSupabaseServiceClient();
-
         const { count: activeWorkshopsCount, error: wError } = await serviceClient
             .from("workshops")
             .select("*", { count: "exact", head: true });
@@ -73,9 +66,6 @@ export async function GET(request: NextRequest) {
             },
         });
     } catch (error) {
-        return NextResponse.json(
-            { error: "Failed to load admin stats.", details: String(error) },
-            { status: 500 }
-        );
+        return handleApiError("Failed to load admin stats.", error);
     }
 }

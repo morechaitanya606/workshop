@@ -1,8 +1,9 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError, parseBody } from "@/lib/api-route";
-import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
-import { requireAdminUser } from "@/lib/api-auth";
+import { requireSupabaseService } from "@/lib/api-helpers";
+import { jsonError, requireAdminUser } from "@/lib/api-auth";
+import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { workshopCreateSchema } from "@/lib/validators";
 import { buildWorkshopInsertPayload, mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 
@@ -12,17 +13,11 @@ export async function GET(request: NextRequest) {
         return auth.response;
     }
 
-    if (!isSupabaseServiceConfigured) {
-        return NextResponse.json(
-            {
-                error: "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
-            },
-            { status: 500 }
-        );
-    }
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+    const serviceClient = service.client;
 
     try {
-        const serviceClient = createSupabaseServiceClient();
         const { data, error } = await serviceClient
             .from("workshops")
             .select("*")
@@ -30,7 +25,7 @@ export async function GET(request: NextRequest) {
             .limit(100);
 
         if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            throw error;
         }
 
         return NextResponse.json({
@@ -47,14 +42,19 @@ export async function POST(request: NextRequest) {
         return auth.response;
     }
 
-    if (!isSupabaseServiceConfigured) {
-        return NextResponse.json(
-            {
-                error: "Supabase service role is not configured. Add SUPABASE_SERVICE_ROLE_KEY.",
-            },
-            { status: 500 }
-        );
+    const rateLimitResult = await assertRateLimit({
+        key: getRateLimitKey(request, "admin-workshops-write", auth.user.id),
+        limit: 30,
+        windowMs: 60_000,
+        message: "Too many workshop management actions. Please wait and try again.",
+    });
+    if (!rateLimitResult.ok) {
+        return rateLimitResult.response;
     }
+
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+    const serviceClient = service.client;
 
     const parsed = await parseBody(
         request,
@@ -67,7 +67,6 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const serviceClient = createSupabaseServiceClient();
         const payload = buildWorkshopInsertPayload(parsed.data, auth.user.id);
         const { data, error } = await serviceClient
             .from("workshops")
@@ -76,12 +75,10 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (error) {
-            return NextResponse.json(
-                {
-                    error: "Unable to create workshop. Confirm the Supabase migration was applied.",
-                    details: error.message,
-                },
-                { status: 500 }
+            return jsonError(
+                "Unable to create workshop. Confirm the Supabase migration was applied.",
+                500,
+                error.message
             );
         }
 

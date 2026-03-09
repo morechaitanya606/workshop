@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import * as Sentry from "@sentry/nextjs";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
     Loader2,
@@ -15,6 +16,8 @@ import {
     MessageSquare,
     Settings,
     Heart,
+    HeartOff,
+    Banknote,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import MobileNav from "@/components/MobileNav";
@@ -22,12 +25,15 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import {
     getFavorites,
+    removeFavorite,
     getWorkshopById,
     getMyBookings,
     getWorkshopFeedback,
     submitWorkshopFeedback,
     toApiErrorMessage,
     uploadMedia,
+    getHostLedger,
+    type HostLedgerResponse,
 } from "@/lib/api-client";
 import type { Workshop } from "@/lib/data";
 
@@ -67,20 +73,25 @@ const defaultDraft: FeedbackDraft = {
     photos: [],
     videoUrl: "",
 };
+const MIN_REVIEW_LENGTH = 10;
 
 export default function ProfilePage() {
     const router = useRouter();
     const { user, session, loading, signOut, role } = useAuth();
     const prefersReducedMotion = useReducedMotion();
 
-    const [tab, setTab] = useState<"tickets" | "history" | "past" | "wishlist" | "settings">(
-        "tickets"
-    );
+    const [tab, setTab] = useState<
+        "tickets" | "history" | "past" | "wishlist" | "settings" | "earnings"
+    >("tickets");
     const [bookings, setBookings] = useState<BookingItem[]>([]);
     const [favoriteWorkshops, setFavoriteWorkshops] = useState<Workshop[]>([]);
+    const [ledger, setLedger] = useState<HostLedgerResponse | null>(null);
     const [fetching, setFetching] = useState(false);
     const [loadingFavorites, setLoadingFavorites] = useState(false);
+    const [loadingLedger, setLoadingLedger] = useState(false);
+    const [removingFavoriteId, setRemovingFavoriteId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [reloadKey, setReloadKey] = useState(0);
 
     const [openFeedbackId, setOpenFeedbackId] = useState<string | null>(null);
     const [drafts, setDrafts] = useState<Record<string, FeedbackDraft>>({});
@@ -90,12 +101,36 @@ export default function ProfilePage() {
     const [uploading, setUploading] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const feedbackDialogContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (!loading && !user) {
             router.push(`/auth/login?redirect=${encodeURIComponent("/profile")}`);
         }
     }, [loading, user, router]);
+
+    useEffect(() => {
+        if (!openFeedbackId) {
+            return;
+        }
+
+        const focusTimer = window.setTimeout(() => {
+            feedbackDialogContainerRef.current?.focus();
+        }, 0);
+
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                setOpenFeedbackId(null);
+            }
+        };
+
+        window.addEventListener("keydown", handleEscape);
+
+        return () => {
+            window.clearTimeout(focusTimer);
+            window.removeEventListener("keydown", handleEscape);
+        };
+    }, [openFeedbackId]);
 
     useEffect(() => {
         let cancelled = false;
@@ -118,7 +153,7 @@ export default function ProfilePage() {
         return () => {
             cancelled = true;
         };
-    }, [user, session]);
+    }, [user, session, reloadKey]);
 
     // Fetch existing feedback for past events
     useEffect(() => {
@@ -149,7 +184,15 @@ export default function ProfilePage() {
                             };
                         }
                     } catch (e) {
-                        console.error("Failed to fetch feedback for workshop", workshopId, e);
+                        Sentry.captureException(e, {
+                            tags: {
+                                layer: "profile",
+                                action: "load_feedback",
+                            },
+                            extra: {
+                                workshopId,
+                            },
+                        });
                     }
                 })
             );
@@ -197,6 +240,10 @@ export default function ProfilePage() {
                         workshopResults.filter((item): item is Workshop => Boolean(item))
                     );
                 }
+            } catch (e) {
+                if (active) {
+                    setError(toApiErrorMessage(e, "Unable to load wishlist right now."));
+                }
             } finally {
                 if (active) {
                     setLoadingFavorites(false);
@@ -208,7 +255,30 @@ export default function ProfilePage() {
         return () => {
             active = false;
         };
-    }, [session?.access_token]);
+    }, [session?.access_token, reloadKey]);
+
+    useEffect(() => {
+        let active = true;
+        const loadLedger = async () => {
+            if (role !== "host" || !session?.access_token) return;
+            setLoadingLedger(true);
+            try {
+                const result = await getHostLedger(session.access_token);
+                if (active) setLedger(result);
+            } catch (e) {
+                if (active) setError(toApiErrorMessage(e, "Unable to load earnings."));
+            } finally {
+                if (active) setLoadingLedger(false);
+            }
+        };
+
+        if (tab === "earnings") {
+            loadLedger();
+        }
+        return () => {
+            active = false;
+        };
+    }, [role, session?.access_token, tab, reloadKey]);
 
     const today = new Date().toISOString().slice(0, 10);
     const tickets = useMemo(
@@ -296,8 +366,12 @@ export default function ProfilePage() {
         if (!workshopId || !session?.access_token) return;
 
         const d = getDraft(id);
-        if (!d.comment.trim()) {
-            setFeedbackErrors((prev) => ({ ...prev, [id]: "Please add a feedback comment." }));
+        const trimmedComment = d.comment.trim();
+        if (trimmedComment.length < MIN_REVIEW_LENGTH) {
+            setFeedbackErrors((prev) => ({
+                ...prev,
+                [id]: `Please add at least ${MIN_REVIEW_LENGTH} characters.`,
+            }));
             return;
         }
 
@@ -305,7 +379,7 @@ export default function ProfilePage() {
         try {
             await submitWorkshopFeedback(workshopId, session.access_token, {
                 rating: d.rating,
-                comment: d.comment.trim(),
+                comment: trimmedComment,
                 photos: d.photos,
                 videoUrl: d.videoUrl.trim() || undefined,
             });
@@ -314,7 +388,7 @@ export default function ProfilePage() {
                 ...prev,
                 [id]: {
                     rating: d.rating,
-                    comment: d.comment.trim(),
+                    comment: trimmedComment,
                     photos: [...d.photos],
                     videoUrl: d.videoUrl.trim(),
                     submittedAt: new Date().toISOString(),
@@ -337,6 +411,26 @@ export default function ProfilePage() {
         router.push("/");
     };
 
+    const handleRetry = () => {
+        setError(null);
+        setReloadKey((prev) => prev + 1);
+    };
+
+    const handleUnsaveWorkshop = async (workshopId: string) => {
+        if (!session?.access_token) return;
+
+        setRemovingFavoriteId(workshopId);
+        setError(null);
+        try {
+            await removeFavorite(session.access_token, workshopId);
+            setFavoriteWorkshops((prev) => prev.filter((item) => item.id !== workshopId));
+        } catch (e) {
+            setError(toApiErrorMessage(e, "Unable to remove workshop from wishlist."));
+        } finally {
+            setRemovingFavoriteId(null);
+        }
+    };
+
     if (loading || !user) {
         return (
             <main className="min-h-screen flex items-center justify-center bg-cream">
@@ -345,29 +439,37 @@ export default function ProfilePage() {
         );
     }
 
-    const tabs = [
+    let tabs = [
         { id: "tickets", label: "My Tickets", icon: Ticket },
         { id: "history", label: "Purchase History", icon: History },
         { id: "past", label: "Past Events", icon: MessageSquare },
         { id: "wishlist", label: "Wishlist", icon: Heart },
-        { id: "settings", label: "Settings", icon: Settings },
-    ] as const;
+    ] as Array<{
+        id: "tickets" | "history" | "past" | "wishlist" | "settings" | "earnings";
+        label: string;
+        icon: any;
+    }>;
+
+    if (role === "host") {
+        tabs.push({ id: "earnings", label: "Earnings", icon: Banknote });
+    }
+    tabs.push({ id: "settings", label: "Settings", icon: Settings });
 
     return (
-        <main className="min-h-screen bg-cream pb-24 md:pb-12 text-forest">
+        <main className="min-h-screen bg-cream pb-24 md:pb-12 text-dark">
             <Navbar />
 
             <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-28 pb-10">
                 <header className="mb-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl md:text-4xl font-display font-medium text-forest mb-2">
+                        <h1 className="text-3xl md:text-4xl font-playfair font-medium text-dark mb-2">
                             My Profile
                         </h1>
                         <p className="text-dark-muted">{user.email}</p>
                     </div>
                     <button
                         onClick={handleSignOut}
-                        className="px-5 py-2.5 rounded-full text-sm font-medium border border-forest/10 hover:bg-forest hover:text-white bg-white transition-colors"
+                        className="px-5 py-2.5 rounded-full text-sm font-medium border border-dark/10 hover:bg-dark hover:text-white bg-white transition-colors"
                     >
                         Sign Out
                     </button>
@@ -386,12 +488,12 @@ export default function ProfilePage() {
                                         onClick={() => setTab(t.id)}
                                         className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-200 ${
                                             isActive
-                                                ? "bg-forest text-sand shadow-md scale-[1.02]"
-                                                : "bg-white/50 text-forest hover:bg-white hover:shadow-sm"
+                                                ? "bg-dark text-cream shadow-md scale-[1.02]"
+                                                : "bg-white/50 text-dark hover:bg-white hover:shadow-sm"
                                         }`}
                                     >
                                         <Icon
-                                            className={`w-4 h-4 ${isActive ? "text-terracotta" : "text-forest/60"}`}
+                                            className={`w-4 h-4 ${isActive ? "text-terracotta" : "text-dark/60"}`}
                                         />
                                         {t.label}
                                     </button>
@@ -415,34 +517,250 @@ export default function ProfilePage() {
                                 }
                             >
                                 {error && (
-                                    <div className="mb-6 bg-red-50 border border-red-200 text-red-700 rounded-xl px-5 py-4 text-sm flex items-center gap-3">
-                                        <X className="w-5 h-5 shrink-0" />
-                                        {error}
+                                    <div className="mb-6 bg-red-50 border border-red-200 text-red-700 rounded-xl px-5 py-4 text-sm flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <X className="w-5 h-5 shrink-0" />
+                                            {error}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleRetry}
+                                            className="inline-flex items-center justify-center rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                                        >
+                                            Try again
+                                        </button>
                                     </div>
                                 )}
 
                                 {fetching ? (
-                                    <div className="flex flex-col items-center justify-center py-20 text-forest/60">
+                                    <div className="flex flex-col items-center justify-center py-20 text-dark/60">
                                         <Loader2 className="w-8 h-8 animate-spin mb-4 text-terracotta" />
                                         <p>Loading your profile data...</p>
                                     </div>
+                                ) : tab === "earnings" ? (
+                                    <div className="space-y-6">
+                                        {loadingLedger ? (
+                                            <div className="flex flex-col items-center justify-center py-20 text-dark/60">
+                                                <Loader2 className="w-8 h-8 animate-spin mb-4 text-terracotta" />
+                                                <p>Loading your earnings...</p>
+                                            </div>
+                                        ) : !ledger ? (
+                                            <div className="bg-white rounded-2xl p-12 text-center shadow-soft border border-dark/5">
+                                                <p className="text-dark/60">
+                                                    No earnings data found.
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-8">
+                                                <div className="bg-white rounded-2xl p-8 shadow-soft border border-dark/5">
+                                                    <h2 className="text-xl font-playfair font-medium mb-6">
+                                                        Earnings Overview
+                                                    </h2>
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                        <div className="p-5 rounded-xl bg-cream">
+                                                            <p className="text-sm text-dark/60 font-medium mb-1">
+                                                                Available to Payout
+                                                            </p>
+                                                            <p className="text-3xl font-playfair text-terracotta">
+                                                                {formatCurrency(
+                                                                    ledger.earnings
+                                                                        .filter(
+                                                                            (e) =>
+                                                                                e.status ===
+                                                                                "available"
+                                                                        )
+                                                                        .reduce(
+                                                                            (acc, curr) =>
+                                                                                acc + curr.amount,
+                                                                            0
+                                                                        )
+                                                                )}
+                                                            </p>
+                                                        </div>
+                                                        <div className="p-5 rounded-xl bg-cream-50">
+                                                            <p className="text-sm text-dark/60 font-medium mb-1">
+                                                                Pending Clearance
+                                                            </p>
+                                                            <p className="text-3xl font-playfair text-dark">
+                                                                {formatCurrency(
+                                                                    ledger.earnings
+                                                                        .filter(
+                                                                            (e) =>
+                                                                                e.status ===
+                                                                                "pending"
+                                                                        )
+                                                                        .reduce(
+                                                                            (acc, curr) =>
+                                                                                acc + curr.amount,
+                                                                            0
+                                                                        )
+                                                                )}
+                                                            </p>
+                                                        </div>
+                                                        <div className="p-5 rounded-xl bg-cream-50">
+                                                            <p className="text-sm text-dark/60 font-medium mb-1">
+                                                                Total Paid Out
+                                                            </p>
+                                                            <p className="text-3xl font-playfair text-dark">
+                                                                {formatCurrency(
+                                                                    ledger.payouts
+                                                                        .filter(
+                                                                            (p) =>
+                                                                                p.status ===
+                                                                                "completed"
+                                                                        )
+                                                                        .reduce(
+                                                                            (acc, curr) =>
+                                                                                acc + curr.amount,
+                                                                            0
+                                                                        )
+                                                                )}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-white rounded-2xl p-8 shadow-soft border border-dark/5">
+                                                    <h2 className="text-xl font-playfair font-medium mb-6">
+                                                        Recent Earnings
+                                                    </h2>
+                                                    {ledger.earnings.length === 0 ? (
+                                                        <p className="text-dark/60">
+                                                            No transactions yet.
+                                                        </p>
+                                                    ) : (
+                                                        <div className="space-y-4">
+                                                            {ledger.earnings
+                                                                .slice(0, 10)
+                                                                .map((earning) => (
+                                                                    <div
+                                                                        key={earning.id}
+                                                                        className="flex justify-between items-center p-4 border border-dark/5 rounded-xl hover:border-dark/10 transition-colors"
+                                                                    >
+                                                                        <div>
+                                                                            <p className="font-medium text-dark">
+                                                                                {earning.booking
+                                                                                    ?.workshop
+                                                                                    ?.title ||
+                                                                                    "Workshop Booking"}
+                                                                            </p>
+                                                                            <p className="text-sm text-dark/60">
+                                                                                {formatDate(
+                                                                                    earning.created_at.split(
+                                                                                        "T"
+                                                                                    )[0]
+                                                                                )}{" "}
+                                                                                &middot;{" "}
+                                                                                {
+                                                                                    earning.booking
+                                                                                        ?.guests
+                                                                                }{" "}
+                                                                                guest
+                                                                                {earning.booking
+                                                                                    ?.guests !== 1
+                                                                                    ? "s"
+                                                                                    : ""}
+                                                                            </p>
+                                                                        </div>
+                                                                        <div className="text-right flex flex-col items-end gap-1">
+                                                                            <p className="font-semibold text-dark">
+                                                                                +
+                                                                                {formatCurrency(
+                                                                                    earning.amount
+                                                                                )}
+                                                                            </p>
+                                                                            <span
+                                                                                className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                                                                                    earning.status ===
+                                                                                    "available"
+                                                                                        ? "bg-emerald-100 text-emerald-800"
+                                                                                        : earning.status ===
+                                                                                            "pending"
+                                                                                          ? "bg-amber-100 text-amber-800"
+                                                                                          : "bg-blue-100 text-blue-800"
+                                                                                }`}
+                                                                            >
+                                                                                {earning.status}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="bg-white rounded-2xl p-8 shadow-soft border border-dark/5">
+                                                    <h2 className="text-xl font-playfair font-medium mb-6">
+                                                        Payout History
+                                                    </h2>
+                                                    {ledger.payouts.length === 0 ? (
+                                                        <p className="text-dark/60">
+                                                            No payouts yet.
+                                                        </p>
+                                                    ) : (
+                                                        <div className="space-y-4">
+                                                            {ledger.payouts.map((payout) => (
+                                                                <div
+                                                                    key={payout.id}
+                                                                    className="flex justify-between items-center p-4 border border-dark/5 rounded-xl"
+                                                                >
+                                                                    <div>
+                                                                        <p className="font-medium text-dark">
+                                                                            Payout
+                                                                        </p>
+                                                                        <p className="text-sm text-dark/60">
+                                                                            {formatDate(
+                                                                                payout.created_at.split(
+                                                                                    "T"
+                                                                                )[0]
+                                                                            )}{" "}
+                                                                            {payout.reference_note
+                                                                                ? `· ${payout.reference_note}`
+                                                                                : ""}
+                                                                        </p>
+                                                                    </div>
+                                                                    <div className="text-right flex flex-col items-end gap-1">
+                                                                        <p className="font-semibold text-dark">
+                                                                            {formatCurrency(
+                                                                                payout.amount
+                                                                            )}
+                                                                        </p>
+                                                                        <span
+                                                                            className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                                                                                payout.status ===
+                                                                                "completed"
+                                                                                    ? "bg-emerald-100 text-emerald-800"
+                                                                                    : "bg-amber-100 text-amber-800"
+                                                                            }`}
+                                                                        >
+                                                                            {payout.status}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 ) : tab === "settings" ? (
-                                    <div className="bg-white rounded-2xl p-8 shadow-soft border border-forest/5">
-                                        <h2 className="text-xl font-display font-medium mb-6">
+                                    <div className="bg-white rounded-2xl p-8 shadow-soft border border-dark/5">
+                                        <h2 className="text-xl font-playfair font-medium mb-6">
                                             Account Settings
                                         </h2>
                                         <div className="space-y-6">
                                             <div>
-                                                <label className="block text-sm font-medium text-forest/70 mb-2">
+                                                <label className="block text-sm font-medium text-dark/70 mb-2">
                                                     Email Address
                                                 </label>
                                                 <input
                                                     type="text"
                                                     disabled
                                                     value={user.email || ""}
-                                                    className="w-full max-w-md bg-cream-50 border border-forest/10 rounded-xl px-4 py-3 text-forest cursor-not-allowed"
+                                                    className="w-full max-w-md bg-cream-50 border border-dark/10 rounded-xl px-4 py-3 text-dark cursor-not-allowed"
                                                 />
-                                                <p className="text-xs text-forest/50 mt-2">
+                                                <p className="text-xs text-dark/50 mt-2">
                                                     Your email address is managed by your
                                                     authentication provider.
                                                 </p>
@@ -452,19 +770,19 @@ export default function ProfilePage() {
                                 ) : tab === "wishlist" ? (
                                     <div className="space-y-4">
                                         {loadingFavorites ? (
-                                            <div className="flex flex-col items-center justify-center py-20 text-forest/60">
+                                            <div className="flex flex-col items-center justify-center py-20 text-dark/60">
                                                 <Loader2 className="w-8 h-8 animate-spin mb-4 text-terracotta" />
                                                 <p>Loading your wishlist...</p>
                                             </div>
                                         ) : favoriteWorkshops.length === 0 ? (
-                                            <div className="bg-white rounded-2xl p-12 text-center shadow-soft border border-forest/5">
+                                            <div className="bg-white rounded-2xl p-12 text-center shadow-soft border border-dark/5">
                                                 <div className="w-16 h-16 bg-cream rounded-full flex items-center justify-center mx-auto mb-6 text-terracotta">
                                                     <Heart className="w-8 h-8" />
                                                 </div>
                                                 <h3 className="text-lg font-medium mb-2">
                                                     No saved workshops yet
                                                 </h3>
-                                                <p className="text-forest/60 mb-8 max-w-md mx-auto">
+                                                <p className="text-dark/60 mb-8 max-w-md mx-auto">
                                                     Save workshops from the detail page to see them
                                                     here.
                                                 </p>
@@ -478,36 +796,70 @@ export default function ProfilePage() {
                                         ) : (
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 {favoriteWorkshops.map((workshop) => (
-                                                    <button
+                                                    <div
                                                         key={workshop.id}
-                                                        onClick={() =>
-                                                            router.push(`/workshop/${workshop.id}`)
-                                                        }
-                                                        className="text-left rounded-2xl bg-white p-5 shadow-soft border border-forest/5 hover:border-terracotta/40 transition-colors"
+                                                        className="rounded-2xl bg-white p-5 shadow-soft border border-dark/5 hover:border-terracotta/40 transition-colors"
                                                     >
-                                                        <p className="text-xs font-semibold uppercase tracking-wider text-terracotta mb-2">
-                                                            {workshop.category}
-                                                        </p>
-                                                        <h3 className="font-display text-xl text-forest mb-2">
+                                                        <div className="mb-3 flex items-start justify-between gap-2">
+                                                            <p className="text-xs font-semibold uppercase tracking-wider text-terracotta">
+                                                                {workshop.category}
+                                                            </p>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    void handleUnsaveWorkshop(
+                                                                        workshop.id
+                                                                    )
+                                                                }
+                                                                disabled={
+                                                                    removingFavoriteId ===
+                                                                    workshop.id
+                                                                }
+                                                                aria-label={`Remove ${workshop.title} from wishlist`}
+                                                                className="inline-flex items-center gap-1 rounded-full border border-dark/10 px-3 py-1 text-xs font-medium text-dark/70 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                                                            >
+                                                                {removingFavoriteId ===
+                                                                workshop.id ? (
+                                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                ) : (
+                                                                    <HeartOff className="h-3.5 w-3.5" />
+                                                                )}
+                                                                Unsave
+                                                            </button>
+                                                        </div>
+                                                        <h3 className="font-playfair text-xl text-dark mb-2">
                                                             {workshop.title}
                                                         </h3>
-                                                        <p className="text-sm text-forest/70 mb-2">
+                                                        <p className="text-sm text-dark/70 mb-2">
                                                             {workshop.location}, {workshop.city}
                                                         </p>
-                                                        <p className="text-sm text-forest/70 mb-3">
+                                                        <p className="text-sm text-dark/70 mb-4">
                                                             {formatDate(workshop.date)} |{" "}
                                                             {workshop.time}
                                                         </p>
-                                                        <p className="font-semibold text-forest">
-                                                            {formatCurrency(workshop.price)}
-                                                        </p>
-                                                    </button>
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <p className="font-semibold text-dark">
+                                                                {formatCurrency(workshop.price)}
+                                                            </p>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    router.push(
+                                                                        `/workshop/${workshop.id}`
+                                                                    )
+                                                                }
+                                                                className="text-sm font-semibold text-terracotta hover:underline"
+                                                            >
+                                                                View workshop
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                 ))}
                                             </div>
                                         )}
                                     </div>
                                 ) : activeList.length === 0 ? (
-                                    <div className="bg-white rounded-2xl p-12 text-center shadow-soft border border-forest/5">
+                                    <div className="bg-white rounded-2xl p-12 text-center shadow-soft border border-dark/5">
                                         <div className="w-16 h-16 bg-cream rounded-full flex items-center justify-center mx-auto mb-6 text-terracotta">
                                             {tab === "tickets" ? (
                                                 <Ticket className="w-8 h-8" />
@@ -525,7 +877,7 @@ export default function ProfilePage() {
                                                   ? "booking history"
                                                   : "past events"}
                                         </h3>
-                                        <p className="text-forest/60 mb-8 max-w-md mx-auto">
+                                        <p className="text-dark/60 mb-8 max-w-md mx-auto">
                                             When you book workshops, they will appear here. Find
                                             your next creative experience!
                                         </p>
@@ -546,7 +898,7 @@ export default function ProfilePage() {
                                             return (
                                                 <div
                                                     key={b.id}
-                                                    className="bg-white rounded-2xl p-6 md:p-8 shadow-soft border border-forest/5"
+                                                    className="bg-white rounded-2xl p-6 md:p-8 shadow-soft border border-dark/5"
                                                 >
                                                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
                                                         <div className="flex-1">
@@ -554,7 +906,7 @@ export default function ProfilePage() {
                                                                 <span className="px-3 py-1 bg-cream rounded-lg text-xs font-semibold text-terracotta tracking-wider uppercase">
                                                                     Booking #{b.id.slice(0, 8)}
                                                                 </span>
-                                                                <span className="text-sm text-forest/50">
+                                                                <span className="text-sm text-dark/50">
                                                                     Made on{" "}
                                                                     {formatDate(
                                                                         b.created_at.split("T")[0]
@@ -562,13 +914,13 @@ export default function ProfilePage() {
                                                                 </span>
                                                             </div>
 
-                                                            <h3 className="font-display font-medium text-2xl mb-4 text-forest">
+                                                            <h3 className="font-playfair font-medium text-2xl mb-4 text-dark">
                                                                 {b.workshop?.title || "Workshop"}
                                                             </h3>
 
-                                                            <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-forest/80 mb-4 max-w-2xl bg-cream-50 p-4 rounded-xl">
+                                                            <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-dark/80 mb-4 max-w-2xl bg-cream-50 p-4 rounded-xl">
                                                                 <div className="flex-1 min-w-[140px]">
-                                                                    <span className="block text-xs uppercase text-forest/50 font-semibold tracking-wider mb-1">
+                                                                    <span className="block text-xs uppercase text-dark/50 font-semibold tracking-wider mb-1">
                                                                         Date & Time
                                                                     </span>
                                                                     <div className="font-medium">
@@ -584,7 +936,7 @@ export default function ProfilePage() {
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex-1 min-w-[140px]">
-                                                                    <span className="block text-xs uppercase text-forest/50 font-semibold tracking-wider mb-1">
+                                                                    <span className="block text-xs uppercase text-dark/50 font-semibold tracking-wider mb-1">
                                                                         Location
                                                                     </span>
                                                                     <div className="font-medium">
@@ -596,7 +948,7 @@ export default function ProfilePage() {
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex-1 min-w-[100px]">
-                                                                    <span className="block text-xs uppercase text-forest/50 font-semibold tracking-wider mb-1">
+                                                                    <span className="block text-xs uppercase text-dark/50 font-semibold tracking-wider mb-1">
                                                                         Guests
                                                                     </span>
                                                                     <div className="font-medium">
@@ -604,7 +956,7 @@ export default function ProfilePage() {
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex-1 min-w-[100px]">
-                                                                    <span className="block text-xs uppercase text-forest/50 font-semibold tracking-wider mb-1">
+                                                                    <span className="block text-xs uppercase text-dark/50 font-semibold tracking-wider mb-1">
                                                                         Amount
                                                                     </span>
                                                                     <div className="font-medium">
@@ -616,11 +968,11 @@ export default function ProfilePage() {
                                                     </div>
 
                                                     {tab === "past" && (
-                                                        <div className="mt-8 pt-6 border-t border-forest/10">
+                                                        <div className="mt-8 pt-6 border-t border-dark/10">
                                                             {saved && !isOpen && (
                                                                 <div className="bg-cream-100/50 rounded-xl p-6 relative overflow-hidden border border-cream-200">
                                                                     <div className="flex items-center justify-between mb-4 relative z-10">
-                                                                        <h4 className="font-medium text-forest text-lg flex items-center gap-2">
+                                                                        <h4 className="font-medium text-dark text-lg flex items-center gap-2">
                                                                             Your Review
                                                                             <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                                                                         </h4>
@@ -629,17 +981,17 @@ export default function ProfilePage() {
                                                                                 (s) => (
                                                                                     <Star
                                                                                         key={s}
-                                                                                        className={`w-3.5 h-3.5 ${saved.rating >= s ? "text-amber-400 fill-amber-400" : "text-forest/20"}`}
+                                                                                        className={`w-3.5 h-3.5 ${saved.rating >= s ? "text-amber-400 fill-amber-400" : "text-dark/20"}`}
                                                                                     />
                                                                                 )
                                                                             )}
-                                                                            <span className="ml-2 text-xs font-semibold text-forest/80">
+                                                                            <span className="ml-2 text-xs font-semibold text-dark/80">
                                                                                 {saved.rating}.0
                                                                             </span>
                                                                         </div>
                                                                     </div>
 
-                                                                    <p className="text-forest/80 mb-5 relative z-10 leading-relaxed text-sm">
+                                                                    <p className="text-dark/80 mb-5 relative z-10 leading-relaxed text-sm">
                                                                         &quot;{saved.comment}&quot;
                                                                     </p>
 
@@ -650,7 +1002,7 @@ export default function ProfilePage() {
                                                                                     (url, i) => (
                                                                                         <div
                                                                                             key={i}
-                                                                                            className="relative w-24 h-24 rounded-xl overflow-hidden shrink-0 border border-forest/10 shadow-sm"
+                                                                                            className="relative w-24 h-24 rounded-xl overflow-hidden shrink-0 border border-dark/10 shadow-sm"
                                                                                         >
                                                                                             {/* eslint-disable-next-line @next/next/no-img-element */}
                                                                                             <img
@@ -687,7 +1039,7 @@ export default function ProfilePage() {
                                                                             onClick={() =>
                                                                                 openEditor(b.id)
                                                                             }
-                                                                            className="text-sm font-medium text-forest/60 hover:text-terracotta hover:bg-terracotta/5 px-4 py-2 rounded-lg transition-colors"
+                                                                            className="text-sm font-medium text-dark/60 hover:text-terracotta hover:bg-terracotta/5 px-4 py-2 rounded-lg transition-colors"
                                                                         >
                                                                             Edit Review
                                                                         </button>
@@ -697,14 +1049,14 @@ export default function ProfilePage() {
 
                                                             {!saved && !isOpen && (
                                                                 <div
-                                                                    className="flex flex-col items-center justify-center p-10 border border-dashed border-forest/20 rounded-2xl bg-cream-50 overflow-hidden relative group cursor-pointer transition-colors hover:border-terracotta hover:bg-terracotta/5"
+                                                                    className="flex flex-col items-center justify-center p-10 border border-dashed border-dark/20 rounded-2xl bg-cream-50 overflow-hidden relative group cursor-pointer transition-colors hover:border-terracotta hover:bg-terracotta/5"
                                                                     onClick={() => openEditor(b.id)}
                                                                 >
                                                                     <div className="absolute inset-0 bg-gradient-to-t from-cream/50 to-transparent pointer-events-none" />
                                                                     <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4 group-hover:scale-110 transition-transform duration-300 relative z-10">
                                                                         <MessageSquare className="w-7 h-7 text-terracotta" />
                                                                     </div>
-                                                                    <p className="text-forest/70 mb-5 max-w-sm text-center font-medium relative z-10">
+                                                                    <p className="text-dark/70 mb-5 max-w-sm text-center font-medium relative z-10">
                                                                         We&apos;d love to hear about
                                                                         your experience! Share your
                                                                         thoughts and photos with the
@@ -716,238 +1068,382 @@ export default function ProfilePage() {
                                                                 </div>
                                                             )}
 
-                                                            {isOpen && (
-                                                                <div className="bg-white border border-forest/10 rounded-2xl p-6 md:p-8 shadow-md">
-                                                                    <h4 className="font-display text-2xl font-medium mb-1">
-                                                                        Write your review
-                                                                    </h4>
-                                                                    <p className="text-forest/60 text-sm mb-8">
-                                                                        Share your experience to
-                                                                        help future attendees and
-                                                                        support the host.
-                                                                    </p>
+                                                            <AnimatePresence initial={false}>
+                                                                {isOpen && (
+                                                                    <motion.div
+                                                                        initial={
+                                                                            prefersReducedMotion
+                                                                                ? { opacity: 0 }
+                                                                                : {
+                                                                                      opacity: 0,
+                                                                                      y: 16,
+                                                                                  }
+                                                                        }
+                                                                        animate={
+                                                                            prefersReducedMotion
+                                                                                ? { opacity: 1 }
+                                                                                : {
+                                                                                      opacity: 1,
+                                                                                      y: 0,
+                                                                                  }
+                                                                        }
+                                                                        exit={
+                                                                            prefersReducedMotion
+                                                                                ? { opacity: 0 }
+                                                                                : {
+                                                                                      opacity: 0,
+                                                                                      y: 8,
+                                                                                  }
+                                                                        }
+                                                                        transition={
+                                                                            prefersReducedMotion
+                                                                                ? {
+                                                                                      duration: 0.2,
+                                                                                  }
+                                                                                : {
+                                                                                      duration: 0.25,
+                                                                                      ease: [
+                                                                                          0.22, 1,
+                                                                                          0.36, 1,
+                                                                                      ],
+                                                                                  }
+                                                                        }
+                                                                        className="fixed inset-0 z-[90] overflow-y-auto bg-cream/95 p-4 backdrop-blur-sm md:static md:inset-auto md:z-auto md:overflow-visible md:bg-transparent md:p-0 md:backdrop-blur-0"
+                                                                    >
+                                                                        <div
+                                                                            ref={
+                                                                                feedbackDialogContainerRef
+                                                                            }
+                                                                            role="dialog"
+                                                                            aria-modal="true"
+                                                                            aria-labelledby={`feedback-editor-title-${b.id}`}
+                                                                            aria-describedby={`feedback-editor-description-${b.id}`}
+                                                                            tabIndex={-1}
+                                                                            className="bg-white border border-dark/10 rounded-2xl p-6 md:p-8 shadow-md min-h-[calc(100dvh-2rem)] md:min-h-0"
+                                                                        >
+                                                                            <h4
+                                                                                id={`feedback-editor-title-${b.id}`}
+                                                                                className="sr-only"
+                                                                            >
+                                                                                Write your review
+                                                                            </h4>
+                                                                            <p
+                                                                                id={`feedback-editor-description-${b.id}`}
+                                                                                className="sr-only"
+                                                                            >
+                                                                                Share your
+                                                                                experience to help
+                                                                                future attendees and
+                                                                                support the host.
+                                                                            </p>
+                                                                            <div className="sticky -mx-6 -mt-6 top-0 z-10 mb-6 flex items-center justify-between border-b border-dark/10 bg-white px-6 py-4 md:hidden">
+                                                                                <h4 className="font-playfair text-xl font-medium">
+                                                                                    Write your
+                                                                                    review
+                                                                                </h4>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() =>
+                                                                                        setOpenFeedbackId(
+                                                                                            null
+                                                                                        )
+                                                                                    }
+                                                                                    aria-label="Close review editor"
+                                                                                    className="rounded-full p-2 text-dark/70 hover:bg-dark/5 hover:text-dark transition-colors"
+                                                                                >
+                                                                                    <X className="w-4 h-4" />
+                                                                                </button>
+                                                                            </div>
+                                                                            <div className="hidden md:flex items-center justify-between mb-1">
+                                                                                <h4 className="font-playfair text-2xl font-medium">
+                                                                                    Write your
+                                                                                    review
+                                                                                </h4>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() =>
+                                                                                        setOpenFeedbackId(
+                                                                                            null
+                                                                                        )
+                                                                                    }
+                                                                                    aria-label="Close review editor"
+                                                                                    className="rounded-full p-2 text-dark/70 hover:bg-dark/5 hover:text-dark transition-colors"
+                                                                                >
+                                                                                    <X className="w-4 h-4" />
+                                                                                </button>
+                                                                            </div>
+                                                                            <p className="text-dark/60 text-sm mb-8">
+                                                                                Share your
+                                                                                experience to help
+                                                                                future attendees and
+                                                                                support the host.
+                                                                            </p>
 
-                                                                    <div className="space-y-8">
-                                                                        {/* Rating */}
-                                                                        <div className="bg-cream-50 rounded-xl p-6 border border-forest/5 flex flex-col items-center">
-                                                                            <label className="block text-sm font-semibold uppercase tracking-wider text-forest/50 mb-4">
-                                                                                Overall Rating
-                                                                            </label>
-                                                                            <div className="flex items-center gap-3">
-                                                                                {[
-                                                                                    1, 2, 3, 4, 5,
-                                                                                ].map((s) => (
-                                                                                    <button
-                                                                                        key={`${b.id}-${s}`}
-                                                                                        type="button"
-                                                                                        onClick={() =>
+                                                                            <div className="space-y-8">
+                                                                                {/* Rating */}
+                                                                                <div className="bg-cream-50 rounded-xl p-6 border border-dark/5 flex flex-col items-center">
+                                                                                    <label className="block text-sm font-semibold uppercase tracking-wider text-dark/50 mb-4">
+                                                                                        Overall
+                                                                                        Rating
+                                                                                    </label>
+                                                                                    <div className="flex items-center gap-3">
+                                                                                        {[
+                                                                                            1, 2, 3,
+                                                                                            4, 5,
+                                                                                        ].map(
+                                                                                            (s) => (
+                                                                                                <button
+                                                                                                    key={`${b.id}-${s}`}
+                                                                                                    type="button"
+                                                                                                    aria-label={`Rate ${s} star${s > 1 ? "s" : ""}`}
+                                                                                                    onClick={() =>
+                                                                                                        updateDraft(
+                                                                                                            b.id,
+                                                                                                            {
+                                                                                                                rating: s,
+                                                                                                            }
+                                                                                                        )
+                                                                                                    }
+                                                                                                    className="transform hover:scale-110 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta/50 focus-visible:ring-offset-2 focus-visible:ring-offset-cream p-1"
+                                                                                                >
+                                                                                                    <Star
+                                                                                                        className={`w-10 h-10 ${d.rating >= s ? "text-amber-400 fill-amber-400 drop-shadow-sm" : "text-dark/10"}`}
+                                                                                                    />
+                                                                                                </button>
+                                                                                            )
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+
+                                                                                {/* Comment */}
+                                                                                <div>
+                                                                                    <label className="block text-sm font-medium text-dark mb-2">
+                                                                                        Detailed
+                                                                                        Thoughts{" "}
+                                                                                        <span className="text-red-500">
+                                                                                            *
+                                                                                        </span>
+                                                                                    </label>
+                                                                                    <textarea
+                                                                                        value={
+                                                                                            d.comment
+                                                                                        }
+                                                                                        onChange={(
+                                                                                            e
+                                                                                        ) =>
                                                                                             updateDraft(
                                                                                                 b.id,
                                                                                                 {
-                                                                                                    rating: s,
+                                                                                                    comment:
+                                                                                                        e
+                                                                                                            .target
+                                                                                                            .value,
                                                                                                 }
                                                                                             )
                                                                                         }
-                                                                                        className="transform hover:scale-110 transition-transform focus:outline-none p-1"
-                                                                                    >
-                                                                                        <Star
-                                                                                            className={`w-10 h-10 ${d.rating >= s ? "text-amber-400 fill-amber-400 drop-shadow-sm" : "text-forest/10"}`}
-                                                                                        />
-                                                                                    </button>
-                                                                                ))}
-                                                                            </div>
-                                                                        </div>
-
-                                                                        {/* Comment */}
-                                                                        <div>
-                                                                            <label className="block text-sm font-medium text-forest mb-2">
-                                                                                Detailed Thoughts{" "}
-                                                                                <span className="text-red-500">
-                                                                                    *
-                                                                                </span>
-                                                                            </label>
-                                                                            <textarea
-                                                                                value={d.comment}
-                                                                                onChange={(e) =>
-                                                                                    updateDraft(
-                                                                                        b.id,
+                                                                                        rows={4}
+                                                                                        placeholder="What did you enjoy the most? How was the host?"
+                                                                                        className="w-full bg-cream-50 border border-dark/10 rounded-xl px-5 py-4 text-dark focus:ring-2 focus:ring-terracotta/20 focus:border-terracotta transition-all resize-none shadow-inner"
+                                                                                    />
+                                                                                    <p className="mt-2 text-xs text-dark/50">
+                                                                                        Minimum{" "}
                                                                                         {
-                                                                                            comment:
-                                                                                                e
-                                                                                                    .target
-                                                                                                    .value,
+                                                                                            MIN_REVIEW_LENGTH
+                                                                                        }{" "}
+                                                                                        characters (
+                                                                                        {
+                                                                                            d.comment.trim()
+                                                                                                .length
                                                                                         }
-                                                                                    )
-                                                                                }
-                                                                                rows={4}
-                                                                                placeholder="What did you enjoy the most? How was the host?"
-                                                                                className="w-full bg-cream-50 border border-forest/10 rounded-xl px-5 py-4 text-forest focus:ring-2 focus:ring-terracotta/20 focus:border-terracotta transition-all resize-none shadow-inner"
-                                                                            />
-                                                                        </div>
+                                                                                        /
+                                                                                        {
+                                                                                            MIN_REVIEW_LENGTH
+                                                                                        }
+                                                                                        )
+                                                                                    </p>
+                                                                                </div>
 
-                                                                        {/* Media */}
-                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-forest/5">
-                                                                            <div>
-                                                                                <label className="block text-sm font-medium text-forest mb-3 flex items-center gap-2">
-                                                                                    <Upload className="w-4 h-4 text-terracotta" />{" "}
-                                                                                    Photos
-                                                                                </label>
+                                                                                {/* Media */}
+                                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-dark/5">
+                                                                                    <div>
+                                                                                        <label className="block text-sm font-medium text-dark mb-3 flex items-center gap-2">
+                                                                                            <Upload className="w-4 h-4 text-terracotta" />{" "}
+                                                                                            Photos
+                                                                                        </label>
 
-                                                                                <div className="grid grid-cols-3 gap-3">
-                                                                                    {d.photos.map(
-                                                                                        (
-                                                                                            photo,
-                                                                                            i
-                                                                                        ) => (
-                                                                                            <div
-                                                                                                key={
+                                                                                        <div className="grid grid-cols-3 gap-3">
+                                                                                            {d.photos.map(
+                                                                                                (
+                                                                                                    photo,
                                                                                                     i
-                                                                                                }
-                                                                                                className="relative aspect-square rounded-xl overflow-hidden group border border-forest/10 shadow-sm"
-                                                                                            >
-                                                                                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                                                                <img
-                                                                                                    src={
-                                                                                                        photo
-                                                                                                    }
-                                                                                                    alt=""
-                                                                                                    className="object-cover w-full h-full"
-                                                                                                />
-                                                                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                                                                    <button
-                                                                                                        onClick={() =>
-                                                                                                            removePhoto(
+                                                                                                ) => (
+                                                                                                    <div
+                                                                                                        key={
+                                                                                                            i
+                                                                                                        }
+                                                                                                        className="relative aspect-square rounded-xl overflow-hidden group border border-dark/10 shadow-sm"
+                                                                                                    >
+                                                                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                                                                        <img
+                                                                                                            src={
+                                                                                                                photo
+                                                                                                            }
+                                                                                                            alt={`Uploaded feedback photo ${i + 1}`}
+                                                                                                            className="object-cover w-full h-full"
+                                                                                                        />
+                                                                                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                                                                            <button
+                                                                                                                onClick={() =>
+                                                                                                                    removePhoto(
+                                                                                                                        b.id,
+                                                                                                                        i
+                                                                                                                    )
+                                                                                                                }
+                                                                                                                aria-label={`Remove photo ${i + 1}`}
+                                                                                                                className="w-8 h-8 bg-white/20 hover:bg-red-500 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm"
+                                                                                                            >
+                                                                                                                <X className="w-4 h-4 text-white" />
+                                                                                                            </button>
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                )
+                                                                                            )}
+                                                                                            {d
+                                                                                                .photos
+                                                                                                .length <
+                                                                                                5 && (
+                                                                                                <label className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-dark/20 rounded-xl text-dark/50 hover:text-terracotta hover:border-terracotta hover:bg-terracotta/5 transition-all cursor-pointer bg-cream-50 group">
+                                                                                                    {uploading ? (
+                                                                                                        <Loader2 className="w-6 h-6 animate-spin mb-2" />
+                                                                                                    ) : (
+                                                                                                        <Upload className="w-6 h-6 mb-2 group-hover:-translate-y-1 transition-transform" />
+                                                                                                    )}
+                                                                                                    <span className="text-xs font-medium">
+                                                                                                        Add
+                                                                                                        Photo
+                                                                                                    </span>
+                                                                                                    <input
+                                                                                                        type="file"
+                                                                                                        accept="image/*"
+                                                                                                        className="hidden"
+                                                                                                        ref={
+                                                                                                            fileInputRef
+                                                                                                        }
+                                                                                                        onChange={(
+                                                                                                            e
+                                                                                                        ) =>
+                                                                                                            handleFileUpload(
                                                                                                                 b.id,
-                                                                                                                i
+                                                                                                                e
                                                                                                             )
                                                                                                         }
-                                                                                                        className="w-8 h-8 bg-white/20 hover:bg-red-500 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm"
-                                                                                                    >
-                                                                                                        <X className="w-4 h-4 text-white" />
-                                                                                                    </button>
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        )
-                                                                                    )}
-                                                                                    {d.photos
-                                                                                        .length <
-                                                                                        5 && (
-                                                                                        <label className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-forest/20 rounded-xl text-forest/50 hover:text-terracotta hover:border-terracotta hover:bg-terracotta/5 transition-all cursor-pointer bg-cream-50 group">
-                                                                                            {uploading ? (
-                                                                                                <Loader2 className="w-6 h-6 animate-spin mb-2" />
-                                                                                            ) : (
-                                                                                                <Upload className="w-6 h-6 mb-2 group-hover:-translate-y-1 transition-transform" />
+                                                                                                        disabled={
+                                                                                                            uploading
+                                                                                                        }
+                                                                                                    />
+                                                                                                </label>
                                                                                             )}
-                                                                                            <span className="text-xs font-medium">
-                                                                                                Add
-                                                                                                Photo
-                                                                                            </span>
-                                                                                            <input
-                                                                                                type="file"
-                                                                                                accept="image/*"
-                                                                                                className="hidden"
-                                                                                                ref={
-                                                                                                    fileInputRef
-                                                                                                }
-                                                                                                onChange={(
-                                                                                                    e
-                                                                                                ) =>
-                                                                                                    handleFileUpload(
-                                                                                                        b.id,
-                                                                                                        e
-                                                                                                    )
-                                                                                                }
-                                                                                                disabled={
-                                                                                                    uploading
-                                                                                                }
-                                                                                            />
+                                                                                        </div>
+                                                                                        <p className="text-xs text-dark/40 mt-3 font-medium uppercase tracking-wide">
+                                                                                            Up to 5
+                                                                                            photos
+                                                                                            (max 5MB
+                                                                                            each)
+                                                                                        </p>
+                                                                                    </div>
+
+                                                                                    <div>
+                                                                                        <label className="block text-sm font-medium text-dark mb-3 flex items-center gap-2">
+                                                                                            <Video className="w-4 h-4 text-terracotta" />{" "}
+                                                                                            Video
+                                                                                            Link
                                                                                         </label>
-                                                                                    )}
-                                                                                </div>
-                                                                                <p className="text-xs text-forest/40 mt-3 font-medium uppercase tracking-wide">
-                                                                                    Up to 5 photos
-                                                                                    (max 5MB each)
-                                                                                </p>
-                                                                            </div>
-
-                                                                            <div>
-                                                                                <label className="block text-sm font-medium text-forest mb-3 flex items-center gap-2">
-                                                                                    <Video className="w-4 h-4 text-terracotta" />{" "}
-                                                                                    Video Link
-                                                                                </label>
-                                                                                <input
-                                                                                    type="url"
-                                                                                    value={
-                                                                                        d.videoUrl
-                                                                                    }
-                                                                                    onChange={(e) =>
-                                                                                        updateDraft(
-                                                                                            b.id,
-                                                                                            {
-                                                                                                videoUrl:
-                                                                                                    e
-                                                                                                        .target
-                                                                                                        .value,
+                                                                                        <input
+                                                                                            type="url"
+                                                                                            value={
+                                                                                                d.videoUrl
                                                                                             }
-                                                                                        )
-                                                                                    }
-                                                                                    placeholder="YouTube or Instagram Reel URL"
-                                                                                    className="w-full bg-cream-50 border border-forest/10 rounded-xl px-4 py-3.5 text-sm focus:ring-2 focus:ring-terracotta/20 focus:border-terracotta transition-shadow shadow-inner"
-                                                                                />
-                                                                            </div>
-                                                                        </div>
-
-                                                                        {feedbackErrors[b.id] && (
-                                                                            <div className="bg-red-50 text-red-700 text-sm px-5 py-4 rounded-xl border border-red-100 flex items-center gap-3">
-                                                                                <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center shrink-0">
-                                                                                    <X className="w-4 h-4 text-red-500" />
+                                                                                            onChange={(
+                                                                                                e
+                                                                                            ) =>
+                                                                                                updateDraft(
+                                                                                                    b.id,
+                                                                                                    {
+                                                                                                        videoUrl:
+                                                                                                            e
+                                                                                                                .target
+                                                                                                                .value,
+                                                                                                    }
+                                                                                                )
+                                                                                            }
+                                                                                            placeholder="YouTube or Instagram Reel URL"
+                                                                                            className="w-full bg-cream-50 border border-dark/10 rounded-xl px-4 py-3.5 text-sm focus:ring-2 focus:ring-terracotta/20 focus:border-terracotta transition-shadow shadow-inner"
+                                                                                        />
+                                                                                    </div>
                                                                                 </div>
-                                                                                <div className="font-medium">
-                                                                                    {
-                                                                                        feedbackErrors[
-                                                                                            b.id
-                                                                                        ]
-                                                                                    }
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
 
-                                                                        <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-forest/10">
-                                                                            <button
-                                                                                onClick={() =>
-                                                                                    saveFeedback(
-                                                                                        b.id,
-                                                                                        b.workshop
-                                                                                            ?.id
-                                                                                    )
-                                                                                }
-                                                                                disabled={
-                                                                                    savingFeedback
-                                                                                }
-                                                                                className="btn-primary !py-3.5 flex-1 sm:flex-none flex justify-center items-center gap-2 shadow-md hover:shadow-lg"
-                                                                            >
-                                                                                {savingFeedback && (
-                                                                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                                                                {feedbackErrors[
+                                                                                    b.id
+                                                                                ] && (
+                                                                                    <div className="bg-red-50 text-red-700 text-sm px-5 py-4 rounded-xl border border-red-100 flex items-center gap-3">
+                                                                                        <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center shrink-0">
+                                                                                            <X className="w-4 h-4 text-red-500" />
+                                                                                        </div>
+                                                                                        <div className="font-medium">
+                                                                                            {
+                                                                                                feedbackErrors[
+                                                                                                    b
+                                                                                                        .id
+                                                                                                ]
+                                                                                            }
+                                                                                        </div>
+                                                                                    </div>
                                                                                 )}
-                                                                                Publish Review
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() =>
-                                                                                    setOpenFeedbackId(
-                                                                                        null
-                                                                                    )
-                                                                                }
-                                                                                disabled={
-                                                                                    savingFeedback
-                                                                                }
-                                                                                className="px-6 py-3.5 rounded-full font-medium border border-forest/10 text-forest/70 hover:text-forest hover:bg-forest/5 flex-1 sm:flex-none transition-all pulse-hover"
-                                                                            >
-                                                                                Discard changes
-                                                                            </button>
+
+                                                                                <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-dark/10">
+                                                                                    <button
+                                                                                        onClick={() =>
+                                                                                            saveFeedback(
+                                                                                                b.id,
+                                                                                                b
+                                                                                                    .workshop
+                                                                                                    ?.id
+                                                                                            )
+                                                                                        }
+                                                                                        disabled={
+                                                                                            savingFeedback ||
+                                                                                            d.comment.trim()
+                                                                                                .length <
+                                                                                                MIN_REVIEW_LENGTH
+                                                                                        }
+                                                                                        className="btn-primary !py-3.5 flex-1 sm:flex-none flex justify-center items-center gap-2 shadow-md hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
+                                                                                    >
+                                                                                        {savingFeedback && (
+                                                                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                                                                        )}
+                                                                                        Publish
+                                                                                        Review
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={() =>
+                                                                                            setOpenFeedbackId(
+                                                                                                null
+                                                                                            )
+                                                                                        }
+                                                                                        disabled={
+                                                                                            savingFeedback
+                                                                                        }
+                                                                                        className="px-6 py-3.5 rounded-full font-medium border border-dark/10 text-dark/70 hover:text-dark hover:bg-dark/5 flex-1 sm:flex-none transition-all pulse-hover"
+                                                                                    >
+                                                                                        Discard
+                                                                                        changes
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
                                                                         </div>
-                                                                    </div>
-                                                                </div>
-                                                            )}
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
                                                         </div>
                                                     )}
                                                 </div>

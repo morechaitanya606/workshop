@@ -5,7 +5,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./supabase";
 import { getAuthMe } from "@/lib/api-client";
 
-type UserRole = "admin" | "user";
+type UserRole = "admin" | "host" | "user";
 
 interface AuthContextType {
     user: User | null;
@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const loadRole = async (accessToken: string) => {
             try {
                 const result = await getAuthMe(accessToken);
-                return result.role === "admin" ? "admin" : "user";
+                return result.role === "admin" || result.role === "host" ? result.role : "user";
             } catch {
                 return "user" as UserRole;
             }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,7 +16,7 @@ const SUGGESTIONS = [
     "Mixology",
     "Wine Tasting",
     "Jazz Event",
-    "Baking Masterclass"
+    "Baking Masterclass",
 ];
 
 export default function Navbar() {
@@ -25,10 +25,11 @@ export default function Navbar() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [query, setQuery] = useState("");
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const searchContainerRef = useRef<HTMLDivElement | null>(null);
     const { user, role, roleLoading, loading, signOut } = useAuth();
 
     const filteredSuggestions = query
-        ? SUGGESTIONS.filter(s => s.toLowerCase().includes(query.toLowerCase()))
+        ? SUGGESTIONS.filter((s) => s.toLowerCase().includes(query.toLowerCase()))
         : SUGGESTIONS;
 
     useEffect(() => {
@@ -39,7 +40,21 @@ export default function Navbar() {
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
 
-    const userInitial = user?.user_metadata?.full_name?.[0] || user?.email?.[0]?.toUpperCase() || "U";
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (!searchContainerRef.current) return;
+            if (!searchContainerRef.current.contains(event.target as Node)) {
+                setShowSuggestions(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
+
+    const userInitial =
+        user?.user_metadata?.full_name?.[0] || user?.email?.[0]?.toUpperCase() || "U";
 
     return (
         <>
@@ -47,10 +62,11 @@ export default function Navbar() {
                 initial={{ y: -100 }}
                 animate={{ y: 0 }}
                 transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${isScrolled
-                    ? "bg-cream/95 backdrop-blur-xl shadow-soft py-3"
-                    : "bg-transparent py-5"
-                    }`}
+                className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
+                    isScrolled
+                        ? "bg-cream/95 backdrop-blur-xl shadow-soft py-3"
+                        : "bg-transparent py-5"
+                }`}
             >
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between">
@@ -72,20 +88,24 @@ export default function Navbar() {
 
                         {/* Desktop Search */}
                         <div
-                            className={`hidden md:flex items-center gap-2 bg-white rounded-full px-5 py-2.5 shadow-soft border border-gray-100 max-w-md flex-1 mx-8 transition-all duration-300 relative ${isScrolled ? "opacity-100" : "opacity-0 pointer-events-none"
-                                }`}
+                            ref={searchContainerRef}
+                            className={`hidden md:flex items-center gap-2 rounded-full px-5 py-2.5 shadow-soft border border-gray-100 max-w-md flex-1 mx-8 transition-all duration-300 relative ${
+                                isScrolled ? "bg-white" : "bg-white/95"
+                            }`}
                         >
                             <Search className="w-4 h-4 text-dark-muted" />
                             <input
                                 type="text"
                                 placeholder="Search experiences..."
+                                aria-label="Search workshops"
                                 value={query}
                                 onFocus={() => setShowSuggestions(true)}
-                                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                                 onChange={(e) => setQuery(e.target.value)}
                                 onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && query.trim()) {
-                                        router.push(`/explore?q=${encodeURIComponent(query.trim())}`);
+                                    if (e.key === "Enter" && query.trim()) {
+                                        router.push(
+                                            `/explore?q=${encodeURIComponent(query.trim())}`
+                                        );
                                     }
                                 }}
                                 className="flex-1 w-full bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted"
@@ -105,7 +125,9 @@ export default function Navbar() {
                                             onClick={() => {
                                                 setQuery(suggestion);
                                                 setShowSuggestions(false);
-                                                router.push(`/explore?q=${encodeURIComponent(suggestion)}`);
+                                                router.push(
+                                                    `/explore?q=${encodeURIComponent(suggestion)}`
+                                                );
                                             }}
                                         >
                                             <Search className="w-3.5 h-3.5 text-terracotta/50" />
@@ -140,7 +162,10 @@ export default function Navbar() {
                                     >
                                         Log In
                                     </Link>
-                                    <Link href="/auth/signup" className="btn-primary !py-2.5 !px-6 text-sm">
+                                    <Link
+                                        href="/auth/signup"
+                                        className="btn-primary !py-2.5 !px-6 text-sm"
+                                    >
                                         Sign Up
                                     </Link>
                                 </>
@@ -156,6 +181,7 @@ export default function Navbar() {
                                     </Link>
                                     <button
                                         onClick={signOut}
+                                        aria-label="Sign out"
                                         className="text-sm font-inter font-medium text-dark-muted hover:text-terracotta transition-colors duration-300 flex items-center gap-1"
                                     >
                                         <LogOut className="w-4 h-4" />
@@ -167,12 +193,17 @@ export default function Navbar() {
                         {/* Mobile Menu Button */}
                         <button
                             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                            aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
                             className="md:hidden p-2 rounded-xl hover:bg-clay/30 transition-colors"
                         >
                             {isMobileMenuOpen ? (
-                                <X className="w-6 h-6 text-dark" />
+                                <X
+                                    className={`w-6 h-6 ${isScrolled ? "text-dark" : "text-white"}`}
+                                />
                             ) : (
-                                <Menu className="w-6 h-6 text-dark" />
+                                <Menu
+                                    className={`w-6 h-6 ${isScrolled ? "text-dark" : "text-white"}`}
+                                />
                             )}
                         </button>
                     </div>
@@ -222,7 +253,10 @@ export default function Navbar() {
                             >
                                 {user ? (
                                     <button
-                                        onClick={() => { signOut(); setIsMobileMenuOpen(false); }}
+                                        onClick={() => {
+                                            signOut();
+                                            setIsMobileMenuOpen(false);
+                                        }}
                                         className="btn-secondary flex-1 text-center"
                                     >
                                         <LogOut className="w-4 h-4" />

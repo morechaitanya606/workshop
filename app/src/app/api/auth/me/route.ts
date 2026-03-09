@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
         return auth.response;
     }
 
-    const rateLimitResult = assertRateLimit({
+    const rateLimitResult = await assertRateLimit({
         key: getRateLimitKey(request, "auth-me", auth.user.id),
         limit: 90,
         windowMs: 60_000,
