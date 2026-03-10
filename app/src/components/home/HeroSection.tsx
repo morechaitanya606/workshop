@@ -76,6 +76,8 @@ export default function HeroSection({ source }: { source: "supabase" | "mock" | 
                     className="object-cover"
                     sizes="100vw"
                 />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_#fbe4db_0%,_#fefbea_45%,_#f5e48a_100%)] opacity-75 mix-blend-soft-light" />
+                <div className="absolute inset-0 grain-overlay" />
                 <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/80" />
             </motion.div>
             <motion.div

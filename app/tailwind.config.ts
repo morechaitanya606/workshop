@@ -101,6 +101,7 @@ const config: Config = {
                 "text-reveal": "textReveal 0.8s cubic-bezier(0.77, 0, 0.175, 1) forwards",
                 "counter-up": "counterUp 2s ease-out forwards",
                 "image-pan": "imagePan 4s ease-in-out infinite",
+                "light-sweep": "lightSweep 0.6s ease-out forwards",
             },
             keyframes: {
                 fadeIn: {
@@ -142,6 +143,10 @@ const config: Config = {
                 imagePan: {
                     "0%": { transform: "translateX(-8%) scale(1.08)" },
                     "100%": { transform: "translateX(8%) scale(1.08)" },
+                },
+                lightSweep: {
+                    "0%": { transform: "translateX(-100%) skewX(-15deg)" },
+                    "100%": { transform: "translateX(200%) skewX(-15deg)" },
                 },
             },
         },

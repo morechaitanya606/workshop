@@ -25,7 +25,11 @@ export default function CommunityGallerySection({
     return (
         <>
             <section className="section-padding mt-24 sm:mt-20">
-                <SectionHeader title="From Our Community" reduceMotion={shouldReduceMotion} />
+                <SectionHeader
+                    title="From Our Community"
+                    eyebrow="Community"
+                    reduceMotion={shouldReduceMotion}
+                />
                 <motion.div
                     {...galleryMotionProps}
                     variants={shouldReduceMotion ? undefined : staggerContainer}

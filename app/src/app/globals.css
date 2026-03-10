@@ -56,7 +56,8 @@
            transition-all duration-300 ease-out
            hover:bg-terracotta-600 hover:shadow-glow hover:scale-[1.02]
            active:scale-[0.98]
-           focus:outline-none focus:ring-2 focus:ring-terracotta/50 focus:ring-offset-2 focus:ring-offset-cream;
+           focus:outline-none focus:ring-2 focus:ring-terracotta/50 focus:ring-offset-2 focus:ring-offset-cream
+           relative overflow-hidden;
     }
 
     .btn-secondary {
@@ -80,10 +81,45 @@
     }
 
     .card-workshop {
-        @apply bg-white rounded-2xl overflow-hidden
-           shadow-soft
+        @apply bg-white rounded-3xl overflow-hidden
+           border border-clay/40 shadow-soft
            transition-all duration-500 ease-out
-           hover:shadow-hover hover:-translate-y-1;
+           hover:shadow-hover hover:-translate-y-1.5;
+    }
+
+    .light-sweep,
+    .btn-primary {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .light-sweep::after,
+    .btn-primary::after {
+        content: "";
+        position: absolute;
+        top: -40%;
+        bottom: -40%;
+        width: 45%;
+        left: -60%;
+        background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+        opacity: 0;
+        pointer-events: none;
+        transform: translateX(-120%) skewX(-15deg);
+    }
+
+    .light-sweep:hover::after,
+    .btn-primary:hover::after,
+    .group:hover .light-sweep::after {
+        opacity: 1;
+        animation: lightSweep 0.6s ease-out forwards;
+    }
+
+    .card-section {
+        @apply bg-white rounded-2xl border border-clay/30 shadow-soft p-6 md:p-7;
+    }
+
+    .eyebrow-label {
+        @apply text-[11px] font-inter font-semibold uppercase tracking-[0.14em] text-terracotta mb-1;
     }
 
     .section-padding {
@@ -209,6 +245,14 @@
             box-shadow 200ms ease;
     }
 
+    .grain-overlay {
+        background-image: radial-gradient(rgba(0, 0, 0, 0.08) 0.6px, transparent 0.6px);
+        background-size: 3px 3px;
+        mix-blend-mode: multiply;
+        opacity: 0.15;
+        pointer-events: none;
+    }
+
     @media (prefers-reduced-motion: no-preference) {
         .pulse-hover:hover {
             transform: translateY(-1px);
@@ -231,5 +275,14 @@
             box-shadow !important;
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
+    }
+
+    .light-sweep::after,
+    .btn-primary::after,
+    .light-sweep:hover::after,
+    .btn-primary:hover::after,
+    .group:hover .light-sweep::after {
+        animation: none !important;
+        opacity: 0 !important;
     }
 }

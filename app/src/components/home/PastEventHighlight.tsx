@@ -32,6 +32,7 @@ export default function PastEventHighlight({
         <section className="section-padding mt-20 sm:mt-16">
             <SectionHeader
                 title="Past Event Highlight"
+                eyebrow="Archive"
                 action="View details"
                 href={`/workshop/${pastWorkshop.id}`}
                 reduceMotion={shouldReduceMotion}

@@ -8,6 +8,7 @@ import { EmptyWorkshopState, SectionHeader } from "@/components/home/HomeSection
 
 export default function WorkshopGridSection({
     title,
+    eyebrow,
     sectionClassName,
     actionLabel = "View all",
     actionHref = "/explore",
@@ -21,6 +22,7 @@ export default function WorkshopGridSection({
     onTryAnotherCategory,
 }: {
     title: string;
+    eyebrow?: string;
     sectionClassName?: string;
     actionLabel?: string;
     actionHref?: string;
@@ -41,6 +43,7 @@ export default function WorkshopGridSection({
         <section className={sectionClassName || "section-padding mt-20 sm:mt-16"}>
             <SectionHeader
                 title={title}
+                eyebrow={eyebrow}
                 action={actionLabel}
                 href={actionHref}
                 reduceMotion={shouldReduceMotion}

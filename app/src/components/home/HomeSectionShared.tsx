@@ -55,11 +55,13 @@ export function AnimatedCounter({
 
 export function SectionHeader({
     title,
+    eyebrow,
     action,
     href = "#",
     reduceMotion = false,
 }: {
     title: string;
+    eyebrow?: string;
     action?: string;
     href?: string;
     reduceMotion?: boolean;
@@ -67,8 +69,14 @@ export function SectionHeader({
     const headerMotionProps = useMotionProps(reduceMotion, fadeInUp, standardTransition);
 
     return (
-        <motion.div {...headerMotionProps} className="flex items-end justify-between mb-8">
-            <h2 className="heading-lg">{title}</h2>
+        <motion.div
+            {...headerMotionProps}
+            className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 gap-3"
+        >
+            <div>
+                {eyebrow && <span className="eyebrow-label">{eyebrow}</span>}
+                <h2 className="heading-lg">{title}</h2>
+            </div>
             {action && (
                 <Link
                     href={href}
