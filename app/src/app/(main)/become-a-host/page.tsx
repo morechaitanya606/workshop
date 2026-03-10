@@ -15,8 +15,13 @@ export default function BecomeAHostPage() {
 
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
+    const [phone, setPhone] = useState("");
     const [bio, setBio] = useState("");
     const [portfolioUrl, setPortfolioUrl] = useState("");
+    const [expertise, setExpertise] = useState("");
+    const [instagram, setInstagram] = useState("");
+    const [youtube, setYoutube] = useState("");
+    const [website, setWebsite] = useState("");
 
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
@@ -47,6 +52,16 @@ export default function BecomeAHostPage() {
                 email: email.trim(),
                 bio: bio.trim(),
                 portfolioUrl: portfolioUrl.trim(),
+                applicationType: "creator",
+                details: {
+                    expertise: expertise.trim(),
+                    phone: phone.trim(),
+                    socialLinks: {
+                        instagram: instagram.trim(),
+                        youtube: youtube.trim(),
+                        website: website.trim(),
+                    },
+                },
             });
             setMessage(result.message || "Application submitted.");
             setSubmitted(true);
@@ -82,7 +97,8 @@ export default function BecomeAHostPage() {
                     <div className="bg-white rounded-2xl border border-gray-200 shadow-soft p-6 sm:p-8">
                         <h1 className="heading-sm mb-2">Become a Host</h1>
                         <p className="text-body text-dark-muted mb-8">
-                            Apply to host workshops and start earning from your sessions.
+                            Apply to host workshops and start earning from your sessions. Share
+                            detailed info, social links, and availability so we can review faster.
                         </p>
 
                         {!user && (
@@ -158,6 +174,33 @@ export default function BecomeAHostPage() {
 
                                 <div>
                                     <label className="mb-1.5 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
+                                        Mobile Number
+                                    </label>
+                                    <input
+                                        type="tel"
+                                        value={phone}
+                                        onChange={(event) => setPhone(event.target.value)}
+                                        required
+                                        placeholder="+91 9XXXX XXXXX"
+                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
+                                        Field of Expertise
+                                    </label>
+                                    <input
+                                        value={expertise}
+                                        onChange={(event) => setExpertise(event.target.value)}
+                                        required
+                                        placeholder="e.g., Pottery, Digital Marketing, Yoga"
+                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
                                         Experience & Bio
                                     </label>
                                     <textarea
@@ -181,6 +224,46 @@ export default function BecomeAHostPage() {
                                         value={portfolioUrl}
                                         onChange={(event) => setPortfolioUrl(event.target.value)}
                                         placeholder="https://your-portfolio.com"
+                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                    />
+                                </div>
+
+                                <div className="grid sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="mb-1.5 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
+                                            Instagram (Optional)
+                                        </label>
+                                        <input
+                                            type="url"
+                                            value={instagram}
+                                            onChange={(event) => setInstagram(event.target.value)}
+                                            placeholder="https://instagram.com/yourhandle"
+                                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="mb-1.5 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
+                                            YouTube (Optional)
+                                        </label>
+                                        <input
+                                            type="url"
+                                            value={youtube}
+                                            onChange={(event) => setYoutube(event.target.value)}
+                                            placeholder="https://youtube.com/@yourchannel"
+                                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
+                                        Website (Optional)
+                                    </label>
+                                    <input
+                                        type="url"
+                                        value={website}
+                                        onChange={(event) => setWebsite(event.target.value)}
+                                        placeholder="https://yourstudio.com"
                                         className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
                                     />
                                 </div>

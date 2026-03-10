@@ -8,6 +8,8 @@ import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
 import WorkshopClient from "./WorkshopClient";
 
+export const revalidate = 60;
+
 const SIMILAR_WORKSHOP_LIMIT = 3;
 
 function rankSimilarWorkshops(workshops: Workshop[], currentWorkshop: Workshop) {

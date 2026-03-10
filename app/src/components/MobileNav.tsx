@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Search, CalendarDays, User } from "lucide-react";
+import { Home, Search, CalendarDays, User, PlusCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 export default function MobileNav() {
@@ -11,6 +11,9 @@ export default function MobileNav() {
     const navItems = [
         { href: "/", label: "Home", icon: Home },
         { href: "/explore", label: "Discover", icon: Search },
+        ...((!user || (role !== "host" && role !== "admin")) && !roleLoading
+            ? [{ href: "/become-a-host", label: "Host", icon: PlusCircle }]
+            : []),
         ...(user && !roleLoading && role === "admin"
             ? [{ href: "/admin/dashboard", label: "Dashboard", icon: CalendarDays }]
             : []),
@@ -31,15 +34,14 @@ export default function MobileNav() {
                         <Link
                             key={item.href}
                             href={item.href}
-                            className={`flex flex-col items-center gap-1 py-1.5 rounded-xl transition-colors duration-200 ${isActive ? "text-terracotta" : "text-dark-muted"
-                                }`}
+                            className={`flex flex-col items-center gap-1 py-1.5 rounded-xl transition-colors duration-200 ${
+                                isActive ? "text-terracotta" : "text-dark-muted"
+                            }`}
                         >
                             <Icon
                                 className={`w-5 h-5 ${isActive ? "stroke-[2.5px]" : "stroke-[1.5px]"}`}
                             />
-                            <span className="text-[10px] font-inter font-medium">
-                                {item.label}
-                            </span>
+                            <span className="text-[10px] font-inter font-medium">{item.label}</span>
                         </Link>
                     );
                 })}

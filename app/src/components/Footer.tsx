@@ -37,8 +37,8 @@ export default function Footer() {
                             {[
                                 { label: "About Us", href: "/about" },
                                 { label: "Careers", href: "/careers" },
-                                { label: "Press", href: "/press" },
-                                { label: "Blog", href: "/blog" },
+                                { label: "Become a Host", href: "/become-a-host" },
+                                { label: "List your Space", href: "/list-your-space" },
                             ].map((item) => (
                                 <li key={item.label}>
                                     <Link
@@ -85,7 +85,8 @@ export default function Footer() {
                         &copy; {new Date().getFullYear()} Only Workshop Inc. All rights reserved.
                     </p>
                     <p className="text-xs font-inter font-medium text-dark-muted tracking-wide sm:w-1/3 text-center">
-                        Only Workshop <span className="text-terracotta px-1">|</span> Experiential Learning
+                        Only Workshop <span className="text-terracotta px-1">|</span> Experiential
+                        Learning
                     </p>
                     <div className="flex items-center justify-center sm:justify-end gap-6 sm:w-1/3">
                         {[

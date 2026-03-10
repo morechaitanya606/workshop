@@ -412,6 +412,8 @@ export type Database = {
                     email: string;
                     bio: string;
                     portfolio_url: string | null;
+                    application_type: string;
+                    details: Json;
                     status: Database["public"]["Enums"]["host_application_status"];
                     created_at: string;
                     updated_at: string;
@@ -423,6 +425,8 @@ export type Database = {
                     email: string;
                     bio: string;
                     portfolio_url?: string | null;
+                    application_type?: string;
+                    details?: Json;
                     status?: Database["public"]["Enums"]["host_application_status"];
                     created_at?: string;
                     updated_at?: string;
@@ -434,6 +438,8 @@ export type Database = {
                     email?: string;
                     bio?: string;
                     portfolio_url?: string | null;
+                    application_type?: string;
+                    details?: Json;
                     status?: Database["public"]["Enums"]["host_application_status"];
                     created_at?: string;
                     updated_at?: string;

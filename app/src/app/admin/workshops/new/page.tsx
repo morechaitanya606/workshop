@@ -440,7 +440,8 @@ export default function AdminCreateWorkshopPage() {
                             Cover Image URL
                         </label>
                         <input
-                            type="url"
+                            type="text"
+                            inputMode="url"
                             value={form.coverImage}
                             onChange={(e) => update("coverImage", e.target.value)}
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
@@ -509,7 +510,8 @@ export default function AdminCreateWorkshopPage() {
                             Video URL (optional)
                         </label>
                         <input
-                            type="url"
+                            type="text"
+                            inputMode="url"
                             value={form.videoUrl}
                             onChange={(e) => update("videoUrl", e.target.value)}
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"

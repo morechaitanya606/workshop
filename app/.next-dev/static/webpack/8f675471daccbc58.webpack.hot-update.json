@@ -1,0 +1,15 @@
+{
+    "c": [
+        "app/page",
+        "app/layout",
+        "app/admin/dashboard/page",
+        "app/admin/workshops/page",
+        "app/admin/workshops/[id]/edit/page",
+        "app/admin/applications/page",
+        "app/admin/analytics/page",
+        "app/(main)/become-a-host/page",
+        "webpack"
+    ],
+    "r": [],
+    "m": []
+}

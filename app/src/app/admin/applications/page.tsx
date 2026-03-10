@@ -213,6 +213,23 @@ export default function AdminApplicationsPage() {
                     {filteredApplications.map((application) => {
                         const isPending = application.status === "pending";
                         const isProcessing = processingId === application.id;
+                        const details =
+                            (application.details as Record<string, unknown> | null) ?? {};
+                        const location =
+                            typeof details.location === "string" ? details.location : "";
+                        const capacityRaw = details.capacity;
+                        const capacity =
+                            typeof capacityRaw === "string" || typeof capacityRaw === "number"
+                                ? String(capacityRaw)
+                                : "";
+                        const ownerName =
+                            typeof details.ownerName === "string" ? details.ownerName : "";
+                        const ownerPhone =
+                            typeof details.ownerPhone === "string" ? details.ownerPhone : "";
+                        const spaceType =
+                            typeof details.spaceType === "string" ? details.spaceType : "";
+                        const expertise =
+                            typeof details.expertise === "string" ? details.expertise : "";
 
                         return (
                             <div
@@ -228,11 +245,20 @@ export default function AdminApplicationsPage() {
                                             {application.email}
                                         </p>
                                     </div>
-                                    <div className="text-left sm:text-right">
-                                        <span className="inline-flex rounded-full border border-gray-200 bg-cream-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-dark-muted">
-                                            {application.status}
-                                        </span>
-                                        <p className="mt-2 text-xs font-inter text-dark-muted">
+                                    <div className="text-left sm:text-right flex flex-col items-start sm:items-end gap-2">
+                                        <div className="flex gap-2">
+                                            <span className="inline-flex rounded-full border border-gray-200 bg-cream-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-dark-muted">
+                                                {application.status}
+                                            </span>
+                                            <span
+                                                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${application.application_type === "space" ? "bg-emerald-100 text-emerald-800" : "bg-blue-100 text-blue-800"}`}
+                                            >
+                                                {application.application_type === "space"
+                                                    ? "Space / Studio"
+                                                    : "Creator"}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs font-inter text-dark-muted">
                                             Applied{" "}
                                             {formatDate(application.created_at.slice(0, 10))}
                                         </p>
@@ -242,6 +268,72 @@ export default function AdminApplicationsPage() {
                                 <p className="mb-4 whitespace-pre-wrap text-sm font-inter text-dark-secondary">
                                     {application.bio}
                                 </p>
+
+                                {application.application_type === "creator" && expertise && (
+                                    <div className="mb-4">
+                                        <p className="text-xs font-bold uppercase tracking-wider text-dark-muted mb-1">
+                                            Area of Expertise
+                                        </p>
+                                        <p className="text-sm font-inter text-dark-secondary">
+                                            {expertise}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {application.application_type === "space" && (
+                                    <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        {location && (
+                                            <div>
+                                                <p className="text-xs font-bold uppercase tracking-wider text-dark-muted mb-1">
+                                                    Location
+                                                </p>
+                                                <p className="text-sm font-inter text-dark-secondary">
+                                                    {location}
+                                                </p>
+                                            </div>
+                                        )}
+                                        {capacity && (
+                                            <div>
+                                                <p className="text-xs font-bold uppercase tracking-wider text-dark-muted mb-1">
+                                                    Capacity
+                                                </p>
+                                                <p className="text-sm font-inter text-dark-secondary">
+                                                    {capacity} people
+                                                </p>
+                                            </div>
+                                        )}
+                                        {spaceType && (
+                                            <div>
+                                                <p className="text-xs font-bold uppercase tracking-wider text-dark-muted mb-1">
+                                                    Space Type
+                                                </p>
+                                                <p className="text-sm font-inter text-dark-secondary">
+                                                    {spaceType}
+                                                </p>
+                                            </div>
+                                        )}
+                                        {ownerName && (
+                                            <div>
+                                                <p className="text-xs font-bold uppercase tracking-wider text-dark-muted mb-1">
+                                                    Owner Name
+                                                </p>
+                                                <p className="text-sm font-inter text-dark-secondary">
+                                                    {ownerName}
+                                                </p>
+                                            </div>
+                                        )}
+                                        {ownerPhone && (
+                                            <div>
+                                                <p className="text-xs font-bold uppercase tracking-wider text-dark-muted mb-1">
+                                                    Owner Phone
+                                                </p>
+                                                <p className="text-sm font-inter text-dark-secondary">
+                                                    {ownerPhone}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
                                 {application.portfolio_url && (
                                     <a

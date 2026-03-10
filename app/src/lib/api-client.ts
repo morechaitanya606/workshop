@@ -499,6 +499,8 @@ export type HostApplication = {
     email: string;
     bio: string;
     portfolio_url: string | null;
+    application_type: string;
+    details: Record<string, unknown>;
     status: "pending" | "approved" | "rejected";
     created_at: string;
     updated_at: string;
@@ -516,6 +518,8 @@ export function submitHostApplication(
         email: string;
         bio: string;
         portfolioUrl?: string;
+        applicationType: string;
+        details?: Record<string, unknown>;
     }
 ) {
     return apiRequest<HostApplicationSubmitResponse>("/api/host-applications", {

@@ -91,19 +91,19 @@
     }
 
     .heading-xl {
-        @apply font-playfair text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-dark leading-[1.1] tracking-tight;
+        @apply font-playfair text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-medium text-dark leading-[1.1] tracking-tight;
     }
 
     .heading-lg {
-        @apply font-playfair text-3xl sm:text-4xl md:text-5xl font-bold text-dark leading-[1.15];
+        @apply font-playfair text-3xl sm:text-4xl md:text-5xl font-medium text-dark leading-[1.15];
     }
 
     .heading-md {
-        @apply font-playfair text-2xl sm:text-3xl font-bold text-dark leading-[1.2];
+        @apply font-playfair text-2xl sm:text-3xl font-medium text-dark leading-[1.2];
     }
 
     .heading-sm {
-        @apply font-playfair text-xl sm:text-2xl font-semibold text-dark;
+        @apply font-playfair text-xl sm:text-2xl font-medium text-dark;
     }
 
     .text-body {

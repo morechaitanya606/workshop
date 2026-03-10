@@ -100,7 +100,7 @@ export const bookingCheckoutSchema = z
         firstName: z.string().trim().min(1).max(120),
         lastName: z.string().trim().min(1).max(120),
         email: z.string().trim().email().max(320),
-        phone: z.string().trim().max(32).optional().default(""),
+        phone: z.string().trim().min(10, "Phone number must be at least 10 digits").max(32),
         notes: z.string().trim().max(2000).optional().default(""),
         razorpayOrderId: z.string().trim().min(1).max(80).optional(),
         razorpayPaymentId: z.string().trim().min(1).max(80).optional(),

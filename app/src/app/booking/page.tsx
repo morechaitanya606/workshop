@@ -240,6 +240,7 @@ function BookingContent() {
         !trimFormData.firstName ||
         !trimFormData.lastName ||
         !trimFormData.email ||
+        !trimFormData.phone ||
         !holdId ||
         holdExpired;
 
@@ -257,7 +258,9 @@ function BookingContent() {
             nextErrors.email = "Enter a valid email address.";
         }
 
-        if (trimFormData.phone) {
+        if (!trimFormData.phone) {
+            nextErrors.phone = "Phone number is required.";
+        } else {
             const phoneDigits = trimFormData.phone.replace(/\D/g, "");
             if (!/^\d{10}$/.test(phoneDigits)) {
                 nextErrors.phone = "Enter a valid 10-digit phone number.";
@@ -801,7 +804,7 @@ function BookingContent() {
                             </div>
                             <div>
                                 <label className="mb-1.5 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
-                                    Phone number (optional)
+                                    Phone number <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="tel"

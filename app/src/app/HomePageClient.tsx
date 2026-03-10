@@ -72,7 +72,7 @@ export default function HomePageClient({
     }, [categoryWorkshops]);
 
     const trendingWorkshops = categoryWorkshops.slice(0, 4);
-    const newWorkshops = categoryWorkshops.slice(4, 8);
+    const newWorkshops = categoryWorkshops.slice(4, 6);
     const pastWorkshop = allWorkshops
         .filter((workshop) => workshop.date < today)
         .sort((a, b) => b.date.localeCompare(a.date))

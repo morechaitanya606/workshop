@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
-import { Mail, Phone } from "lucide-react";
+import { Mail } from "lucide-react";
 import { fadeInUp, standardTransition, useMotionProps } from "@/lib/motion-presets";
 
 export default function HostCtaSection({ shouldReduceMotion }: { shouldReduceMotion: boolean }) {
@@ -23,19 +24,18 @@ export default function HostCtaSection({ shouldReduceMotion }: { shouldReduceMot
                         you set up your workshop.
                     </p>
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6">
+                        <Link
+                            href="/become-a-host"
+                            className="inline-flex items-center gap-2.5 bg-white text-terracotta font-inter font-semibold px-8 py-4 rounded-full hover:shadow-lg motion-safe:hover:scale-[1.02] transition-all duration-300"
+                        >
+                            Apply to Host
+                        </Link>
                         <a
                             href="mailto:hello@onlyworkshop.com"
-                            className="inline-flex items-center gap-2.5 bg-white text-terracotta font-inter font-semibold px-8 py-4 rounded-full hover:shadow-lg motion-safe:hover:scale-[1.02] transition-all duration-300"
+                            className="inline-flex items-center gap-2.5 bg-white/15 backdrop-blur-sm text-white border-2 border-white/30 font-inter font-semibold px-8 py-4 rounded-full hover:border-white/60 hover:bg-white/25 transition-all duration-300"
                         >
                             <Mail className="w-5 h-5" />
                             hello@onlyworkshop.com
-                        </a>
-                        <a
-                            href="tel:+919876543210"
-                            className="inline-flex items-center gap-2.5 bg-white/15 backdrop-blur-sm text-white border-2 border-white/30 font-inter font-semibold px-8 py-4 rounded-full hover:border-white/60 hover:bg-white/25 transition-all duration-300"
-                        >
-                            <Phone className="w-5 h-5" />
-                            +91 98765 43210
                         </a>
                     </div>
                 </div>

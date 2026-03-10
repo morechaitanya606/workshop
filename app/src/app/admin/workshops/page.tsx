@@ -8,7 +8,7 @@ import type { Workshop } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import AdminShell from "@/components/admin/AdminShell";
-import { deleteAdminWorkshop, getAdminWorkshops } from "@/lib/api-client";
+import { deleteAdminWorkshop, getAdminWorkshops, toApiErrorMessage } from "@/lib/api-client";
 
 export default function AdminWorkshopsPage() {
     const { session } = useAuth();
@@ -59,8 +59,13 @@ export default function AdminWorkshopsPage() {
             await deleteAdminWorkshop(session.access_token, workshop.id);
 
             setWorkshops((prev) => prev.filter((item) => item.id !== workshop.id));
-        } catch {
-            setError("Unable to delete this workshop right now. Please try again.");
+        } catch (deleteError) {
+            setError(
+                toApiErrorMessage(
+                    deleteError,
+                    "Unable to delete this workshop right now. Please try again."
+                )
+            );
         } finally {
             setDeletingId(null);
         }

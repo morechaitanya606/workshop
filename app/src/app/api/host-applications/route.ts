@@ -11,6 +11,8 @@ const hostApplicationSchema = z.object({
     email: z.string().trim().email(),
     bio: z.string().trim().min(20).max(4000),
     portfolioUrl: z.string().trim().url().max(500).optional().or(z.literal("")),
+    applicationType: z.enum(["creator", "space"]).default("creator"),
+    details: z.any().default({}),
 });
 
 export async function GET(request: NextRequest) {
@@ -112,6 +114,8 @@ export async function POST(request: NextRequest) {
             email: parsed.data.email,
             bio: parsed.data.bio,
             portfolio_url: parsed.data.portfolioUrl || null,
+            application_type: parsed.data.applicationType,
+            details: parsed.data.details as any,
             status: "pending" as const,
         };
 

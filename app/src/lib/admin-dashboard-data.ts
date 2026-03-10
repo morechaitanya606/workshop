@@ -3,6 +3,7 @@ import "server-only";
 import type { Workshop } from "@/lib/data";
 import type { DbTable } from "@/lib/database.types";
 import { createSupabaseRscClient } from "@/lib/supabase-rsc";
+import { createSupabaseServiceClient } from "@/lib/supabase-server";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 
 export type AdminDashboardStats = {
@@ -11,6 +12,8 @@ export type AdminDashboardStats = {
     revenue: number;
     avgRating: string;
 };
+
+export type AdminHostApplication = DbTable<"host_applications">;
 
 type AdminDashboardSupabaseClient = NonNullable<ReturnType<typeof createSupabaseRscClient>>;
 
@@ -23,9 +26,11 @@ type RatingRow = {
     rating: DbTable<"workshop_feedback">["rating"] | null;
 };
 
-export async function loadAdminDashboardData(
-    supabase: AdminDashboardSupabaseClient
-): Promise<{ stats: AdminDashboardStats; workshops: Workshop[] }> {
+export async function loadAdminDashboardData(supabase: AdminDashboardSupabaseClient): Promise<{
+    stats: AdminDashboardStats;
+    workshops: Workshop[];
+    applications: AdminHostApplication[];
+}> {
     const stats: AdminDashboardStats = {
         activeWorkshops: 0,
         totalBookedSeats: 0,
@@ -33,15 +38,25 @@ export async function loadAdminDashboardData(
         avgRating: "-",
     };
 
-    const [{ data: workshopRows, error: workshopError }, { count, error: countError }] =
-        await Promise.all([
-            supabase
-                .from("workshops")
-                .select("*")
-                .order("created_at", { ascending: false })
-                .limit(100),
-            supabase.from("workshops").select("id", { count: "exact", head: true }),
-        ]);
+    const serviceClient = createSupabaseServiceClient();
+
+    const [
+        { data: workshopRows, error: workshopError },
+        { count, error: countError },
+        { data: applicationRows, error: applicationError },
+    ] = await Promise.all([
+        serviceClient
+            .from("workshops")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .limit(100),
+        serviceClient.from("workshops").select("id", { count: "exact", head: true }),
+        serviceClient
+            .from("host_applications")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .limit(200),
+    ]);
 
     if (workshopError) {
         throw workshopError;
@@ -49,13 +64,16 @@ export async function loadAdminDashboardData(
     if (countError) {
         throw countError;
     }
+    if (applicationError) {
+        throw applicationError;
+    }
 
     const workshops = (workshopRows || []).map((row) =>
         mapWorkshopRowToWorkshop(row as DbTable<"workshops">)
     );
     stats.activeWorkshops = count || workshops.length;
 
-    const { data: bookingsData, error: bookingsError } = await supabase
+    const { data: bookingsData, error: bookingsError } = await serviceClient
         .from("bookings")
         .select("total, guests")
         .eq("status", "confirmed");
@@ -69,7 +87,7 @@ export async function loadAdminDashboardData(
         stats.totalBookedSeats += Number(booking.guests || 0);
     }
 
-    const { data: ratingsData, error: ratingsError } = await supabase
+    const { data: ratingsData, error: ratingsError } = await serviceClient
         .from("workshop_feedback")
         .select("rating")
         .not("rating", "is", null);
@@ -87,5 +105,5 @@ export async function loadAdminDashboardData(
         stats.avgRating = ratedCount > 0 ? (totalRating / ratedCount).toFixed(1) : "-";
     }
 
-    return { stats, workshops };
+    return { stats, workshops, applications: applicationRows || [] };
 }

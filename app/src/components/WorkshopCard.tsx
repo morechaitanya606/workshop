@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, type MouseEvent } from "react";
+import React, { useEffect, useMemo, useState, type MouseEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
@@ -54,6 +54,16 @@ export default function WorkshopCard({
     const accessToken = session?.access_token ?? null;
     const [isSaved, setIsSaved] = useState(false);
     const [favoriteLoading, setFavoriteLoading] = useState(false);
+    const [isHovered, setIsHovered] = useState(false);
+    const [imageIndex, setImageIndex] = useState(0);
+
+    const imagePool = useMemo(() => {
+        const items = [workshop.coverImage, ...(workshop.galleryImages || [])]
+            .map((item) => item?.trim())
+            .filter((item): item is string => Boolean(item));
+        const unique = Array.from(new Set(items));
+        return unique.length ? unique : [workshop.coverImage];
+    }, [workshop.coverImage, workshop.galleryImages]);
 
     const highlightedBadge = workshop.isBestseller
         ? {
@@ -96,6 +106,25 @@ export default function WorkshopCard({
             cancelled = true;
         };
     }, [accessToken, workshop.id]);
+
+    useEffect(() => {
+        if (!isHovered || imagePool.length <= 1 || prefersReducedMotion) {
+            setImageIndex(0);
+            return;
+        }
+
+        let index = 1 % imagePool.length;
+        setImageIndex(index);
+
+        const interval = setInterval(() => {
+            index = (index + 1) % imagePool.length;
+            setImageIndex(index);
+        }, 1000);
+
+        return () => {
+            clearInterval(interval);
+        };
+    }, [isHovered, imagePool.length, prefersReducedMotion]);
 
     const handleToggleFavorite = async (event: MouseEvent<HTMLButtonElement>) => {
         event.preventDefault();
@@ -142,21 +171,28 @@ export default function WorkshopCard({
             <Link href={`/workshop/${workshop.id}`} className="block group">
                 <div className="card-workshop">
                     {/* Image */}
-                    <div className="relative overflow-hidden aspect-[4/3]">
-                        <Image
-                            src={workshop.coverImage}
-                            alt={`${workshop.category} workshop: ${workshop.title}`}
-                            fill
-                            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                            className="object-cover transition-transform duration-700 ease-out group-hover:scale-110"
-                            loading="lazy"
-                        />
-                        {/* Category Badge */}
-                        <div className="absolute top-3 left-3">
-                            <span className="inline-block bg-terracotta text-white text-[10px] font-inter font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
-                                {workshop.category}
-                            </span>
-                        </div>
+                    <div
+                        className="relative overflow-hidden aspect-[4/3] bg-cream-100"
+                        onMouseEnter={() => setIsHovered(true)}
+                        onMouseLeave={() => setIsHovered(false)}
+                    >
+                        {imagePool.map((src, idx) => {
+                            const isActive = (isHovered ? imageIndex : 0) === idx;
+                            return (
+                                <Image
+                                    key={src}
+                                    src={src}
+                                    alt={`${workshop.category} workshop: ${workshop.title}`}
+                                    fill
+                                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                                    className={`object-cover transition-opacity duration-500 ease-in-out ${
+                                        isActive ? "opacity-100" : "opacity-0"
+                                    }`}
+                                    loading={isHovered ? "eager" : "lazy"}
+                                />
+                            );
+                        })}
+                        {/* Category Badge - Removed per user request */}
                         {/* Bestseller / New Badge */}
                         {highlightedBadge && (
                             <div className="absolute top-3 right-3">
@@ -198,15 +234,26 @@ export default function WorkshopCard({
                             </span>
                         </div>
 
-                        {/* Title */}
-                        <h3 className="font-playfair text-base sm:text-lg font-semibold text-dark leading-snug mb-2 line-clamp-2 group-hover:text-terracotta transition-colors duration-300">
+                        <h3 className="font-inter text-base sm:text-lg font-bold text-dark leading-snug mb-2 line-clamp-2 group-hover:text-terracotta transition-colors duration-300">
                             {workshop.title}
                         </h3>
 
                         {/* Location */}
                         {variant === "default" && (
                             <div className="flex items-center gap-1.5 mb-3">
-                                <MapPin className="w-3.5 h-3.5 text-dark-muted" />
+                                {workshop.hostAvatar ? (
+                                    <div className="relative w-4 h-4 rounded-full overflow-hidden shrink-0 border border-gray-100">
+                                        <Image
+                                            src={workshop.hostAvatar}
+                                            alt={workshop.hostName}
+                                            fill
+                                            className="object-cover"
+                                            sizes="16px"
+                                        />
+                                    </div>
+                                ) : (
+                                    <MapPin className="w-3.5 h-3.5 text-dark-muted" />
+                                )}
                                 <span className="text-xs font-inter text-dark-muted">
                                     {workshop.location}, {workshop.city}
                                 </span>

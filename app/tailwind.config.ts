@@ -100,6 +100,7 @@ const config: Config = {
                 shimmer: "shimmer 2s linear infinite",
                 "text-reveal": "textReveal 0.8s cubic-bezier(0.77, 0, 0.175, 1) forwards",
                 "counter-up": "counterUp 2s ease-out forwards",
+                "image-pan": "imagePan 4s ease-in-out infinite",
             },
             keyframes: {
                 fadeIn: {
@@ -137,6 +138,10 @@ const config: Config = {
                 counterUp: {
                     "0%": { opacity: "0", transform: "translateY(20px)" },
                     "100%": { opacity: "1", transform: "translateY(0)" },
+                },
+                imagePan: {
+                    "0%": { transform: "translateX(-8%) scale(1.08)" },
+                    "100%": { transform: "translateX(8%) scale(1.08)" },
                 },
             },
         },

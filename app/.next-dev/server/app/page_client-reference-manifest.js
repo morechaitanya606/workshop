@@ -92,24 +92,61 @@ globalThis.__RSC_MANIFEST["/page"] = {
                 async: false,
             },
         },
-        "(app-pages-browser)/./src/app/workshop/[id]/WorkshopClient.tsx": {
+        "(app-pages-browser)/./src/components/admin/AdminShell.tsx": {
             "*": {
-                id: "(ssr)/./src/app/workshop/[id]/WorkshopClient.tsx",
+                id: "(ssr)/./src/components/admin/AdminShell.tsx",
                 name: "*",
                 chunks: [],
                 async: false,
             },
         },
-        "(app-pages-browser)/./src/components/MobileNav.tsx": {
+        "(app-pages-browser)/./src/app/admin/workshops/page.tsx": {
             "*": {
-                id: "(ssr)/./src/components/MobileNav.tsx",
+                id: "(ssr)/./src/app/admin/workshops/page.tsx",
                 name: "*",
                 chunks: [],
                 async: false,
             },
         },
-        "(app-pages-browser)/./src/components/Navbar.tsx": {
-            "*": { id: "(ssr)/./src/components/Navbar.tsx", name: "*", chunks: [], async: false },
+        "(app-pages-browser)/./src/app/admin/workshops/[id]/edit/page.tsx": {
+            "*": {
+                id: "(ssr)/./src/app/admin/workshops/[id]/edit/page.tsx",
+                name: "*",
+                chunks: [],
+                async: false,
+            },
+        },
+        "(app-pages-browser)/./src/app/admin/applications/page.tsx": {
+            "*": {
+                id: "(ssr)/./src/app/admin/applications/page.tsx",
+                name: "*",
+                chunks: [],
+                async: false,
+            },
+        },
+        "(app-pages-browser)/./src/app/admin/analytics/page.tsx": {
+            "*": {
+                id: "(ssr)/./src/app/admin/analytics/page.tsx",
+                name: "*",
+                chunks: [],
+                async: false,
+            },
+        },
+        "(app-pages-browser)/./src/app/(main)/become-a-host/page.tsx": {
+            "*": {
+                id: "(ssr)/./src/app/(main)/become-a-host/page.tsx",
+                name: "*",
+                chunks: [],
+                async: false,
+            },
+        },
+        "(app-pages-browser)/./src/app/(main)/list-your-space/page.tsx": {
+            "*": {
+                id: "(ssr)/./src/app/(main)/list-your-space/page.tsx",
+                name: "*",
+                chunks: [],
+                async: false,
+            },
         },
     },
     edgeSSRModuleMapping: {},
@@ -276,25 +313,51 @@ globalThis.__RSC_MANIFEST["/page"] = {
                 chunks: [],
                 async: false,
             },
-        "D:\\Users\\Chait\\Pratice\\tts\\workshop\\app\\src\\app\\workshop\\[id]\\WorkshopClient.tsx":
+        "D:\\Users\\Chait\\Pratice\\tts\\workshop\\app\\src\\components\\admin\\AdminShell.tsx": {
+            id: "(app-pages-browser)/./src/components/admin/AdminShell.tsx",
+            name: "*",
+            chunks: [],
+            async: false,
+        },
+        "D:\\Users\\Chait\\Pratice\\tts\\workshop\\app\\src\\app\\admin\\workshops\\page.tsx": {
+            id: "(app-pages-browser)/./src/app/admin/workshops/page.tsx",
+            name: "*",
+            chunks: [],
+            async: false,
+        },
+        "D:\\Users\\Chait\\Pratice\\tts\\workshop\\app\\src\\app\\admin\\workshops\\[id]\\edit\\page.tsx":
             {
-                id: "(app-pages-browser)/./src/app/workshop/[id]/WorkshopClient.tsx",
+                id: "(app-pages-browser)/./src/app/admin/workshops/[id]/edit/page.tsx",
                 name: "*",
                 chunks: [],
                 async: false,
             },
-        "D:\\Users\\Chait\\Pratice\\tts\\workshop\\app\\src\\components\\MobileNav.tsx": {
-            id: "(app-pages-browser)/./src/components/MobileNav.tsx",
+        "D:\\Users\\Chait\\Pratice\\tts\\workshop\\app\\src\\app\\admin\\applications\\page.tsx": {
+            id: "(app-pages-browser)/./src/app/admin/applications/page.tsx",
             name: "*",
             chunks: [],
             async: false,
         },
-        "D:\\Users\\Chait\\Pratice\\tts\\workshop\\app\\src\\components\\Navbar.tsx": {
-            id: "(app-pages-browser)/./src/components/Navbar.tsx",
+        "D:\\Users\\Chait\\Pratice\\tts\\workshop\\app\\src\\app\\admin\\analytics\\page.tsx": {
+            id: "(app-pages-browser)/./src/app/admin/analytics/page.tsx",
             name: "*",
             chunks: [],
             async: false,
         },
+        "D:\\Users\\Chait\\Pratice\\tts\\workshop\\app\\src\\app\\(main)\\become-a-host\\page.tsx":
+            {
+                id: "(app-pages-browser)/./src/app/(main)/become-a-host/page.tsx",
+                name: "*",
+                chunks: [],
+                async: false,
+            },
+        "D:\\Users\\Chait\\Pratice\\tts\\workshop\\app\\src\\app\\(main)\\list-your-space\\page.tsx":
+            {
+                id: "(app-pages-browser)/./src/app/(main)/list-your-space/page.tsx",
+                name: "*",
+                chunks: [],
+                async: false,
+            },
     },
     entryCSSFiles: {
         "D:\\Users\\Chait\\Pratice\\tts\\workshop\\app\\src\\": [],
