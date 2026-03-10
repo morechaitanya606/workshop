@@ -146,14 +146,6 @@ export default function Navbar() {
                             >
                                 Explore
                             </Link>
-                            {(!user || (role !== "host" && role !== "admin")) && !roleLoading && (
-                                <Link
-                                    href="/become-a-host"
-                                    className="text-sm font-inter font-medium text-dark-secondary hover:text-terracotta transition-colors duration-300"
-                                >
-                                    Host a Workshop
-                                </Link>
-                            )}
                             {user && !roleLoading && role === "admin" && (
                                 <Link
                                     href="/admin/dashboard"
@@ -232,9 +224,6 @@ export default function Navbar() {
                             {[
                                 { href: "/", label: "Home" },
                                 { href: "/explore", label: "Explore Workshops" },
-                                ...((!user || (role !== "host" && role !== "admin")) && !roleLoading
-                                    ? [{ href: "/become-a-host", label: "Host a Workshop" }]
-                                    : []),
                                 ...(user ? [{ href: "/profile", label: "Profile" }] : []),
                                 ...(user && !roleLoading && role === "admin"
                                     ? [{ href: "/admin/dashboard", label: "Dashboard" }]

@@ -15,46 +15,6 @@
             "static/chunks/main-app.js",
             "static/css/app/layout.css",
             "static/chunks/app/layout.js"
-        ],
-        "/admin/dashboard/page": [
-            "static/chunks/webpack.js",
-            "static/chunks/main-app.js",
-            "static/chunks/app/admin/dashboard/page.js"
-        ],
-        "/admin/layout": [
-            "static/chunks/webpack.js",
-            "static/chunks/main-app.js",
-            "static/chunks/app/admin/layout.js"
-        ],
-        "/admin/workshops/page": [
-            "static/chunks/webpack.js",
-            "static/chunks/main-app.js",
-            "static/chunks/app/admin/workshops/page.js"
-        ],
-        "/admin/workshops/[id]/edit/page": [
-            "static/chunks/webpack.js",
-            "static/chunks/main-app.js",
-            "static/chunks/app/admin/workshops/[id]/edit/page.js"
-        ],
-        "/admin/applications/page": [
-            "static/chunks/webpack.js",
-            "static/chunks/main-app.js",
-            "static/chunks/app/admin/applications/page.js"
-        ],
-        "/admin/analytics/page": [
-            "static/chunks/webpack.js",
-            "static/chunks/main-app.js",
-            "static/chunks/app/admin/analytics/page.js"
-        ],
-        "/(main)/become-a-host/page": [
-            "static/chunks/webpack.js",
-            "static/chunks/main-app.js",
-            "static/chunks/app/(main)/become-a-host/page.js"
-        ],
-        "/(main)/list-your-space/page": [
-            "static/chunks/webpack.js",
-            "static/chunks/main-app.js",
-            "static/chunks/app/(main)/list-your-space/page.js"
         ]
     }
 }
