@@ -39,7 +39,7 @@ export default function PastEventHighlight({
             />
             <motion.div
                 {...pastEventMotionProps}
-                className="bg-white border border-gray-100 rounded-3xl shadow-soft overflow-hidden"
+                className="bg-white border border-gray-100 rounded-3xl shadow-soft overflow-hidden hover-lift"
             >
                 <div className="grid grid-cols-1 lg:grid-cols-[360px,1fr]">
                     <div className="relative min-h-[260px] lg:min-h-full">
@@ -47,7 +47,7 @@ export default function PastEventHighlight({
                             src={pastWorkshop.coverImage}
                             alt={pastWorkshop.title}
                             fill
-                            className="object-cover"
+                            className="object-cover image-hover-zoom"
                             sizes="(max-width: 1024px) 100vw, 360px"
                         />
                     </div>

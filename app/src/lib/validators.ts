@@ -139,6 +139,17 @@ export const workshopFeedbackSchema = z.object({
 
 export type WorkshopFeedbackInput = z.infer<typeof workshopFeedbackSchema>;
 
+export const profileUpdateSchema = z
+    .object({
+        fullName: z.string().trim().min(2).max(120).optional(),
+        avatarUrl: mediaUrlOrEmpty.optional(),
+    })
+    .refine((value) => typeof value.fullName === "string" || typeof value.avatarUrl === "string", {
+        message: "Provide at least one field to update.",
+    });
+
+export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
+
 export const adminFeedbackUpdateSchema = z
     .object({
         rating: z.coerce.number().int().min(1).max(5).optional(),

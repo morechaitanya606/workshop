@@ -60,6 +60,11 @@ function buildDefaultRecord(userId: string, workshopId: string): FallbackFeedbac
     };
 }
 
+export function getFallbackPublicFeedback(workshopId: string) {
+    const seeded = buildDefaultRecord("public", workshopId);
+    return seeded ? [seeded] : [];
+}
+
 export function isMissingFeedbackTableError(error: unknown) {
     if (!error || typeof error !== "object") {
         return false;

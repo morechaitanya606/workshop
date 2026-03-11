@@ -55,6 +55,7 @@ export default function Navbar() {
 
     const userInitial =
         user?.user_metadata?.full_name?.[0] || user?.email?.[0]?.toUpperCase() || "U";
+    const userAvatar = user?.user_metadata?.avatar_url || "";
 
     return (
         <>
@@ -175,9 +176,23 @@ export default function Navbar() {
                                     <Link
                                         href="/profile"
                                         aria-label="Open profile"
-                                        className="w-9 h-9 bg-terracotta rounded-full flex items-center justify-center text-white font-inter font-bold text-sm hover:opacity-90 transition-opacity"
+                                        className={`w-9 h-9 rounded-full overflow-hidden flex items-center justify-center font-inter font-bold text-sm hover:opacity-90 transition-opacity ${
+                                            userAvatar
+                                                ? "bg-cream border border-clay/40"
+                                                : "bg-terracotta text-white"
+                                        }`}
                                     >
-                                        {userInitial}
+                                        {userAvatar ? (
+                                            <Image
+                                                src={userAvatar}
+                                                alt="Profile avatar"
+                                                width={36}
+                                                height={36}
+                                                className="h-full w-full object-cover"
+                                            />
+                                        ) : (
+                                            userInitial
+                                        )}
                                     </Link>
                                     <button
                                         onClick={signOut}
@@ -220,6 +235,38 @@ export default function Navbar() {
                         transition={{ duration: 0.3, ease: "easeOut" }}
                         className="fixed inset-0 z-40 bg-cream pt-24 px-6 md:hidden"
                     >
+                        {user && (
+                            <Link
+                                href="/profile"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                className="mb-6 flex items-center gap-3 rounded-2xl border border-clay/30 bg-white/80 px-4 py-3"
+                            >
+                                <div
+                                    className={`h-12 w-12 rounded-full overflow-hidden flex items-center justify-center font-inter font-bold text-sm ${
+                                        userAvatar
+                                            ? "bg-cream border border-clay/40"
+                                            : "bg-terracotta text-white"
+                                    }`}
+                                >
+                                    {userAvatar ? (
+                                        <Image
+                                            src={userAvatar}
+                                            alt="Profile avatar"
+                                            width={48}
+                                            height={48}
+                                            className="h-full w-full object-cover"
+                                        />
+                                    ) : (
+                                        userInitial
+                                    )}
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-base font-playfair font-semibold text-dark truncate">
+                                        {user.user_metadata?.full_name || "My Profile"}
+                                    </p>
+                                </div>
+                            </Link>
+                        )}
                         <nav className="flex flex-col gap-1">
                             {[
                                 { href: "/", label: "Home" },

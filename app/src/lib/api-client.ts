@@ -137,11 +137,42 @@ export type WorkshopFeedbackResponse = {
     message?: string;
 };
 
+export type WorkshopPublicFeedbackResponse = {
+    feedback: Array<{
+        id: string;
+        rating: number | null;
+        comment: string;
+        photos: string[];
+        createdAt: string;
+        userDisplayName: string;
+        avatarUrl?: string | null;
+    }>;
+};
+
 export function getWorkshopFeedback(workshopId: string, accessToken: string) {
     return apiRequest<WorkshopFeedbackResponse>(`/api/workshops/${workshopId}/feedback`, {
         accessToken,
         cache: "no-store",
     });
+}
+
+export function getWorkshopPublicFeedback(
+    workshopId: string,
+    params?: {
+        limit?: number;
+    }
+) {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) {
+        searchParams.set("limit", String(params.limit));
+    }
+    const suffix = searchParams.toString() ? `?${searchParams.toString()}` : "";
+    return apiRequest<WorkshopPublicFeedbackResponse>(
+        `/api/workshops/${workshopId}/public-feedback${suffix}`,
+        {
+            cache: "no-store",
+        }
+    );
 }
 
 export function submitWorkshopFeedback(
@@ -249,6 +280,34 @@ export function getAuthMe(accessToken: string) {
     return apiRequest<AuthMeResponse>("/api/auth/me", {
         accessToken,
         cache: "no-store",
+    });
+}
+
+export type ProfileResponse = {
+    profile: {
+        fullName: string | null;
+        avatarUrl: string | null;
+    };
+};
+
+export function getProfile(accessToken: string) {
+    return apiRequest<ProfileResponse>("/api/profile", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function updateProfile(
+    accessToken: string,
+    payload: {
+        fullName?: string;
+        avatarUrl?: string;
+    }
+) {
+    return apiRequest<ProfileResponse>("/api/profile", {
+        method: "PATCH",
+        accessToken,
+        body: payload,
     });
 }
 

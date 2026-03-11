@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import * as Sentry from "@sentry/nextjs";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
@@ -21,8 +22,9 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import MobileNav from "@/components/MobileNav";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, getInitials } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import {
     getFavorites,
     removeFavorite,
@@ -32,6 +34,8 @@ import {
     submitWorkshopFeedback,
     toApiErrorMessage,
     uploadMedia,
+    getProfile,
+    updateProfile,
     getHostLedger,
     type HostLedgerResponse,
 } from "@/lib/api-client";
@@ -99,15 +103,50 @@ export default function ProfilePage() {
     const [feedbackErrors, setFeedbackErrors] = useState<Record<string, string>>({});
     const [savingFeedback, setSavingFeedback] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [profileName, setProfileName] = useState("");
+    const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
+    const [profileLoading, setProfileLoading] = useState(false);
+    const [profileSaving, setProfileSaving] = useState(false);
+    const [profileMessage, setProfileMessage] = useState<string | null>(null);
+    const [profileError, setProfileError] = useState<string | null>(null);
+    const [avatarUploading, setAvatarUploading] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const feedbackDialogContainerRef = useRef<HTMLDivElement>(null);
+    const avatarInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (!loading && !user) {
             router.push(`/auth/login?redirect=${encodeURIComponent("/profile")}`);
         }
     }, [loading, user, router]);
+
+    useEffect(() => {
+        if (!session?.access_token) return;
+        let active = true;
+        setProfileLoading(true);
+        setProfileError(null);
+        getProfile(session.access_token)
+            .then((result) => {
+                if (!active) return;
+                const fallbackName = String(user?.user_metadata?.full_name || "").trim();
+                setProfileName(result.profile.fullName || fallbackName);
+                setProfileAvatar(result.profile.avatarUrl || null);
+            })
+            .catch((error) => {
+                if (!active) return;
+                const fallbackName = String(user?.user_metadata?.full_name || "").trim();
+                setProfileName((prev) => prev || fallbackName);
+                setProfileError(toApiErrorMessage(error, "Unable to load profile settings."));
+            })
+            .finally(() => {
+                if (active) setProfileLoading(false);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [session?.access_token, user?.user_metadata?.full_name]);
 
     useEffect(() => {
         if (!openFeedbackId) {
@@ -344,6 +383,61 @@ export default function ProfilePage() {
         const newPhotos = [...currentDraft.photos];
         newPhotos.splice(index, 1);
         updateDraft(bookingId, { photos: newPhotos });
+    };
+
+    const handleAvatarUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file || !session?.access_token) return;
+
+        setAvatarUploading(true);
+        setProfileError(null);
+        try {
+            const data = await uploadMedia(session.access_token, file);
+            setProfileAvatar(data.url);
+        } catch (error) {
+            setProfileError(toApiErrorMessage(error, "Unable to upload profile photo."));
+        } finally {
+            setAvatarUploading(false);
+        }
+    };
+
+    const handleRemoveAvatar = () => {
+        setProfileAvatar(null);
+    };
+
+    const handleSaveProfile = async () => {
+        if (!session?.access_token) return;
+        const trimmedName = profileName.trim();
+        if (trimmedName.length < 2) {
+            setProfileError("Please enter a username with at least 2 characters.");
+            return;
+        }
+
+        setProfileSaving(true);
+        setProfileError(null);
+        setProfileMessage(null);
+        try {
+            const result = await updateProfile(session.access_token, {
+                fullName: trimmedName,
+                avatarUrl: profileAvatar || "",
+            });
+            setProfileName(result.profile.fullName || trimmedName);
+            setProfileAvatar(result.profile.avatarUrl || profileAvatar || null);
+            setProfileMessage("Profile updated.");
+            if (isSupabaseConfigured) {
+                await supabase.auth.updateUser({
+                    data: {
+                        full_name: trimmedName,
+                        avatar_url: profileAvatar || null,
+                    },
+                });
+            }
+        } catch (error) {
+            setProfileError(toApiErrorMessage(error, "Unable to update profile settings."));
+        } finally {
+            setProfileSaving(false);
+        }
     };
 
     const openEditor = (id: string) => {
@@ -752,6 +846,74 @@ export default function ProfilePage() {
                                         <div className="space-y-6">
                                             <div>
                                                 <label className="block text-sm font-medium text-dark/70 mb-2">
+                                                    Profile Photo
+                                                </label>
+                                                <div className="flex flex-wrap items-center gap-4">
+                                                    <div className="h-16 w-16 rounded-full bg-cream border border-clay/40 overflow-hidden flex items-center justify-center text-sm font-inter font-semibold text-dark-secondary">
+                                                        {profileAvatar ? (
+                                                            <Image
+                                                                src={profileAvatar}
+                                                                alt={profileName || "Profile"}
+                                                                width={64}
+                                                                height={64}
+                                                                className="h-full w-full object-cover"
+                                                            />
+                                                        ) : (
+                                                            getInitials(
+                                                                profileName || user.email || "User"
+                                                            )
+                                                        )}
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-3">
+                                                        <label className="inline-flex items-center gap-2 rounded-full border border-clay/40 px-4 py-2 text-xs font-inter font-semibold text-dark-secondary cursor-pointer hover:border-terracotta hover:text-terracotta transition-colors">
+                                                            <input
+                                                                type="file"
+                                                                accept="image/*"
+                                                                onChange={handleAvatarUpload}
+                                                                ref={avatarInputRef}
+                                                                className="sr-only"
+                                                                disabled={
+                                                                    avatarUploading ||
+                                                                    profileLoading
+                                                                }
+                                                            />
+                                                            {avatarUploading
+                                                                ? "Uploading..."
+                                                                : "Upload photo"}
+                                                        </label>
+                                                        {profileAvatar && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleRemoveAvatar}
+                                                                className="text-xs font-inter font-semibold text-dark-muted hover:text-terracotta transition-colors"
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-dark/70 mb-2">
+                                                    Username
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={profileName}
+                                                    onChange={(event) =>
+                                                        setProfileName(event.target.value)
+                                                    }
+                                                    placeholder="Enter your username"
+                                                    className="w-full max-w-md bg-cream-50 border border-dark/10 rounded-xl px-4 py-3 text-dark"
+                                                    disabled={profileLoading}
+                                                />
+                                                <p className="text-xs text-dark/50 mt-2">
+                                                    This name appears on your public workshop
+                                                    reviews.
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-dark/70 mb-2">
                                                     Email Address
                                                 </label>
                                                 <input
@@ -764,6 +926,26 @@ export default function ProfilePage() {
                                                     Your email address is managed by your
                                                     authentication provider.
                                                 </p>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSaveProfile}
+                                                    disabled={profileSaving || profileLoading}
+                                                    className="btn-primary !px-6 !py-2.5 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                                                >
+                                                    {profileSaving ? "Saving..." : "Save changes"}
+                                                </button>
+                                                {profileMessage && (
+                                                    <span className="text-xs font-inter text-emerald-700">
+                                                        {profileMessage}
+                                                    </span>
+                                                )}
+                                                {profileError && (
+                                                    <span className="text-xs font-inter text-red-600">
+                                                        {profileError}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

@@ -72,9 +72,9 @@ export default function PartnersMarquee({ shouldReduceMotion }: { shouldReduceMo
                     {marqueePartners.map((partner, index) => (
                         <div
                             key={index}
-                            className="flex items-center gap-4 bg-white px-6 py-4 rounded-2xl shadow-sm border border-clay/30 min-w-[240px] motion-safe:hover:scale-[1.03] hover:shadow-hover transition-all duration-300"
+                            className="flex flex-col items-center justify-center gap-3 bg-white px-6 py-5 rounded-2xl shadow-sm border border-clay/30 min-w-[220px] text-center motion-safe:hover:scale-[1.03] hover:shadow-hover transition-all duration-300"
                         >
-                            <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 bg-cream border border-clay/50">
+                            <div className="w-12 h-12 rounded-full overflow-hidden bg-cream border border-clay/50">
                                 <Image
                                     src={partner.img}
                                     alt={partner.name}

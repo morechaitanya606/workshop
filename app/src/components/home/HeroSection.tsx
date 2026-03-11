@@ -91,22 +91,22 @@ export default function HeroSection({ source }: { source: "supabase" | "mock" | 
             >
                 <motion.div
                     {...heroBadgeMotionProps}
-                    className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-md border border-white/20 rounded-full px-5 py-2 mb-8"
+                    className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-md border border-white/20 rounded-full px-5 py-2 mb-8 hover-lift"
                 >
                     <Sparkles className="w-4 h-4 text-terracotta-300" />
                     <span className="text-sm font-inter font-medium text-white/90">
-                        Creative experiences in your city
+                        Creative experiences in Pune
                     </span>
                 </motion.div>
 
-                <div className="overflow-hidden mb-6">
+                <div className="text-animate-reveal mb-6">
                     <motion.h1
                         {...heroHeadlineMotionProps}
-                        className="heading-xl text-white max-w-4xl text-balance"
+                        className="heading-xl text-white max-w-4xl text-balance text-glow-soft"
                     >
-                        A Better Weekend
+                        Pune weekends,
                         <br />
-                        <span className="text-terracotta-300">Awaits</span>
+                        <span className="text-terracotta-300">well spent.</span>
                     </motion.h1>
                 </div>
 
@@ -115,7 +115,8 @@ export default function HeroSection({ source }: { source: "supabase" | "mock" | 
                         {...heroBodyMotionProps}
                         className="text-lg sm:text-xl font-inter text-white/80 max-w-xl"
                     >
-                        Discover creative workshops and experiences happening in your city.
+                        Discover pottery, painting, cooking and more with handpicked hosts across
+                        Pune.
                     </motion.p>
                 </div>
 
@@ -125,7 +126,7 @@ export default function HeroSection({ source }: { source: "supabase" | "mock" | 
                 >
                     <Link
                         href="/explore"
-                        className="btn-primary text-base !px-10 !py-4 shadow-lg shadow-terracotta/25"
+                        className="btn-primary btn-animated text-base !px-10 !py-4 shadow-lg shadow-terracotta/25"
                     >
                         Explore Workshops
                         <ArrowRight className="w-5 h-5" />

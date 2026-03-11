@@ -81,6 +81,10 @@ export default function WorkshopCard({
         ? "Sold out"
         : `${workshop.seatsRemaining} seat${workshop.seatsRemaining === 1 ? "" : "s"} available`;
 
+    const isBeginnerFriendly = true;
+    const includesMaterials = workshop.materialsProvided.length > 0;
+    const isGreatForGroups = workshop.maxSeats >= 6;
+
     useEffect(() => {
         if (!accessToken) {
             setIsSaved(false);
@@ -119,7 +123,7 @@ export default function WorkshopCard({
         const interval = setInterval(() => {
             index = (index + 1) % imagePool.length;
             setImageIndex(index);
-        }, 1000);
+        }, 1500);
 
         return () => {
             clearInterval(interval);
@@ -168,14 +172,19 @@ export default function WorkshopCard({
                 shouldAnimateOnScroll ? { ...standardTransition, delay: index * 0.08 } : undefined
             }
         >
-            <Link href={`/workshop/${workshop.id}`} className="block group">
-                <div className="card-workshop">
+            <Link
+                href={`/workshop/${workshop.id}`}
+                className="block group"
+                onFocus={() => setIsHovered(true)}
+                onBlur={() => setIsHovered(false)}
+            >
+                <div
+                    className="card-workshop light-sweep hover-lift"
+                    onMouseEnter={() => setIsHovered(true)}
+                    onMouseLeave={() => setIsHovered(false)}
+                >
                     {/* Image */}
-                    <div
-                        className="relative overflow-hidden aspect-[4/3] bg-cream-100"
-                        onMouseEnter={() => setIsHovered(true)}
-                        onMouseLeave={() => setIsHovered(false)}
-                    >
+                    <div className="relative overflow-hidden aspect-[4/3] bg-cream-100">
                         {imagePool.map((src, idx) => {
                             const isActive = (isHovered ? imageIndex : 0) === idx;
                             return (
@@ -185,7 +194,7 @@ export default function WorkshopCard({
                                     alt={`${workshop.category} workshop: ${workshop.title}`}
                                     fill
                                     sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                                    className={`object-cover transition-opacity duration-500 ease-in-out ${
+                                    className={`object-cover transition-opacity duration-500 ease-in-out image-hover-tilt ${
                                         isActive ? "opacity-100" : "opacity-0"
                                     }`}
                                     loading={isHovered ? "eager" : "lazy"}
@@ -197,7 +206,7 @@ export default function WorkshopCard({
                         {highlightedBadge && (
                             <div className="absolute top-3 right-3">
                                 <span
-                                    className={`inline-block text-[10px] font-inter font-bold uppercase tracking-wider px-2.5 py-1 rounded-md ${highlightedBadge.className}`}
+                                    className={`inline-flex items-center text-[10px] font-inter font-bold uppercase tracking-wider px-3 py-1 rounded-full ${highlightedBadge.className}`}
                                 >
                                     {highlightedBadge.label}
                                 </span>
@@ -221,11 +230,11 @@ export default function WorkshopCard({
                             />
                         </button>
                         {/* Gradient overlay */}
-                        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/20 via-black/5 to-transparent opacity-70 group-hover:opacity-90 transition-opacity duration-500" />
                     </div>
 
                     {/* Content */}
-                    <div className="p-4">
+                    <div className="p-4 transition-transform duration-300 group-hover:-translate-y-0.5">
                         {/* Date & Time */}
                         <div className="flex items-center gap-1.5 mb-2">
                             <Calendar className="w-3.5 h-3.5 text-dark-muted" />
@@ -234,9 +243,28 @@ export default function WorkshopCard({
                             </span>
                         </div>
 
-                        <h3 className="font-inter text-base sm:text-lg font-bold text-dark leading-snug mb-2 line-clamp-2 group-hover:text-terracotta transition-colors duration-300">
+                        <h3 className="font-inter text-lg sm:text-xl font-bold text-dark leading-snug mb-2 tracking-tight line-clamp-2 group-hover:text-terracotta transition-colors duration-300">
                             {workshop.title}
                         </h3>
+
+                        {/* Suitability badges */}
+                        <div className="flex flex-wrap gap-1.5 mb-3">
+                            {isBeginnerFriendly && (
+                                <span className="inline-flex items-center rounded-full bg-cream-100 px-2 py-[3px] text-[10px] font-inter font-semibold uppercase tracking-wide text-dark-muted">
+                                    Beginners welcome
+                                </span>
+                            )}
+                            {includesMaterials && (
+                                <span className="inline-flex items-center rounded-full bg-cream-100 px-2 py-[3px] text-[10px] font-inter font-semibold uppercase tracking-wide text-dark-muted">
+                                    All materials included
+                                </span>
+                            )}
+                            {isGreatForGroups && (
+                                <span className="inline-flex items-center rounded-full bg-cream-100 px-2 py-[3px] text-[10px] font-inter font-semibold uppercase tracking-wide text-dark-muted">
+                                    Great for groups
+                                </span>
+                            )}
+                        </div>
 
                         {/* Location */}
                         {variant === "default" && (
@@ -300,12 +328,12 @@ export default function WorkshopCard({
                                 </div>
                             )}
                             <span
-                                className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-inter font-semibold uppercase tracking-wider ${
+                                className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-inter font-semibold uppercase tracking-wider border ${
                                     isSoldOut
-                                        ? "bg-red-100 text-red-700"
+                                        ? "bg-red-100 text-red-700 border-red-200"
                                         : workshop.seatsRemaining <= 5
-                                          ? "bg-terracotta/10 text-terracotta"
-                                          : "bg-emerald-100 text-emerald-700"
+                                          ? "bg-terracotta/10 text-terracotta border-terracotta/20"
+                                          : "bg-emerald-50 text-emerald-800 border-emerald-100"
                                 }`}
                             >
                                 {seatsLabel}

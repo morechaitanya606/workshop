@@ -18,10 +18,10 @@ export default function HostCtaSection({ shouldReduceMotion }: { shouldReduceMot
                 <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
 
                 <div className="relative z-10">
-                    <h2 className="heading-lg text-white mb-4">Want to Host a Workshop?</h2>
+                    <h2 className="heading-lg text-white mb-4">Want to Host a Workshop in Pune?</h2>
                     <p className="text-lg font-inter text-white/80 max-w-lg mx-auto mb-8">
-                        Are you a creative professional? Get in touch with our team and we will help
-                        you set up your workshop.
+                        Are you a creative professional or studio owner in Pune? Set up paid
+                        experiences for your community with support from our team.
                     </p>
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6">
                         <Link

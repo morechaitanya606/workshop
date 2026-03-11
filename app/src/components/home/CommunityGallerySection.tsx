@@ -16,15 +16,17 @@ import { SectionHeader } from "@/components/home/HomeSectionShared";
 
 export default function CommunityGallerySection({
     shouldReduceMotion,
+    sectionClassName,
 }: {
     shouldReduceMotion: boolean;
+    sectionClassName?: string;
 }) {
     const [activeGalleryIndex, setActiveGalleryIndex] = useState<number | null>(null);
     const galleryMotionProps = useMotionProps(shouldReduceMotion, fadeIn, quickTransition);
 
     return (
         <>
-            <section className="section-padding mt-24 sm:mt-20">
+            <section className={sectionClassName || "section-padding mt-24 sm:mt-20"}>
                 <SectionHeader
                     title="From Our Community"
                     eyebrow="Community"
@@ -53,7 +55,7 @@ export default function CommunityGallerySection({
                                       }
                             }
                             transition={shouldReduceMotion ? { duration: 0 } : quickTransition}
-                            className={`relative mb-3 sm:mb-4 rounded-xl overflow-hidden group break-inside-avoid cursor-zoom-in ${
+                            className={`relative mb-3 sm:mb-4 rounded-xl overflow-hidden group break-inside-avoid cursor-zoom-in hover-lift ${
                                 index >= 8 ? "hidden sm:block" : ""
                             }`}
                         >
@@ -62,7 +64,7 @@ export default function CommunityGallerySection({
                                 alt={`Community workshop ${index + 1}`}
                                 width={400}
                                 height={index % 3 === 0 ? 500 : index % 3 === 1 ? 350 : 400}
-                                className="w-full h-auto object-cover transition-transform duration-700 motion-safe:group-hover:scale-105"
+                                className="w-full h-auto object-cover image-hover-zoom"
                                 sizes="(max-width: 640px) 48vw, (max-width: 1024px) 31vw, (max-width: 1440px) 23vw, 320px"
                                 loading="lazy"
                                 quality={70}

@@ -12,6 +12,8 @@ export default function WorkshopGridSection({
     sectionClassName,
     actionLabel = "View all",
     actionHref = "/explore",
+    gridClassName,
+    cardWrapperClassName,
     gridKeyPrefix,
     selectedCategory,
     shouldReduceMotion,
@@ -26,6 +28,8 @@ export default function WorkshopGridSection({
     sectionClassName?: string;
     actionLabel?: string;
     actionHref?: string;
+    gridClassName?: string;
+    cardWrapperClassName?: string;
     gridKeyPrefix: string;
     selectedCategory: string;
     shouldReduceMotion: boolean;
@@ -53,7 +57,10 @@ export default function WorkshopGridSection({
                     key={`${gridKeyPrefix}-${selectedCategory}`}
                     {...gridSwapMotionProps}
                     exit={shouldReduceMotion ? undefined : { opacity: 0 }}
-                    className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6"
+                    className={
+                        gridClassName ||
+                        "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(340px,350px))] justify-center gap-4 sm:gap-6"
+                    }
                 >
                     {workshops.length === 0 ? (
                         <EmptyWorkshopState
@@ -63,14 +70,27 @@ export default function WorkshopGridSection({
                             onTryAnotherCategory={onTryAnotherCategory}
                         />
                     ) : (
-                        workshops.map((workshop, index) => (
-                            <WorkshopCard
-                                key={workshop.id}
-                                workshop={workshop}
-                                index={index}
-                                animateOnScroll={false}
-                            />
-                        ))
+                        workshops.map((workshop, index) => {
+                            if (!cardWrapperClassName) {
+                                return (
+                                    <WorkshopCard
+                                        key={workshop.id}
+                                        workshop={workshop}
+                                        index={index}
+                                        animateOnScroll={false}
+                                    />
+                                );
+                            }
+                            return (
+                                <div key={workshop.id} className={cardWrapperClassName}>
+                                    <WorkshopCard
+                                        workshop={workshop}
+                                        index={index}
+                                        animateOnScroll={false}
+                                    />
+                                </div>
+                            );
+                        })
                     )}
                 </motion.div>
             </AnimatePresence>

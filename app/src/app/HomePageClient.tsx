@@ -37,6 +37,7 @@ export default function HomePageClient({
     const [notifyState, setNotifyState] = useState<
         Record<string, { similar: boolean; creator: boolean }>
     >({});
+    const [showFirstTimeBanner, setShowFirstTimeBanner] = useState(false);
 
     const allWorkshops = useMemo(() => {
         if (source === "mock") {
@@ -71,8 +72,12 @@ export default function HomePageClient({
         return "Trending Workshops";
     }, [categoryWorkshops]);
 
-    const trendingWorkshops = categoryWorkshops.slice(0, 4);
+    const trendingWorkshops = categoryWorkshops;
     const newWorkshops = categoryWorkshops.slice(4, 6);
+    const upcomingGridClassName =
+        newWorkshops.length <= 2
+            ? "grid grid-flow-col auto-cols-[minmax(240px,280px)] justify-center gap-4 sm:gap-6"
+            : "grid grid-flow-col auto-cols-[minmax(240px,280px)] gap-4 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide snap-x snap-mandatory";
     const pastWorkshop = allWorkshops
         .filter((workshop) => workshop.date < today)
         .sort((a, b) => b.date.localeCompare(a.date))
@@ -125,6 +130,15 @@ export default function HomePageClient({
     };
 
     useEffect(() => {
+        if (typeof window === "undefined") return;
+        const seenFlag = window.localStorage.getItem("ow_onboarding_seen");
+        if (!seenFlag) {
+            setShowFirstTimeBanner(true);
+            window.localStorage.setItem("ow_onboarding_seen", "1");
+        }
+    }, []);
+
+    useEffect(() => {
         if (!notifyMessage) return;
         const timer = window.setTimeout(() => {
             setNotifyMessage(null);
@@ -135,6 +149,28 @@ export default function HomePageClient({
     return (
         <main className="min-h-screen pb-20 md:pb-0">
             <Navbar />
+            {showFirstTimeBanner && (
+                <div className="section-padding pt-20 sm:pt-24 pb-0">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-clay/40 bg-white shadow-soft px-4 py-4 sm:px-6 sm:py-5">
+                        <div className="flex-1 text-sm font-inter text-dark-secondary">
+                            <p className="font-semibold text-dark mb-1">
+                                New here? How Only Workshop works:
+                            </p>
+                            <p>
+                                1) Pick a weekend workshop · 2) Reserve your seats · 3) Pay securely
+                                via Razorpay and get instant confirmation.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowFirstTimeBanner(false)}
+                            className="text-xs font-inter font-semibold text-dark-muted hover:text-terracotta transition-colors"
+                        >
+                            Got it
+                        </button>
+                    </div>
+                </div>
+            )}
             {source === "mock" && (
                 <div className="section-padding pt-24 sm:pt-28 pb-0">
                     <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-inter text-amber-900">
@@ -161,7 +197,10 @@ export default function HomePageClient({
 
             <WorkshopGridSection
                 title={trendingTitle}
+                eyebrow="Trending"
                 sectionClassName="section-padding mt-24 sm:mt-16"
+                gridClassName="grid grid-flow-col auto-cols-[minmax(240px,280px)] gap-4 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide snap-x snap-mandatory"
+                cardWrapperClassName="snap-start"
                 gridKeyPrefix="trending"
                 selectedCategory={selectedCategory}
                 shouldReduceMotion={shouldReduceMotion}
@@ -172,17 +211,25 @@ export default function HomePageClient({
                 onTryAnotherCategory={() => setSelectedCategory("trending")}
             />
 
-            <WorkshopGridSection
-                title="Upcoming Workshops"
-                gridKeyPrefix="upcoming"
-                selectedCategory={selectedCategory}
-                shouldReduceMotion={shouldReduceMotion}
-                workshops={newWorkshops}
-                emptyTitle="No additional upcoming workshops"
-                emptyDescription="We could not find more upcoming events for this category. Try another category or browse all workshops."
-                selectedCategoryLabel={selectedCategoryLabel}
-                onTryAnotherCategory={() => setSelectedCategory("trending")}
-            />
+            <section className="section-padding mt-24 sm:mt-16">
+                <div className="bg-white rounded-3xl shadow-card border border-clay/30 p-6 md:p-8">
+                    <WorkshopGridSection
+                        title="Upcoming Workshops"
+                        eyebrow="Upcoming"
+                        sectionClassName="mt-0"
+                        gridClassName={upcomingGridClassName}
+                        cardWrapperClassName={newWorkshops.length <= 2 ? undefined : "snap-start"}
+                        gridKeyPrefix="upcoming"
+                        selectedCategory={selectedCategory}
+                        shouldReduceMotion={shouldReduceMotion}
+                        workshops={newWorkshops}
+                        emptyTitle="No additional upcoming workshops"
+                        emptyDescription="We could not find more upcoming events for this category. Try another category or browse all workshops."
+                        selectedCategoryLabel={selectedCategoryLabel}
+                        onTryAnotherCategory={() => setSelectedCategory("trending")}
+                    />
+                </div>
+            </section>
 
             {pastWorkshop && (
                 <PastEventHighlight
@@ -200,7 +247,14 @@ export default function HomePageClient({
 
             <SocialProofSection shouldReduceMotion={shouldReduceMotion} />
             <PartnersMarquee shouldReduceMotion={shouldReduceMotion} />
-            <CommunityGallerySection shouldReduceMotion={shouldReduceMotion} />
+            <section className="section-padding mt-24 sm:mt-20">
+                <div className="bg-white rounded-3xl shadow-card border border-clay/30 p-6 md:p-8">
+                    <CommunityGallerySection
+                        shouldReduceMotion={shouldReduceMotion}
+                        sectionClassName="mt-0"
+                    />
+                </div>
+            </section>
             <HostCtaSection shouldReduceMotion={shouldReduceMotion} />
 
             <Footer />

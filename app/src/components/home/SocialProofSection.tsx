@@ -47,13 +47,13 @@ export default function SocialProofSection({
                     {...socialHeaderMotionProps}
                     className="relative z-10 text-center mb-12"
                 >
-                    <h2 className="heading-lg text-white mb-4">Join Our Creative Community</h2>
+                    <h2 className="heading-lg text-white mb-4">Pune’s Creative Community</h2>
                     <p className="text-body text-white/60 max-w-lg mx-auto mb-8">
-                        Thousands of people have discovered their creative spark through our
-                        workshops.
+                        Friends, couples and teams across Pune are discovering new hobbies and
+                        meeting people through our workshops.
                     </p>
                     <a
-                        href="https://chat.whatsapp.com/Cwk12c9wUJy6AnRhg3dUMc"
+                        href="https://chat.whatsapp.com/FBMdu85sBXD6N1XZuiAv0x?mode=gi_t"
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Join WhatsApp Community"

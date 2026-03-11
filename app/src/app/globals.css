@@ -84,7 +84,7 @@
         @apply bg-white rounded-3xl overflow-hidden
            border border-clay/40 shadow-soft
            transition-all duration-500 ease-out
-           hover:shadow-hover hover:-translate-y-1.5;
+           motion-safe:hover:shadow-hover motion-safe:hover:-translate-y-1.5 motion-safe:hover:scale-[1.01];
     }
 
     .light-sweep,
@@ -110,8 +110,7 @@
     .light-sweep:hover::after,
     .btn-primary:hover::after,
     .group:hover .light-sweep::after {
-        opacity: 1;
-        animation: lightSweep 0.6s ease-out forwards;
+        animation: lightSweep 0.7s ease-out;
     }
 
     .card-section {
@@ -191,6 +190,20 @@
         }
     }
 
+    @keyframes lightSweep {
+        0% {
+            transform: translateX(-120%) skewX(-15deg);
+            opacity: 0;
+        }
+        15% {
+            opacity: 0.7;
+        }
+        100% {
+            transform: translateX(200%) skewX(-15deg);
+            opacity: 0;
+        }
+    }
+
     /* Smooth image loading */
     .img-loading {
         @apply bg-clay/30 animate-pulse;
@@ -230,6 +243,19 @@
         text-wrap: balance;
     }
 
+    /* Text animation helpers */
+    .text-animate-reveal {
+        @apply overflow-hidden;
+    }
+
+    .text-animate-reveal > * {
+        @apply inline-block animate-text-reveal;
+    }
+
+    .text-glow-soft {
+        @apply animate-text-glow;
+    }
+
     .mask-fade-bottom {
         mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
         -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
@@ -243,6 +269,76 @@
         transition:
             transform 200ms ease,
             box-shadow 200ms ease;
+    }
+
+    .hover-lift {
+        @apply transition-transform duration-300 ease-out;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .hover-lift:hover {
+            transform: translateY(-4px) scale(1.01);
+        }
+    }
+
+    /* Button animation helpers */
+    .btn-animated {
+        @apply transition-transform duration-300 ease-out;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .btn-animated:hover {
+            transform: translateY(-1px) scale(1.02);
+        }
+
+        .btn-animated:active {
+            transform: translateY(0px) scale(0.98);
+        }
+    }
+
+    /* Background animation helpers */
+    .bg-animated-gradient {
+        background-image: linear-gradient(
+            120deg,
+            rgba(248, 244, 235, 1),
+            rgba(245, 228, 138, 0.9),
+            rgba(199, 107, 79, 0.9)
+        );
+        background-size: 200% 200%;
+        animation: bgWaves 16s ease-in-out infinite;
+    }
+
+    /* Image hover helpers */
+    .image-hover-zoom {
+        @apply transition-transform duration-700 ease-out;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .group:hover .image-hover-zoom,
+        .image-hover-zoom:hover {
+            transform: scale(1.05);
+        }
+    }
+
+    .image-hover-tilt {
+        @apply transition-transform duration-700 ease-out;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .group:hover .image-hover-tilt,
+        .image-hover-tilt:hover {
+            transform: translateY(-4px) rotate(-0.4deg) scale(1.03);
+        }
+    }
+
+    /* Scroll-in helper using CSS animation (optional alternative to JS scroll observers) */
+    .scroll-fade-in {
+        opacity: 0;
+        transform: translateY(24px);
+    }
+
+    .scroll-fade-in.is-visible {
+        animation: scrollFadeIn 0.8s ease-out forwards;
     }
 
     .grain-overlay {

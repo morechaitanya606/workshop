@@ -102,9 +102,11 @@ export function EmptyWorkshopState({
     onTryAnotherCategory: () => void;
 }) {
     return (
-        <div className="col-span-full rounded-2xl border border-dashed border-clay/60 bg-white/70 p-8 text-center">
+        <div className="col-span-full rounded-2xl border border-dashed border-clay/60 bg-white/80 p-8 text-center">
             <h3 className="font-playfair text-2xl font-bold text-dark mb-3">{title}</h3>
-            <p className="text-sm font-inter text-dark-muted max-w-xl mx-auto">{description}</p>
+            <p className="text-sm font-inter text-dark-muted max-w-xl mx-auto">
+                {description} Brew a cup of chai and explore a different category or weekend slot.
+            </p>
             {showTryAnotherCategory && (
                 <button
                     type="button"

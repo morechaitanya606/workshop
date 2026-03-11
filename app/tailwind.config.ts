@@ -99,9 +99,13 @@ const config: Config = {
                 float: "float 6s ease-in-out infinite",
                 shimmer: "shimmer 2s linear infinite",
                 "text-reveal": "textReveal 0.8s cubic-bezier(0.77, 0, 0.175, 1) forwards",
+                "text-glow": "textGlow 1.6s ease-in-out infinite alternate",
                 "counter-up": "counterUp 2s ease-out forwards",
                 "image-pan": "imagePan 4s ease-in-out infinite",
-                "light-sweep": "lightSweep 0.6s ease-out forwards",
+                "image-tilt": "imageTilt 6s ease-in-out infinite",
+                "bg-waves": "bgWaves 12s ease-in-out infinite",
+                "light-sweep": "lightSweep 0.7s ease-out",
+                "scroll-fade-in": "scrollFadeIn 0.8s ease-out forwards",
             },
             keyframes: {
                 fadeIn: {
@@ -144,9 +148,39 @@ const config: Config = {
                     "0%": { transform: "translateX(-8%) scale(1.08)" },
                     "100%": { transform: "translateX(8%) scale(1.08)" },
                 },
+                imageTilt: {
+                    "0%": { transform: "translateY(0px) rotate(0deg) scale(1)" },
+                    "50%": { transform: "translateY(-6px) rotate(-0.8deg) scale(1.02)" },
+                    "100%": { transform: "translateY(0px) rotate(0.4deg) scale(1)" },
+                },
                 lightSweep: {
-                    "0%": { transform: "translateX(-100%) skewX(-15deg)" },
-                    "100%": { transform: "translateX(200%) skewX(-15deg)" },
+                    "0%": { transform: "translateX(-120%) skewX(-15deg)", opacity: "0" },
+                    "15%": { opacity: "0.7" },
+                    "100%": { transform: "translateX(200%) skewX(-15deg)", opacity: "0" },
+                },
+                textGlow: {
+                    "0%": {
+                        textShadow: "0 0 0 rgba(199, 107, 79, 0), 0 0 0 rgba(245, 228, 138, 0)",
+                    },
+                    "100%": {
+                        textShadow:
+                            "0 0 12px rgba(199, 107, 79, 0.7), 0 0 30px rgba(245, 228, 138, 0.6)",
+                    },
+                },
+                bgWaves: {
+                    "0%": {
+                        backgroundPosition: "0% 50%",
+                    },
+                    "50%": {
+                        backgroundPosition: "100% 50%",
+                    },
+                    "100%": {
+                        backgroundPosition: "0% 50%",
+                    },
+                },
+                scrollFadeIn: {
+                    "0%": { opacity: "0", transform: "translateY(24px)" },
+                    "100%": { opacity: "1", transform: "translateY(0)" },
                 },
             },
         },
