@@ -60,6 +60,7 @@ export const workshopCreateSchema = z.object({
     }),
     whatYouLearn: z.array(z.string().trim().min(1).max(240)).min(1).max(20),
     materialsProvided: z.array(z.string().trim().min(1).max(240)).min(1).max(20),
+    badgeLabels: z.array(z.string().trim().min(1).max(120)).max(8).optional().default([]),
 });
 
 export type WorkshopCreateInput = z.infer<typeof workshopCreateSchema>;
@@ -79,6 +80,7 @@ export const workshopUpdateSchema = z
         coverImage: mediaUrl.optional(),
         galleryImages: z.array(mediaUrl).max(20).optional(),
         videoUrl: mediaUrlOrEmpty.optional(),
+        badgeLabels: z.array(z.string().trim().min(1).max(120)).max(8).optional(),
     })
     .refine((value) => Object.keys(value).length > 0, {
         message: "Provide at least one field to update.",
@@ -100,7 +102,7 @@ export const bookingCheckoutSchema = z
         firstName: z.string().trim().min(1).max(120),
         lastName: z.string().trim().min(1).max(120),
         email: z.string().trim().email().max(320),
-        phone: z.string().trim().max(32).optional().default(""),
+        phone: z.string().trim().min(10, "Phone number must be at least 10 digits").max(32),
         notes: z.string().trim().max(2000).optional().default(""),
         razorpayOrderId: z.string().trim().min(1).max(80).optional(),
         razorpayPaymentId: z.string().trim().min(1).max(80).optional(),
@@ -138,6 +140,46 @@ export const workshopFeedbackSchema = z.object({
 });
 
 export type WorkshopFeedbackInput = z.infer<typeof workshopFeedbackSchema>;
+
+export const profileUpdateSchema = z
+    .object({
+        fullName: z.string().trim().min(2).max(120).optional(),
+        avatarUrl: mediaUrlOrEmpty.optional(),
+        dateOfBirth: z
+            .string()
+            .trim()
+            .optional()
+            .refine(
+                (value) =>
+                    value === undefined || value === "" || /^\d{4}-\d{2}-\d{2}$/.test(value),
+                {
+                    message: "Date of birth must be in YYYY-MM-DD format.",
+                }
+            ),
+        phoneNumber: z
+            .string()
+            .trim()
+            .max(32)
+            .optional()
+            .refine(
+                (value) => value === undefined || value === "" || value.length >= 10,
+                {
+                    message: "Phone number must be at least 10 digits.",
+                }
+            ),
+    })
+    .refine(
+        (value) =>
+            typeof value.fullName === "string" ||
+            typeof value.avatarUrl === "string" ||
+            typeof value.dateOfBirth === "string" ||
+            typeof value.phoneNumber === "string",
+        {
+            message: "Provide at least one field to update.",
+        }
+    );
+
+export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
 
 export const adminFeedbackUpdateSchema = z
     .object({

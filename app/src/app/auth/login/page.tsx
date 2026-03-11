@@ -4,11 +4,12 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getAuthMe } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
+import { cardReveal, standardTransition, useMotionProps } from "@/lib/motion-presets";
 
 function LoginContent() {
     const router = useRouter();
@@ -19,6 +20,10 @@ function LoginContent() {
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const prefersReducedMotion = useReducedMotion();
+    const cardMotionProps = useMotionProps(prefersReducedMotion, cardReveal, standardTransition, {
+        whileInView: false,
+    });
 
     const rawRedirect = searchParams.get("redirect");
     let redirectPath = "/";
@@ -74,23 +79,18 @@ function LoginContent() {
     return (
         <main className="min-h-screen bg-cream flex">
             <div className="flex-1 flex items-center justify-center px-6 py-12">
-                <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                    className="w-full max-w-md"
-                >
+                <motion.div {...cardMotionProps} className="w-full max-w-md">
                     <Link href="/" className="flex items-center gap-2.5 mb-10">
                         <div className="relative w-10 h-10 rounded-xl overflow-hidden">
                             <Image
                                 src="/images/logo-black.jpeg"
-                                alt="Only Workshop"
+                                alt="Only Workshops"
                                 fill
                                 className="object-cover"
                             />
                         </div>
                         <span className="font-playfair text-2xl font-bold text-dark">
-                            Only Workshop
+                            Only Workshops
                         </span>
                     </Link>
 
@@ -247,6 +247,7 @@ function LoginContent() {
                     src="/images/background.webp"
                     alt="Creative workshops"
                     fill
+                    sizes="(max-width: 1024px) 0px, 45vw"
                     className="object-cover"
                     priority
                 />

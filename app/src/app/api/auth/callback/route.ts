@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import * as Sentry from "@sentry/core";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getUserRole } from "@/lib/api-auth";
@@ -58,7 +59,16 @@ export async function GET(request: Request) {
                 }
             }
         } catch (err) {
-            console.error("Auth callback error:", err);
+            Sentry.captureException(err, {
+                tags: {
+                    layer: "auth",
+                    route: "auth_callback",
+                },
+                extra: {
+                    next,
+                    hasCode: Boolean(code),
+                },
+            });
         }
     }
 

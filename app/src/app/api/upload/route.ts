@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
         return auth.response;
     }
 
-    const rateLimitResult = assertRateLimit({
+    const rateLimitResult = await assertRateLimit({
         key: getRateLimitKey(request, "upload", auth.user.id),
         limit: 30,
         windowMs: 5 * 60_000,

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
     Mail,
     Lock,
@@ -16,10 +16,17 @@ import {
     CheckCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { quickTransition, scaleIn } from "@/lib/motion-presets";
+import {
+    cardReveal,
+    quickTransition,
+    scaleIn,
+    standardTransition,
+    useMotionProps,
+} from "@/lib/motion-presets";
 
 export default function SignupPage() {
     const { signUp, signInWithGoogle } = useAuth();
+    const prefersReducedMotion = useReducedMotion();
     const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -27,14 +34,29 @@ export default function SignupPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const cardMotionProps = useMotionProps(prefersReducedMotion, cardReveal, standardTransition, {
+        whileInView: false,
+    });
+    const passwordChecks = [
+        { label: "At least 8 characters", met: password.length >= 8 },
+        { label: "One uppercase letter", met: /[A-Z]/.test(password) },
+        { label: "One number", met: /\d/.test(password) },
+    ];
+    const passwordScore = passwordChecks.filter((rule) => rule.met).length;
+    const passwordStrengthLabel =
+        passwordScore <= 1 ? "Weak" : passwordScore === 2 ? "Medium" : "Strong";
+    const passwordStrengthClass =
+        passwordScore <= 1 ? "bg-red-400" : passwordScore === 2 ? "bg-amber-400" : "bg-emerald-500";
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
         setLoading(true);
 
-        if (password.length < 6) {
-            setError("Password must be at least 6 characters.");
+        if (passwordScore < passwordChecks.length) {
+            setError(
+                "Password must be at least 8 characters and include one uppercase letter and one number."
+            );
             setLoading(false);
             return;
         }
@@ -60,17 +82,16 @@ export default function SignupPage() {
     if (success) {
         return (
             <main className="min-h-screen bg-cream flex items-center justify-center px-6">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                    className="text-center max-w-md"
-                >
+                <motion.div {...cardMotionProps} className="text-center max-w-md">
                     <motion.div
-                        variants={scaleIn}
-                        initial="hidden"
-                        animate="visible"
-                        transition={{ ...quickTransition, delay: 0.1 }}
+                        variants={prefersReducedMotion ? undefined : scaleIn}
+                        initial={prefersReducedMotion ? undefined : "hidden"}
+                        animate={prefersReducedMotion ? undefined : "visible"}
+                        transition={
+                            prefersReducedMotion
+                                ? { duration: 0 }
+                                : { ...quickTransition, delay: 0.1 }
+                        }
                         className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6"
                     >
                         <CheckCircle className="w-8 h-8 text-emerald-600" />
@@ -97,6 +118,7 @@ export default function SignupPage() {
                     src="/images/background.webp"
                     alt="Creative workshops"
                     fill
+                    sizes="(max-width: 1024px) 0px, 45vw"
                     className="object-cover"
                     priority
                 />
@@ -116,23 +138,18 @@ export default function SignupPage() {
 
             {/* Right - Form */}
             <div className="flex-1 flex items-center justify-center px-6 py-12">
-                <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                    className="w-full max-w-md"
-                >
+                <motion.div {...cardMotionProps} className="w-full max-w-md">
                     <Link href="/" className="flex items-center gap-2.5 mb-10">
                         <div className="relative w-10 h-10 rounded-xl overflow-hidden">
                             <Image
                                 src="/images/logo-black.jpeg"
-                                alt="Only Workshop"
+                                alt="Only Workshops"
                                 fill
                                 className="object-cover"
                             />
                         </div>
                         <span className="font-playfair text-2xl font-bold text-dark">
-                            Only Workshop
+                            Only Workshops
                         </span>
                     </Link>
 
@@ -201,7 +218,7 @@ export default function SignupPage() {
                                     type={showPassword ? "text" : "password"}
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    placeholder="Minimum 6 characters"
+                                    placeholder="Minimum 8 characters"
                                     required
                                     aria-invalid={error ? "true" : undefined}
                                     aria-describedby={error ? "signup-error" : undefined}
@@ -218,6 +235,34 @@ export default function SignupPage() {
                                         <Eye className="w-5 h-5 text-dark-muted" />
                                     )}
                                 </button>
+                            </div>
+                            <div className="mt-3 space-y-2">
+                                <div className="flex items-center justify-between text-xs font-inter">
+                                    <span className="text-dark-muted">Password strength</span>
+                                    <span className="font-semibold text-dark">
+                                        {passwordStrengthLabel}
+                                    </span>
+                                </div>
+                                <div className="h-1.5 w-full rounded-full bg-gray-200">
+                                    <div
+                                        className={`h-full rounded-full transition-all duration-300 ${passwordStrengthClass}`}
+                                        style={{
+                                            width: `${(passwordScore / passwordChecks.length) * 100}%`,
+                                        }}
+                                    />
+                                </div>
+                                <ul className="space-y-1">
+                                    {passwordChecks.map((rule) => (
+                                        <li
+                                            key={rule.label}
+                                            className={`text-xs font-inter ${
+                                                rule.met ? "text-emerald-700" : "text-dark-muted"
+                                            }`}
+                                        >
+                                            {rule.met ? "✓" : "•"} {rule.label}
+                                        </li>
+                                    ))}
+                                </ul>
                             </div>
                         </div>
 

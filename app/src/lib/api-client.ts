@@ -1,4 +1,5 @@
 import type { Workshop } from "@/lib/data";
+import type { WorkshopCreateInput, WorkshopUpdateInput } from "@/lib/validators";
 
 type Primitive = string | number | boolean | null | undefined;
 
@@ -136,11 +137,42 @@ export type WorkshopFeedbackResponse = {
     message?: string;
 };
 
+export type WorkshopPublicFeedbackResponse = {
+    feedback: Array<{
+        id: string;
+        rating: number | null;
+        comment: string;
+        photos: string[];
+        createdAt: string;
+        userDisplayName: string;
+        avatarUrl?: string | null;
+    }>;
+};
+
 export function getWorkshopFeedback(workshopId: string, accessToken: string) {
     return apiRequest<WorkshopFeedbackResponse>(`/api/workshops/${workshopId}/feedback`, {
         accessToken,
         cache: "no-store",
     });
+}
+
+export function getWorkshopPublicFeedback(
+    workshopId: string,
+    params?: {
+        limit?: number;
+    }
+) {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) {
+        searchParams.set("limit", String(params.limit));
+    }
+    const suffix = searchParams.toString() ? `?${searchParams.toString()}` : "";
+    return apiRequest<WorkshopPublicFeedbackResponse>(
+        `/api/workshops/${workshopId}/public-feedback${suffix}`,
+        {
+            cache: "no-store",
+        }
+    );
 }
 
 export function submitWorkshopFeedback(
@@ -225,6 +257,9 @@ export function confirmCheckoutPayment(
 
 export function toApiErrorMessage(error: unknown, fallbackMessage: string) {
     if (isApiClientError(error)) {
+        if (error.status >= 500) {
+            return fallbackMessage;
+        }
         return error.message || fallbackMessage;
     }
     return fallbackMessage;
@@ -238,13 +273,45 @@ export type AuthMeResponse = {
         email: string | null;
         fullName: string | null;
     };
-    role: "admin" | "user";
+    role: "admin" | "host" | "user";
 };
 
 export function getAuthMe(accessToken: string) {
     return apiRequest<AuthMeResponse>("/api/auth/me", {
         accessToken,
         cache: "no-store",
+    });
+}
+
+export type ProfileResponse = {
+    profile: {
+        fullName: string | null;
+        avatarUrl: string | null;
+        dateOfBirth: string | null;
+        phoneNumber: string | null;
+    };
+};
+
+export function getProfile(accessToken: string) {
+    return apiRequest<ProfileResponse>("/api/profile", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function updateProfile(
+    accessToken: string,
+    payload: {
+        fullName?: string;
+        avatarUrl?: string;
+        dateOfBirth?: string;
+        phoneNumber?: string;
+    }
+) {
+    return apiRequest<ProfileResponse>("/api/profile", {
+        method: "PATCH",
+        accessToken,
+        body: payload,
     });
 }
 
@@ -439,6 +506,233 @@ export function getAdminWorkshops(accessToken: string) {
     });
 }
 
+export type AdminWorkshopResponse = {
+    workshop: Workshop;
+};
+
+export function getAdminWorkshop(accessToken: string, workshopId: string) {
+    return apiRequest<AdminWorkshopResponse>(`/api/admin/workshops/${workshopId}`, {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function createAdminWorkshop(accessToken: string, payload: WorkshopCreateInput) {
+    return apiRequest<AdminWorkshopResponse>("/api/admin/workshops", {
+        method: "POST",
+        accessToken,
+        body: payload,
+    });
+}
+
+export function updateAdminWorkshop(
+    accessToken: string,
+    workshopId: string,
+    payload: WorkshopUpdateInput
+) {
+    return apiRequest<AdminWorkshopResponse>(`/api/admin/workshops/${workshopId}`, {
+        method: "PATCH",
+        accessToken,
+        body: payload,
+    });
+}
+
+export type AdminStats = {
+    activeWorkshops: number;
+    totalBookedSeats: number;
+    revenue: number;
+    avgRating: string;
+};
+
+export type AdminStatsResponse = {
+    stats: AdminStats;
+};
+
+export function getAdminStats(accessToken: string) {
+    return apiRequest<AdminStatsResponse>("/api/admin/stats", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export type HostApplication = {
+    id: string;
+    user_id: string;
+    name: string;
+    email: string;
+    bio: string;
+    portfolio_url: string | null;
+    application_type: string;
+    details: Record<string, unknown>;
+    status: "pending" | "approved" | "rejected";
+    created_at: string;
+    updated_at: string;
+};
+
+export type HostApplicationSubmitResponse = {
+    application: HostApplication;
+    message?: string;
+};
+
+export function submitHostApplication(
+    accessToken: string,
+    payload: {
+        name: string;
+        email: string;
+        bio: string;
+        portfolioUrl?: string;
+        applicationType: string;
+        details?: Record<string, unknown>;
+    }
+) {
+    return apiRequest<HostApplicationSubmitResponse>("/api/host-applications", {
+        method: "POST",
+        accessToken,
+        body: payload,
+    });
+}
+
+export type AdminHostApplicationsResponse = {
+    applications: HostApplication[];
+};
+
+export function getAdminHostApplications(accessToken: string) {
+    return apiRequest<AdminHostApplicationsResponse>("/api/host-applications", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export type AdminHostApplicationActionResponse = {
+    success: boolean;
+    application: HostApplication;
+    message?: string;
+};
+
+export function approveHostApplication(accessToken: string, applicationId: string) {
+    return apiRequest<AdminHostApplicationActionResponse>(
+        `/api/admin/host-applications/${applicationId}/approve`,
+        {
+            method: "POST",
+            accessToken,
+        }
+    );
+}
+
+export function rejectHostApplication(accessToken: string, applicationId: string) {
+    return apiRequest<AdminHostApplicationActionResponse>(
+        `/api/admin/host-applications/${applicationId}/reject`,
+        {
+            method: "POST",
+            accessToken,
+        }
+    );
+}
+
+export type AdminPayoutBalance = {
+    hostId: string;
+    name: string;
+    userId: string | null;
+    availableBalance: number;
+    availableEarningsCount: number;
+};
+
+export type AdminPayoutBalancesResponse = {
+    balances: AdminPayoutBalance[];
+};
+
+export function getAdminPayoutBalances(accessToken: string) {
+    return apiRequest<AdminPayoutBalancesResponse>("/api/admin/payouts/balances", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export type AdminPayout = {
+    id: string;
+    host_id: string;
+    amount: number;
+    status: "processing" | "completed";
+    reference_note: string | null;
+    created_at: string;
+    host: {
+        id: string;
+        name: string;
+        user_id: string | null;
+    } | null;
+};
+
+export type AdminPayoutsResponse = {
+    payouts: AdminPayout[];
+};
+
+export function getAdminPayouts(accessToken: string) {
+    return apiRequest<AdminPayoutsResponse>("/api/admin/payouts", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export type AdminCreatePayoutResponse = {
+    payout: {
+        id: string;
+        host_id: string;
+        amount: number;
+        status: "processing" | "completed";
+        reference_note: string | null;
+        created_at: string;
+        updated_at: string;
+    };
+    paidEarningsCount: number;
+    message?: string;
+};
+
+export function createAdminPayout(
+    accessToken: string,
+    payload: { hostId: string; referenceNote?: string }
+) {
+    return apiRequest<AdminCreatePayoutResponse>("/api/admin/payouts", {
+        method: "POST",
+        accessToken,
+        body: payload,
+    });
+}
+
+export type HostEarningsResponse = {
+    host: {
+        id: string;
+        name: string;
+        user_id: string | null;
+    };
+    summary: {
+        pending: number;
+        available: number;
+        paid: number;
+    };
+    earnings: Array<{
+        id: string;
+        booking_id: string;
+        amount: number;
+        fee_deducted: number;
+        status: "pending" | "available" | "paid";
+        created_at: string;
+    }>;
+    payouts: Array<{
+        id: string;
+        amount: number;
+        status: "processing" | "completed";
+        reference_note: string | null;
+        created_at: string;
+    }>;
+};
+
+export function getHostEarnings(accessToken: string) {
+    return apiRequest<HostEarningsResponse>("/api/host/earnings", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
 export function deleteAdminWorkshop(accessToken: string, workshopId: string) {
     return apiRequest<{ success: boolean }>(`/api/admin/workshops/${workshopId}`, {
         method: "DELETE",
@@ -471,5 +765,39 @@ export function removeFavorite(accessToken: string, workshopId: string) {
         method: "DELETE",
         accessToken,
         body: { workshopId },
+    });
+}
+
+export type HostLedgerResponse = {
+    earnings: Array<{
+        id: string;
+        amount: number;
+        fee_deducted: number;
+        status: "pending" | "available" | "paid";
+        created_at: string;
+        booking?: {
+            id: string;
+            status: string;
+            guests: number;
+            total: number;
+            created_at: string;
+            workshop?: {
+                title: string;
+            } | null;
+        } | null;
+    }>;
+    payouts: Array<{
+        id: string;
+        amount: number;
+        status: "processing" | "completed";
+        reference_note: string | null;
+        created_at: string;
+    }>;
+};
+
+export function getHostLedger(accessToken: string) {
+    return apiRequest<HostLedgerResponse>("/api/host/ledger", {
+        accessToken,
+        cache: "no-store",
     });
 }

@@ -20,6 +20,8 @@ const serverEnvSchema = z.object({
     RAZORPAY_KEY_ID: nonEmpty.optional(),
     RAZORPAY_KEY_SECRET: nonEmpty.optional(),
     RAZORPAY_WEBHOOK_SECRET: nonEmpty.optional(),
+    PAYMENT_NOTIFICATIONS_WEBHOOK_URL: z.string().url().optional(),
+    PAYMENT_NOTIFICATIONS_WEBHOOK_SECRET: nonEmpty.optional(),
     SENTRY_DSN: z.string().url().optional(),
 });
 
@@ -59,6 +61,8 @@ export const env = parseOrThrow(
         RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
         RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
         RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
+        PAYMENT_NOTIFICATIONS_WEBHOOK_URL: process.env.PAYMENT_NOTIFICATIONS_WEBHOOK_URL,
+        PAYMENT_NOTIFICATIONS_WEBHOOK_SECRET: process.env.PAYMENT_NOTIFICATIONS_WEBHOOK_SECRET,
         SENTRY_DSN: process.env.SENTRY_DSN,
     },
     "server env"

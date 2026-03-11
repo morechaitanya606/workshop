@@ -13,6 +13,8 @@ import {
     Settings,
     Plus,
     Loader2,
+    Users,
+    Banknote,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -26,6 +28,8 @@ type AdminShellProps = {
 
 const navItems = [
     { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/admin/applications", label: "Applications", icon: Users },
+    { href: "/admin/payouts", label: "Payouts", icon: Banknote },
     { href: "/admin/workshops", label: "Workshops", icon: Calendar },
     { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
     { href: "/admin/feedback", label: "Feedback", icon: MessageSquare },
@@ -77,12 +81,12 @@ export default function AdminShell({ children }: AdminShellProps) {
             <Navbar />
 
             <div className="pt-20 lg:flex">
-                <aside className="w-full lg:w-72 lg:min-h-[calc(100vh-80px)] lg:sticky lg:top-20 lg:border-r lg:border-gray-100 lg:bg-white">
-                    <div className="mx-4 my-4 lg:m-0 rounded-2xl bg-[#f4f4f6] lg:rounded-none lg:bg-transparent p-6 lg:p-6">
-                        <h2 className="font-playfair text-4xl lg:text-xl font-bold text-dark mb-6">
+                <aside className="w-full lg:w-80 lg:min-h-[calc(100vh-80px)] lg:sticky lg:top-20">
+                    <div className="mx-4 my-4 rounded-3xl border border-gray-200 bg-[#f4f4f6] p-5 sm:p-6 lg:m-5">
+                        <h2 className="font-playfair text-4xl sm:text-5xl lg:text-4xl font-bold text-dark mb-6">
                             Admin Panel
                         </h2>
-                        <nav className="space-y-2">
+                        <nav className="flex items-center gap-3 overflow-x-auto scrollbar-hide pb-1 lg:flex-col lg:items-stretch lg:gap-2 lg:overflow-visible lg:pb-0">
                             {navItems.map((item) => {
                                 const isActive =
                                     pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -92,13 +96,20 @@ export default function AdminShell({ children }: AdminShellProps) {
                                     <Link
                                         key={item.href}
                                         href={item.href}
-                                        className={`w-full flex items-center gap-3.5 px-4 py-4 rounded-3xl text-2xl lg:text-base font-inter font-medium transition-colors ${
+                                        aria-current={isActive ? "page" : undefined}
+                                        className={`group inline-flex items-center gap-3.5 px-5 py-3 rounded-2xl text-base lg:text-[1.1rem] font-inter font-medium whitespace-nowrap border transition-all duration-300 ${
                                             isActive
-                                                ? "bg-terracotta/10 text-terracotta"
-                                                : "text-dark-muted hover:bg-white/80 lg:hover:bg-cream-100"
+                                                ? "bg-dark text-white border-dark shadow-[0_10px_24px_-12px_rgba(0,0,0,0.8)]"
+                                                : "bg-[#f8f5ed] text-dark-muted border-transparent hover:bg-white hover:text-dark"
                                         }`}
                                     >
-                                        <Icon className="w-7 h-7 lg:w-5 lg:h-5" />
+                                        <Icon
+                                            className={`w-5 h-5 ${
+                                                isActive
+                                                    ? "text-terracotta-300"
+                                                    : "text-dark/55 group-hover:text-terracotta"
+                                            }`}
+                                        />
                                         <span>{item.label}</span>
                                     </Link>
                                 );
@@ -106,7 +117,7 @@ export default function AdminShell({ children }: AdminShellProps) {
                         </nav>
                         <Link
                             href="/admin/workshops/new"
-                            className="btn-primary mt-8 w-full !py-4 lg:!py-3.5 text-xl lg:text-base"
+                            className="btn-primary mt-8 w-full !py-3.5 text-base"
                         >
                             <Plus className="w-5 h-5" />
                             Create Workshop

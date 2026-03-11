@@ -16,7 +16,7 @@ export function Pill({
     return (
         <button
             className={cn(
-                "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-inter font-medium transition-colors",
+                "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-inter font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta/50 focus-visible:ring-offset-2 focus-visible:ring-offset-cream",
                 variantClassName[variant],
                 className
             )}

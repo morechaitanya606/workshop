@@ -9,21 +9,30 @@ export type Database = {
                 Row: {
                     id: string;
                     full_name: string | null;
-                    role: "user" | "admin";
+                    avatar_url: string | null;
+                    date_of_birth: string | null;
+                    phone_number: string | null;
+                    role: "user" | "host" | "admin";
                     created_at: string;
                     updated_at: string;
                 };
                 Insert: {
                     id: string;
                     full_name?: string | null;
-                    role?: "user" | "admin";
+                    avatar_url?: string | null;
+                    date_of_birth?: string | null;
+                    phone_number?: string | null;
+                    role?: "user" | "host" | "admin";
                     created_at?: string;
                     updated_at?: string;
                 };
                 Update: {
                     id?: string;
                     full_name?: string | null;
-                    role?: "user" | "admin";
+                    avatar_url?: string | null;
+                    date_of_birth?: string | null;
+                    phone_number?: string | null;
+                    role?: "user" | "host" | "admin";
                     created_at?: string;
                     updated_at?: string;
                 };
@@ -51,12 +60,15 @@ export type Database = {
                     host_avatar: string | null;
                     host_bio: string;
                     host_experience: string | null;
-                    host_social_links: Json;
-                    what_you_learn: string[];
-                    materials_provided: string[];
-                    is_bestseller: boolean;
-                    is_new: boolean;
+                      host_social_links: Json;
+                      what_you_learn: string[];
+                      materials_provided: string[];
+                      badge_labels: string[] | null;
+                      is_bestseller: boolean;
+                      is_new: boolean;
+                      host_id: string | null;
                     created_by: string | null;
+                    host_user_id: string | null;
                     created_at: string;
                     updated_at: string;
                 };
@@ -81,12 +93,15 @@ export type Database = {
                     host_avatar?: string | null;
                     host_bio: string;
                     host_experience?: string | null;
-                    host_social_links?: Json;
-                    what_you_learn?: string[];
-                    materials_provided?: string[];
-                    is_bestseller?: boolean;
-                    is_new?: boolean;
+                      host_social_links?: Json;
+                      what_you_learn?: string[];
+                      materials_provided?: string[];
+                      badge_labels?: string[] | null;
+                      is_bestseller?: boolean;
+                      is_new?: boolean;
+                      host_id?: string | null;
                     created_by?: string | null;
+                    host_user_id?: string | null;
                     created_at?: string;
                     updated_at?: string;
                 };
@@ -111,12 +126,15 @@ export type Database = {
                     host_avatar?: string | null;
                     host_bio?: string;
                     host_experience?: string | null;
-                    host_social_links?: Json;
-                    what_you_learn?: string[];
-                    materials_provided?: string[];
-                    is_bestseller?: boolean;
-                    is_new?: boolean;
+                      host_social_links?: Json;
+                      what_you_learn?: string[];
+                      materials_provided?: string[];
+                      badge_labels?: string[] | null;
+                      is_bestseller?: boolean;
+                      is_new?: boolean;
+                    host_id?: string | null;
                     created_by?: string | null;
+                    host_user_id?: string | null;
                     created_at?: string;
                     updated_at?: string;
                 };
@@ -278,6 +296,228 @@ export type Database = {
                 };
                 Relationships: [];
             };
+            hosts: {
+                Row: {
+                    id: string;
+                    user_id: string | null;
+                    name: string;
+                    bio: string | null;
+                    avatar_url: string | null;
+                    social_links: Json;
+                    created_at: string;
+                    updated_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    user_id?: string | null;
+                    name: string;
+                    bio?: string | null;
+                    avatar_url?: string | null;
+                    social_links?: Json;
+                    created_at?: string;
+                    updated_at?: string;
+                };
+                Update: {
+                    id?: string;
+                    user_id?: string | null;
+                    name?: string;
+                    bio?: string | null;
+                    avatar_url?: string | null;
+                    social_links?: Json;
+                    created_at?: string;
+                    updated_at?: string;
+                };
+                Relationships: [];
+            };
+            user_favorites: {
+                Row: {
+                    id: string;
+                    user_id: string;
+                    workshop_id: string;
+                    created_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    user_id: string;
+                    workshop_id: string;
+                    created_at?: string;
+                };
+                Update: {
+                    id?: string;
+                    user_id?: string;
+                    workshop_id?: string;
+                    created_at?: string;
+                };
+                Relationships: [];
+            };
+            payment_webhook_events: {
+                Row: {
+                    id: string;
+                    provider: string;
+                    event_key: string;
+                    event_type: string;
+                    payload: Json;
+                    received_at: string;
+                    processed_at: string | null;
+                };
+                Insert: {
+                    id?: string;
+                    provider: string;
+                    event_key: string;
+                    event_type: string;
+                    payload?: Json;
+                    received_at?: string;
+                    processed_at?: string | null;
+                };
+                Update: {
+                    id?: string;
+                    provider?: string;
+                    event_key?: string;
+                    event_type?: string;
+                    payload?: Json;
+                    received_at?: string;
+                    processed_at?: string | null;
+                };
+                Relationships: [];
+            };
+            email_delivery_logs: {
+                Row: {
+                    id: string;
+                    recipient_email: string;
+                    subject: string;
+                    template_name: string;
+                    status: Database["public"]["Enums"]["email_delivery_status"];
+                    error_message: string | null;
+                    reference_id: string | null;
+                    created_at: string;
+                    sent_at: string | null;
+                };
+                Insert: {
+                    id?: string;
+                    recipient_email: string;
+                    subject: string;
+                    template_name: string;
+                    status?: Database["public"]["Enums"]["email_delivery_status"];
+                    error_message?: string | null;
+                    reference_id?: string | null;
+                    created_at?: string;
+                    sent_at?: string | null;
+                };
+                Update: {
+                    id?: string;
+                    recipient_email?: string;
+                    subject?: string;
+                    template_name?: string;
+                    status?: Database["public"]["Enums"]["email_delivery_status"];
+                    error_message?: string | null;
+                    reference_id?: string | null;
+                    created_at?: string;
+                    sent_at?: string | null;
+                };
+                Relationships: [];
+            };
+            host_applications: {
+                Row: {
+                    id: string;
+                    user_id: string;
+                    name: string;
+                    email: string;
+                    bio: string;
+                    portfolio_url: string | null;
+                    application_type: string;
+                    details: Json;
+                    status: Database["public"]["Enums"]["host_application_status"];
+                    created_at: string;
+                    updated_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    user_id: string;
+                    name: string;
+                    email: string;
+                    bio: string;
+                    portfolio_url?: string | null;
+                    application_type?: string;
+                    details?: Json;
+                    status?: Database["public"]["Enums"]["host_application_status"];
+                    created_at?: string;
+                    updated_at?: string;
+                };
+                Update: {
+                    id?: string;
+                    user_id?: string;
+                    name?: string;
+                    email?: string;
+                    bio?: string;
+                    portfolio_url?: string | null;
+                    application_type?: string;
+                    details?: Json;
+                    status?: Database["public"]["Enums"]["host_application_status"];
+                    created_at?: string;
+                    updated_at?: string;
+                };
+                Relationships: [];
+            };
+            host_earnings: {
+                Row: {
+                    id: string;
+                    host_id: string;
+                    booking_id: string;
+                    amount: number;
+                    fee_deducted: number;
+                    status: Database["public"]["Enums"]["earning_status"];
+                    created_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    host_id: string;
+                    booking_id: string;
+                    amount: number;
+                    fee_deducted?: number;
+                    status?: Database["public"]["Enums"]["earning_status"];
+                    created_at?: string;
+                };
+                Update: {
+                    id?: string;
+                    host_id?: string;
+                    booking_id?: string;
+                    amount?: number;
+                    fee_deducted?: number;
+                    status?: Database["public"]["Enums"]["earning_status"];
+                    created_at?: string;
+                };
+                Relationships: [];
+            };
+            payouts: {
+                Row: {
+                    id: string;
+                    host_id: string;
+                    amount: number;
+                    status: Database["public"]["Enums"]["payout_status"];
+                    reference_note: string | null;
+                    created_at: string;
+                    updated_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    host_id: string;
+                    amount: number;
+                    status?: Database["public"]["Enums"]["payout_status"];
+                    reference_note?: string | null;
+                    created_at?: string;
+                    updated_at?: string;
+                };
+                Update: {
+                    id?: string;
+                    host_id?: string;
+                    amount?: number;
+                    status?: Database["public"]["Enums"]["payout_status"];
+                    reference_note?: string | null;
+                    created_at?: string;
+                    updated_at?: string;
+                };
+                Relationships: [];
+            };
         };
         Views: {
             [_ in never]: never;
@@ -308,9 +548,24 @@ export type Database = {
                 };
                 Returns: string;
             };
+            user_has_role: {
+                Args: {
+                    required_role: string;
+                };
+                Returns: boolean;
+            };
+            user_has_any_role: {
+                Args: {
+                    required_roles: string[];
+                };
+                Returns: boolean;
+            };
         };
         Enums: {
-            [_ in never]: never;
+            email_delivery_status: "pending" | "sent" | "failed";
+            earning_status: "pending" | "available" | "paid";
+            host_application_status: "pending" | "approved" | "rejected";
+            payout_status: "processing" | "completed";
         };
         CompositeTypes: {
             [_ in never]: never;

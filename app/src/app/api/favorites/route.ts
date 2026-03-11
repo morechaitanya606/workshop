@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { handleApiError, parseBody } from "@/lib/api-route";
 import { requireAuthenticatedUser } from "@/lib/api-auth";
-import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
+import { requireSupabaseService } from "@/lib/api-helpers";
+import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 
 const favoritesBodySchema = z.object({
     workshopId: z.string().trim().min(1).max(120),
@@ -18,15 +19,25 @@ function getMemoryFavorites(userId: string) {
     return memoryFavorites.get(userId)!;
 }
 
+async function assertFavoritesWriteLimit(request: NextRequest, userId: string) {
+    return await assertRateLimit({
+        key: getRateLimitKey(request, "favorites-write", userId),
+        limit: 40,
+        windowMs: 60_000,
+        message: "Too many wishlist updates. Please wait and try again.",
+    });
+}
+
 export async function GET(request: NextRequest) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
     }
 
-    if (isSupabaseServiceConfigured) {
+    const service = requireSupabaseService();
+    if (service.ok) {
         try {
-            const serviceClient = createSupabaseServiceClient();
+            const serviceClient = service.client;
             const { data, error } = await serviceClient
                 .from("user_favorites" as any)
                 .select("workshop_id")
@@ -57,6 +68,11 @@ export async function POST(request: NextRequest) {
         return auth.response;
     }
 
+    const rateLimitResult = await assertFavoritesWriteLimit(request, auth.user.id);
+    if (!rateLimitResult.ok) {
+        return rateLimitResult.response;
+    }
+
     const parsed = await parseBody(
         request,
         favoritesBodySchema,
@@ -67,9 +83,10 @@ export async function POST(request: NextRequest) {
         return parsed.response;
     }
 
-    if (isSupabaseServiceConfigured) {
+    const service = requireSupabaseService();
+    if (service.ok) {
         try {
-            const serviceClient = createSupabaseServiceClient();
+            const serviceClient = service.client;
             const { error } = await serviceClient.from("user_favorites" as any).upsert(
                 {
                     user_id: auth.user.id,
@@ -109,6 +126,11 @@ export async function DELETE(request: NextRequest) {
         return auth.response;
     }
 
+    const rateLimitResult = await assertFavoritesWriteLimit(request, auth.user.id);
+    if (!rateLimitResult.ok) {
+        return rateLimitResult.response;
+    }
+
     const parsed = await parseBody(
         request,
         favoritesBodySchema,
@@ -119,9 +141,10 @@ export async function DELETE(request: NextRequest) {
         return parsed.response;
     }
 
-    if (isSupabaseServiceConfigured) {
+    const service = requireSupabaseService();
+    if (service.ok) {
         try {
-            const serviceClient = createSupabaseServiceClient();
+            const serviceClient = service.client;
             const { error } = await serviceClient
                 .from("user_favorites" as any)
                 .delete()

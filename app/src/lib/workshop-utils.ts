@@ -37,11 +37,18 @@ function cleanUrlValue(value: unknown) {
     return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+type WorkshopLinks = {
+    instagram?: string | null;
+    youtube?: string | null;
+    website?: string | null;
+};
+
+function isWorkshopLinks(value: Json | null | undefined): value is WorkshopLinks {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function cleanLinks(value: Json | null | undefined) {
-    const links =
-        typeof value === "object" && value && !Array.isArray(value)
-            ? (value as Record<string, unknown>)
-            : {};
+    const links = isWorkshopLinks(value) ? value : {};
 
     return {
         instagram: cleanUrlValue(links.instagram),
@@ -84,6 +91,9 @@ export function mapWorkshopRowToWorkshop(row: DbTable<"workshops">): Workshop {
         socialLinks,
         whatYouLearn: row.what_you_learn,
         materialsProvided: row.materials_provided,
+        badgeLabels: Array.isArray(row.badge_labels)
+            ? row.badge_labels.filter((label) => typeof label === "string" && label.trim())
+            : [],
         isNew: row.is_new,
         isBestseller: row.is_bestseller,
     };
@@ -129,9 +139,11 @@ export function buildWorkshopInsertPayload(
         host_social_links: input.hostSocialLinks,
         what_you_learn: input.whatYouLearn,
         materials_provided: input.materialsProvided,
+        badge_labels: input.badgeLabels,
         is_bestseller: false,
         is_new: true,
         created_by: createdBy,
+        host_user_id: createdBy,
     };
 
     return payload;
@@ -237,6 +249,7 @@ export async function ensureWorkshopSeededFromMock(
         host_social_links: mockWorkshop.hostSocialLinks || {},
         what_you_learn: mockWorkshop.whatYouLearn,
         materials_provided: mockWorkshop.materialsProvided,
+        badge_labels: mockWorkshop.badgeLabels ?? null,
         is_bestseller: Boolean(mockWorkshop.isBestseller),
         is_new: Boolean(mockWorkshop.isNew),
     };

@@ -3,7 +3,7 @@ import type { DbTable } from "@/lib/database.types";
 import { mapWorkshopRowToWorkshop, sortWorkshops } from "@/lib/workshop-utils";
 
 function buildWorkshopRow(overrides: Partial<DbTable<"workshops">> = {}): DbTable<"workshops"> {
-    return {
+    const row: DbTable<"workshops"> = {
         id: "workshop-1",
         title: "Ceramics Basics",
         description: "Learn wheel throwing and glazing in one afternoon session.",
@@ -29,10 +29,18 @@ function buildWorkshopRow(overrides: Partial<DbTable<"workshops">> = {}): DbTabl
         materials_provided: ["Clay", "Apron"],
         is_bestseller: true,
         is_new: false,
+        host_id: null,
         created_by: null,
+        host_user_id: null,
         created_at: "2026-03-08T00:00:00Z",
         updated_at: "2026-03-08T00:00:00Z",
         ...overrides,
+    };
+
+    return {
+        ...row,
+        host_id: row.host_id ?? null,
+        host_user_id: row.host_user_id ?? null,
     };
 }
 

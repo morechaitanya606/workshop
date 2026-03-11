@@ -1,20 +1,16 @@
-import * as Sentry from "@sentry/nextjs";
-import { env } from "@/lib/env";
-
 let sentryInitialized = false;
+const sentryDsn = process.env.SENTRY_DSN ?? process.env.NEXT_PUBLIC_SENTRY_DSN;
+const shouldInitSentry = process.env.NODE_ENV === "production" && Boolean(sentryDsn);
 
-function initSentryServer() {
-    if (sentryInitialized) {
+async function initSentryServer() {
+    if (sentryInitialized || !shouldInitSentry || !sentryDsn) {
         return;
     }
 
-    const dsn = env.SENTRY_DSN ?? env.NEXT_PUBLIC_SENTRY_DSN;
-    if (!dsn) {
-        return;
-    }
+    const Sentry = await import("@sentry/nextjs");
 
     Sentry.init({
-        dsn,
+        dsn: sentryDsn,
         tracesSampleRate: 0.1,
         sendDefaultPii: false,
     });
@@ -22,5 +18,5 @@ function initSentryServer() {
 }
 
 export async function register() {
-    initSentryServer();
+    await initSentryServer();
 }

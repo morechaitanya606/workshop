@@ -2,9 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Search, Calendar, MapPin, ArrowRight } from "lucide-react";
 import { categories } from "@/lib/data";
+import { fadeInUp, standardTransition, useMotionProps } from "@/lib/motion-presets";
+
+const OTHER_CATEGORY_VALUE = "__other__";
 
 interface SearchBarProps {
     selectedCategoryId?: string;
@@ -12,14 +15,18 @@ interface SearchBarProps {
 
 export default function SearchBar({ selectedCategoryId = "trending" }: SearchBarProps) {
     const router = useRouter();
+    const prefersReducedMotion = useReducedMotion();
     const [query, setQuery] = useState("");
     const [date, setDate] = useState("");
-    const [city, setCity] = useState("Pune");
+    const [city, setCity] = useState("");
 
     const selectedCategory = useMemo(() => {
         const matched = categories.find((item) => item.id === selectedCategoryId);
-        if (!matched || matched.id === "trending") return "";
-        return matched.label;
+        if (matched) {
+            return matched.id === "trending" ? "" : matched.label;
+        }
+        if (!selectedCategoryId || selectedCategoryId === OTHER_CATEGORY_VALUE) return "";
+        return selectedCategoryId;
     }, [selectedCategoryId]);
 
     const handleSearch = () => {
@@ -31,15 +38,20 @@ export default function SearchBar({ selectedCategoryId = "trending" }: SearchBar
         params.set("page", "1");
         router.push(`/explore?${params.toString()}`);
     };
+    const searchMotionProps = useMotionProps(prefersReducedMotion, fadeInUp, standardTransition, {
+        whileInView: false,
+        delay: 0.4,
+    });
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full max-w-4xl mx-auto relative z-30"
-        >
-            <div className="bg-white rounded-2xl shadow-card p-2 sm:p-3 relative z-30">
+        <motion.div {...searchMotionProps} className="w-full max-w-4xl mx-auto relative z-30">
+            <form
+                onSubmit={(event) => {
+                    event.preventDefault();
+                    handleSearch();
+                }}
+                className="bg-white rounded-2xl shadow-card p-2 sm:p-3 relative z-30"
+            >
                 <div className="grid grid-cols-1 sm:grid-cols-[1fr,1fr,1fr,auto] gap-2 sm:gap-0">
                     {/* What */}
                     <div className="flex items-center gap-3 px-4 py-3 sm:border-r border-gray-100">
@@ -53,7 +65,13 @@ export default function SearchBar({ selectedCategoryId = "trending" }: SearchBar
                                 placeholder="Pottery, Jazz, Hiking..."
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
-                                className="w-full bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted/60"
+                                onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                        event.preventDefault();
+                                        handleSearch();
+                                    }
+                                }}
+                                className="w-full bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted/60 focus-visible:outline-none"
                             />
                         </div>
                     </div>
@@ -70,7 +88,7 @@ export default function SearchBar({ selectedCategoryId = "trending" }: SearchBar
                                 placeholder="Pick a date"
                                 value={date}
                                 onChange={(e) => setDate(e.target.value)}
-                                className="w-full bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted/60"
+                                className="w-full bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted/60 focus-visible:outline-none"
                             />
                         </div>
                     </div>
@@ -85,8 +103,9 @@ export default function SearchBar({ selectedCategoryId = "trending" }: SearchBar
                             <select
                                 value={city}
                                 onChange={(e) => setCity(e.target.value)}
-                                className="w-full bg-transparent outline-none text-sm font-inter text-dark appearance-none cursor-pointer"
+                                className="w-full bg-transparent outline-none text-sm font-inter text-dark appearance-none cursor-pointer focus-visible:outline-none"
                             >
+                                <option value="">All Cities</option>
                                 <option>Pune</option>
                                 <option>Mumbai</option>
                                 <option>Bangalore</option>
@@ -98,7 +117,7 @@ export default function SearchBar({ selectedCategoryId = "trending" }: SearchBar
                     {/* Search Button */}
                     <div className="flex items-center px-2">
                         <button
-                            onClick={handleSearch}
+                            type="submit"
                             className="btn-primary w-full sm:w-auto !rounded-xl !px-6"
                         >
                             <span className="hidden sm:inline">Find Experiences</span>
@@ -106,7 +125,7 @@ export default function SearchBar({ selectedCategoryId = "trending" }: SearchBar
                         </button>
                     </div>
                 </div>
-            </div>
+            </form>
         </motion.div>
     );
 }

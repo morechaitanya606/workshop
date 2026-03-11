@@ -2,13 +2,23 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError, parseBody } from "@/lib/api-route";
 import type { DbUpdate } from "@/lib/database.types";
-import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
-import { requireAdminUser } from "@/lib/api-auth";
+import { requireSupabaseService } from "@/lib/api-helpers";
+import { jsonError, requireAdminUser } from "@/lib/api-auth";
+import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { adminFeedbackUpdateSchema } from "@/lib/validators";
 
 type Params = {
     params: { id: string };
 };
+
+async function assertAdminFeedbackWriteLimit(request: NextRequest, userId: string) {
+    return await assertRateLimit({
+        key: getRateLimitKey(request, "admin-feedback-write", userId),
+        limit: 60,
+        windowMs: 60_000,
+        message: "Too many moderation actions. Please wait and try again.",
+    });
+}
 
 export async function PATCH(request: NextRequest, { params }: Params) {
     const auth = await requireAdminUser(request);
@@ -16,12 +26,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         return auth.response;
     }
 
-    if (!isSupabaseServiceConfigured) {
-        return NextResponse.json(
-            { error: "Supabase service role is not configured." },
-            { status: 500 }
-        );
+    const rateLimitResult = await assertAdminFeedbackWriteLimit(request, auth.user.id);
+    if (!rateLimitResult.ok) {
+        return rateLimitResult.response;
     }
+
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+    const serviceClient = service.client;
 
     const parsed = await parseBody(
         request,
@@ -42,7 +54,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             patch.comment = parsed.data.comment;
         }
 
-        const serviceClient = createSupabaseServiceClient();
         let updateResult = await serviceClient
             .from("workshop_feedback")
             .update(patch)
@@ -56,11 +67,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
                 delete patch.rating;
             }
             if (!("comment" in patch)) {
-                return NextResponse.json(
-                    {
-                        error: "Rating edits are not available until feedback migration is applied.",
-                    },
-                    { status: 400 }
+                return jsonError(
+                    "Rating edits are not available until feedback migration is applied.",
+                    400
                 );
             }
 
@@ -73,18 +82,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         }
 
         if (updateResult.error) {
-            return NextResponse.json(
-                {
-                    error: "Failed to update feedback.",
-                    details: updateResult.error.message,
-                },
-                { status: 500 }
-            );
+            throw updateResult.error;
         }
 
         const data = updateResult.data;
         if (!data) {
-            return NextResponse.json({ error: "Feedback not found." }, { status: 404 });
+            return jsonError("Feedback not found.", 404);
         }
 
         return NextResponse.json({ feedback: data });
@@ -99,15 +102,16 @@ export async function DELETE(request: NextRequest, { params }: Params) {
         return auth.response;
     }
 
-    if (!isSupabaseServiceConfigured) {
-        return NextResponse.json(
-            { error: "Supabase service role is not configured." },
-            { status: 500 }
-        );
+    const rateLimitResult = await assertAdminFeedbackWriteLimit(request, auth.user.id);
+    if (!rateLimitResult.ok) {
+        return rateLimitResult.response;
     }
 
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+    const serviceClient = service.client;
+
     try {
-        const serviceClient = createSupabaseServiceClient();
         const { data, error } = await serviceClient
             .from("workshop_feedback")
             .delete()
@@ -116,14 +120,11 @@ export async function DELETE(request: NextRequest, { params }: Params) {
             .maybeSingle();
 
         if (error) {
-            return NextResponse.json(
-                { error: "Failed to delete feedback.", details: error.message },
-                { status: 500 }
-            );
+            throw error;
         }
 
         if (!data) {
-            return NextResponse.json({ error: "Feedback not found." }, { status: 404 });
+            return jsonError("Feedback not found.", 404);
         }
 
         return NextResponse.json({ success: true });

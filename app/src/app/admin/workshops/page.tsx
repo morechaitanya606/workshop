@@ -16,6 +16,7 @@ export default function AdminWorkshopsPage() {
     const [loadingWorkshops, setLoadingWorkshops] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -30,9 +31,9 @@ export default function AdminWorkshopsPage() {
                 if (!cancelled) {
                     setWorkshops(Array.isArray(result.data) ? result.data : []);
                 }
-            } catch (fetchError) {
+            } catch {
                 if (!cancelled) {
-                    setError(toApiErrorMessage(fetchError, "Unable to load workshops."));
+                    setError("Unable to load workshops right now. Please try again.");
                 }
             } finally {
                 if (!cancelled) {
@@ -45,7 +46,7 @@ export default function AdminWorkshopsPage() {
         return () => {
             cancelled = true;
         };
-    }, [session]);
+    }, [session, reloadKey]);
 
     const handleDeleteWorkshop = async (workshop: Workshop) => {
         if (!session?.access_token) return;
@@ -59,25 +60,31 @@ export default function AdminWorkshopsPage() {
 
             setWorkshops((prev) => prev.filter((item) => item.id !== workshop.id));
         } catch (deleteError) {
-            setError(toApiErrorMessage(deleteError, "Unable to delete workshop."));
+            setError(
+                toApiErrorMessage(
+                    deleteError,
+                    "Unable to delete this workshop right now. Please try again."
+                )
+            );
         } finally {
             setDeletingId(null);
         }
     };
 
+    const handleRetry = () => {
+        setError(null);
+        setReloadKey((prev) => prev + 1);
+    };
+
     return (
         <AdminShell>
-            <div className="mb-8 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+            <div className="mb-8">
                 <div>
                     <p className="text-xs font-inter font-bold uppercase tracking-wider text-terracotta mb-2">
                         Admin
                     </p>
                     <h1 className="heading-md">Workshops</h1>
                 </div>
-                <Link href="/admin/workshops/new" className="btn-primary">
-                    <Plus className="w-4 h-4" />
-                    Create Workshop
-                </Link>
             </div>
 
             {loadingWorkshops && (
@@ -89,7 +96,16 @@ export default function AdminWorkshopsPage() {
 
             {!loadingWorkshops && error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-inter">
-                    {error}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <span>{error}</span>
+                        <button
+                            type="button"
+                            onClick={handleRetry}
+                            className="inline-flex items-center justify-center rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                        >
+                            Try again
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -118,7 +134,7 @@ export default function AdminWorkshopsPage() {
                                 <div className="text-sm font-inter text-dark-muted space-y-1 mb-4">
                                     <p className="inline-flex items-center gap-1.5">
                                         <CalendarDays className="w-4 h-4" />
-                                        {formatDate(workshop.date)} · {workshop.time}
+                                        {formatDate(workshop.date)} &middot; {workshop.time}
                                     </p>
                                     <p className="inline-flex items-center gap-1.5">
                                         <MapPin className="w-4 h-4" />

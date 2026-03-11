@@ -10,10 +10,11 @@ import { fadeUp, standardTransition, revealViewport } from "@/lib/motion-presets
 interface StaticPageProps {
     title: string;
     description: string;
+    icon?: ReactNode;
     children?: ReactNode;
 }
 
-export default function StaticPage({ title, description, children }: StaticPageProps) {
+export default function StaticPage({ title, description, icon, children }: StaticPageProps) {
     const prefersReducedMotion = useReducedMotion();
 
     return (
@@ -28,6 +29,11 @@ export default function StaticPage({ title, description, children }: StaticPageP
                         viewport={prefersReducedMotion ? undefined : revealViewport}
                         transition={prefersReducedMotion ? { duration: 0 } : standardTransition}
                     >
+                        {icon ? (
+                            <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-terracotta shadow-soft">
+                                {icon}
+                            </div>
+                        ) : null}
                         <h1 className="heading-lg mb-3">{title}</h1>
                         <p className="text-body text-dark-muted mb-8">{description}</p>
                     </motion.div>

@@ -14,7 +14,7 @@ const links = [
 
 export default function SitemapPage() {
     return (
-        <StaticPage title="Sitemap" description="Quick links to the main pages on Only Workshop.">
+        <StaticPage title="Sitemap" description="Quick links to the main pages on Only Workshops.">
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {links.map((item) => (
                     <li key={item.href}>

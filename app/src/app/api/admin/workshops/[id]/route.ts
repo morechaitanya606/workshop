@@ -2,8 +2,9 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError, parseBody } from "@/lib/api-route";
 import type { DbUpdate } from "@/lib/database.types";
-import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
-import { requireAdminUser } from "@/lib/api-auth";
+import { requireSupabaseService } from "@/lib/api-helpers";
+import { jsonError, requireAdminUser } from "@/lib/api-auth";
+import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import { workshopUpdateSchema } from "@/lib/validators";
 import {
@@ -15,21 +16,26 @@ type Params = {
     params: { id: string };
 };
 
+async function assertAdminWorkshopWriteLimit(request: NextRequest, userId: string) {
+    return await assertRateLimit({
+        key: getRateLimitKey(request, "admin-workshop-write", userId),
+        limit: 40,
+        windowMs: 60_000,
+        message: "Too many workshop update requests. Please wait and try again.",
+    });
+}
+
 export async function GET(request: NextRequest, { params }: Params) {
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
     }
 
-    if (!isSupabaseServiceConfigured) {
-        return NextResponse.json(
-            { error: "Supabase service role is not configured." },
-            { status: 500 }
-        );
-    }
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+    const serviceClient = service.client;
 
     try {
-        const serviceClient = createSupabaseServiceClient();
         const { data, error } = await serviceClient
             .from("workshops")
             .select("*")
@@ -37,10 +43,10 @@ export async function GET(request: NextRequest, { params }: Params) {
             .maybeSingle();
 
         if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            throw error;
         }
         if (!data) {
-            return NextResponse.json({ error: "Workshop not found." }, { status: 404 });
+            return jsonError("Workshop not found.", 404);
         }
 
         return NextResponse.json({
@@ -57,12 +63,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         return auth.response;
     }
 
-    if (!isSupabaseServiceConfigured) {
-        return NextResponse.json(
-            { error: "Supabase service role is not configured." },
-            { status: 500 }
-        );
+    const rateLimitResult = await assertAdminWorkshopWriteLimit(request, auth.user.id);
+    if (!rateLimitResult.ok) {
+        return rateLimitResult.response;
     }
+
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+    const serviceClient = service.client;
 
     const parsed = await parseBody(
         request,
@@ -75,7 +83,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
 
     try {
-        const serviceClient = createSupabaseServiceClient();
         const { data: existing, error: existingError } = await serviceClient
             .from("workshops")
             .select("id, max_seats, seats_remaining")
@@ -83,10 +90,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             .maybeSingle();
 
         if (existingError) {
-            return NextResponse.json({ error: existingError.message }, { status: 500 });
+            throw existingError;
         }
         if (!existing) {
-            return NextResponse.json({ error: "Workshop not found." }, { status: 404 });
+            return jsonError("Workshop not found.", 404);
         }
 
         const input = parsed.data;
@@ -114,6 +121,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
                 ? normalizeWorkshopVideoUrlInput(input.videoUrl)
                 : null;
         }
+        if (Array.isArray(input.badgeLabels)) {
+            patch.badge_labels = input.badgeLabels;
+        }
 
         if (typeof input.maxSeats === "number") {
             const currentMaxSeats = Number(existing.max_seats || 0);
@@ -121,11 +131,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             const bookedSeats = Math.max(0, currentMaxSeats - currentSeatsRemaining);
 
             if (input.maxSeats < bookedSeats) {
-                return NextResponse.json(
-                    {
-                        error: `Max seats cannot be less than already booked seats (${bookedSeats}).`,
-                    },
-                    { status: 400 }
+                return jsonError(
+                    `Max seats cannot be less than already booked seats (${bookedSeats}).`,
+                    400
                 );
             }
 
@@ -141,10 +149,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             .single();
 
         if (error) {
-            return NextResponse.json(
-                { error: "Failed to update workshop.", details: error.message },
-                { status: 500 }
-            );
+            throw error;
         }
 
         return NextResponse.json({
@@ -161,15 +166,16 @@ export async function DELETE(request: NextRequest, { params }: Params) {
         return auth.response;
     }
 
-    if (!isSupabaseServiceConfigured) {
-        return NextResponse.json(
-            { error: "Supabase service role is not configured." },
-            { status: 500 }
-        );
+    const rateLimitResult = await assertAdminWorkshopWriteLimit(request, auth.user.id);
+    if (!rateLimitResult.ok) {
+        return rateLimitResult.response;
     }
 
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+    const serviceClient = service.client;
+
     try {
-        const serviceClient = createSupabaseServiceClient();
         const { data, error } = await serviceClient
             .from("workshops")
             .delete()
@@ -179,21 +185,13 @@ export async function DELETE(request: NextRequest, { params }: Params) {
 
         if (error) {
             if (error.code === "23503") {
-                return NextResponse.json(
-                    {
-                        error: "Cannot delete workshop because bookings exist for it.",
-                    },
-                    { status: 409 }
-                );
+                return jsonError("Cannot delete workshop because bookings exist for it.", 409);
             }
-            return NextResponse.json(
-                { error: "Failed to delete workshop.", details: error.message },
-                { status: 500 }
-            );
+            throw error;
         }
 
         if (!data) {
-            return NextResponse.json({ error: "Workshop not found." }, { status: 404 });
+            return jsonError("Workshop not found.", 404);
         }
 
         return NextResponse.json({ success: true });

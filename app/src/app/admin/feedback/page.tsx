@@ -50,6 +50,7 @@ export default function AdminFeedbackPage() {
     const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
     const [loadingFeedback, setLoadingFeedback] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [reloadKey, setReloadKey] = useState(0);
 
     const [searchInput, setSearchInput] = useState("");
     const [query, setQuery] = useState("");
@@ -87,9 +88,9 @@ export default function AdminFeedbackPage() {
                     }
                     setFeedback(Array.isArray(result.feedback) ? result.feedback : []);
                 }
-            } catch (fetchError) {
+            } catch {
                 if (!cancelled) {
-                    setError(toApiErrorMessage(fetchError, "Unable to load feedback."));
+                    setError("Unable to load feedback right now. Please try again.");
                 }
             } finally {
                 if (!cancelled) {
@@ -102,7 +103,7 @@ export default function AdminFeedbackPage() {
         return () => {
             cancelled = true;
         };
-    }, [session, page, query]);
+    }, [session, page, query, reloadKey]);
 
     const pageStats = useMemo(() => {
         const rated = feedback.filter((item) => typeof item.rating === "number");
@@ -210,6 +211,11 @@ export default function AdminFeedbackPage() {
         setPage(1);
     };
 
+    const handleRetry = () => {
+        setError(null);
+        setReloadKey((prev) => prev + 1);
+    };
+
     return (
         <AdminShell>
             <div className="mb-8">
@@ -256,7 +262,16 @@ export default function AdminFeedbackPage() {
 
             {!loadingFeedback && error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-inter mb-6">
-                    {error}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <span>{error}</span>
+                        <button
+                            type="button"
+                            onClick={handleRetry}
+                            className="inline-flex items-center justify-center rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                        >
+                            Try again
+                        </button>
+                    </div>
                 </div>
             )}
 

@@ -7,6 +7,8 @@ import { ArrowLeft, Loader2, Upload } from "lucide-react";
 import { categories } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import AdminShell from "@/components/admin/AdminShell";
+import { createAdminWorkshop, toApiErrorMessage, uploadMedia } from "@/lib/api-client";
+import { workshopCreateSchema } from "@/lib/validators";
 
 function toList(value: string) {
     return value
@@ -15,16 +17,48 @@ function toList(value: string) {
         .filter(Boolean);
 }
 
+type CreateWorkshopForm = {
+    title: string;
+    description: string;
+    category: string;
+    price: string;
+    location: string;
+    city: string;
+    duration: string;
+    date: string;
+    time: string;
+    maxSeats: string;
+    coverImage: string;
+    galleryImages: string;
+    videoUrl: string;
+    instagramLink: string;
+    youtubeLink: string;
+    websiteLink: string;
+    hostName: string;
+    hostBio: string;
+    hostExperience: string;
+    hostInstagram: string;
+    hostYoutube: string;
+    hostWebsite: string;
+    whatYouLearn: string;
+    materialsProvided: string;
+    badgeLabels: string;
+};
+
 export default function AdminCreateWorkshopPage() {
     const router = useRouter();
     const { session } = useAuth();
+    const categoryOptions = categories.filter((item) => item.id !== "trending");
     const [saving, setSaving] = useState(false);
     const [uploadingCover, setUploadingCover] = useState(false);
     const [uploadingGallery, setUploadingGallery] = useState(false);
     const [uploadingVideo, setUploadingVideo] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [fieldErrors, setFieldErrors] = useState<
+        Partial<Record<keyof CreateWorkshopForm, string>>
+    >({});
 
-    const [form, setForm] = useState({
+    const [form, setForm] = useState<CreateWorkshopForm>({
         title: "",
         description: "",
         category: "",
@@ -49,31 +83,45 @@ export default function AdminCreateWorkshopPage() {
         hostWebsite: "",
         whatYouLearn: "",
         materialsProvided: "",
+        badgeLabels: "",
     });
+    const [categorySelection, setCategorySelection] = useState("");
+    const [customCategory, setCustomCategory] = useState("");
 
-    const update = (field: keyof typeof form, value: string) => {
+    const update = (field: keyof CreateWorkshopForm, value: string) => {
         setForm((prev) => ({ ...prev, [field]: value }));
+        setFieldErrors((prev) => {
+            if (!prev[field]) return prev;
+            return { ...prev, [field]: undefined };
+        });
+    };
+
+    const renderFieldError = (field: keyof CreateWorkshopForm) =>
+        fieldErrors[field] ? (
+            <p className="mt-1 text-xs font-inter text-red-600">{fieldErrors[field]}</p>
+        ) : null;
+
+    const handleCategoryChange = (value: string) => {
+        setCategorySelection(value);
+        if (value === "__other__") {
+            update("category", customCategory);
+            return;
+        }
+        update("category", value);
+    };
+
+    const handleCustomCategoryChange = (value: string) => {
+        setCustomCategory(value);
+        if (categorySelection === "__other__") {
+            update("category", value);
+        }
     };
 
     const uploadOneFile = async (file: File) => {
         if (!session?.access_token) {
             throw new Error("Your session expired. Please log in again.");
         }
-
-        const formData = new FormData();
-        formData.append("file", file);
-
-        const response = await fetch("/api/upload", {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${session.access_token}`,
-            },
-            body: formData,
-        });
-        const result = await response.json();
-        if (!response.ok) {
-            throw new Error(result.error || "Upload failed.");
-        }
+        const result = await uploadMedia(session.access_token, file);
         return String(result.url || "");
     };
 
@@ -88,11 +136,7 @@ export default function AdminCreateWorkshopPage() {
             const url = await uploadOneFile(file);
             update("coverImage", url);
         } catch (uploadError) {
-            setError(
-                uploadError instanceof Error
-                    ? uploadError.message
-                    : "Unable to upload cover image."
-            );
+            setError(toApiErrorMessage(uploadError, "Unable to upload cover image."));
         } finally {
             setUploadingCover(false);
         }
@@ -110,11 +154,7 @@ export default function AdminCreateWorkshopPage() {
             const merged = Array.from(new Set([...toList(form.galleryImages), ...urls]));
             update("galleryImages", merged.join("\n"));
         } catch (uploadError) {
-            setError(
-                uploadError instanceof Error
-                    ? uploadError.message
-                    : "Unable to upload gallery images."
-            );
+            setError(toApiErrorMessage(uploadError, "Unable to upload gallery images."));
         } finally {
             setUploadingGallery(false);
         }
@@ -131,11 +171,7 @@ export default function AdminCreateWorkshopPage() {
             const url = await uploadOneFile(file);
             update("videoUrl", url);
         } catch (uploadError) {
-            setError(
-                uploadError instanceof Error
-                    ? uploadError.message
-                    : "Unable to upload video."
-            );
+            setError(toApiErrorMessage(uploadError, "Unable to upload video."));
         } finally {
             setUploadingVideo(false);
         }
@@ -147,65 +183,87 @@ export default function AdminCreateWorkshopPage() {
 
         const whatYouLearn = toList(form.whatYouLearn);
         const materialsProvided = toList(form.materialsProvided);
-        if (whatYouLearn.length === 0 || materialsProvided.length === 0) {
-            setError("Add at least one item in What You Learn and Materials Provided.");
+        const badgeLabels = toList(form.badgeLabels);
+
+        const payload = {
+            title: form.title.trim(),
+            description: form.description.trim(),
+            category: form.category.trim(),
+            price: Number(form.price),
+            location: form.location.trim(),
+            city: form.city.trim(),
+            duration: form.duration.trim(),
+            date: form.date.trim(),
+            time: form.time.trim(),
+            maxSeats: Number(form.maxSeats),
+            coverImage: form.coverImage.trim(),
+            galleryImages: toList(form.galleryImages),
+            videoUrl: form.videoUrl.trim(),
+            socialLinks: {
+                instagram: form.instagramLink.trim(),
+                youtube: form.youtubeLink.trim(),
+                website: form.websiteLink.trim(),
+            },
+            hostName: form.hostName.trim(),
+            hostBio: form.hostBio.trim(),
+            hostExperience: form.hostExperience.trim(),
+            hostSocialLinks: {
+                instagram: form.hostInstagram.trim(),
+                youtube: form.hostYoutube.trim(),
+                website: form.hostWebsite.trim(),
+            },
+            whatYouLearn,
+            materialsProvided,
+            badgeLabels,
+        };
+
+        const validation = workshopCreateSchema.safeParse(payload);
+        if (!validation.success) {
+            const nextFieldErrors: Partial<Record<keyof CreateWorkshopForm, string>> = {};
+            for (const issue of validation.error.issues) {
+                const [pathRoot, pathNested] = issue.path;
+                let field: keyof CreateWorkshopForm | null = null;
+
+                if (pathRoot === "socialLinks") {
+                    field =
+                        pathNested === "instagram"
+                            ? "instagramLink"
+                            : pathNested === "youtube"
+                              ? "youtubeLink"
+                              : pathNested === "website"
+                                ? "websiteLink"
+                                : null;
+                } else if (pathRoot === "hostSocialLinks") {
+                    field =
+                        pathNested === "instagram"
+                            ? "hostInstagram"
+                            : pathNested === "youtube"
+                              ? "hostYoutube"
+                              : pathNested === "website"
+                                ? "hostWebsite"
+                                : null;
+                } else if (typeof pathRoot === "string" && pathRoot in form) {
+                    field = pathRoot as keyof CreateWorkshopForm;
+                }
+
+                if (field && !nextFieldErrors[field]) {
+                    nextFieldErrors[field] = issue.message;
+                }
+            }
+
+            setFieldErrors(nextFieldErrors);
+            setError("Please fix the highlighted fields and try again.");
             return;
         }
 
         setSaving(true);
         setError(null);
+        setFieldErrors({});
         try {
-            const payload = {
-                title: form.title.trim(),
-                description: form.description.trim(),
-                category: form.category.trim(),
-                price: Number(form.price),
-                location: form.location.trim(),
-                city: form.city.trim(),
-                duration: form.duration.trim(),
-                date: form.date.trim(),
-                time: form.time.trim(),
-                maxSeats: Number(form.maxSeats),
-                coverImage: form.coverImage.trim(),
-                galleryImages: toList(form.galleryImages),
-                videoUrl: form.videoUrl.trim(),
-                socialLinks: {
-                    instagram: form.instagramLink.trim(),
-                    youtube: form.youtubeLink.trim(),
-                    website: form.websiteLink.trim(),
-                },
-                hostName: form.hostName.trim(),
-                hostBio: form.hostBio.trim(),
-                hostExperience: form.hostExperience.trim(),
-                hostSocialLinks: {
-                    instagram: form.hostInstagram.trim(),
-                    youtube: form.hostYoutube.trim(),
-                    website: form.hostWebsite.trim(),
-                },
-                whatYouLearn,
-                materialsProvided,
-            };
-
-            const response = await fetch("/api/admin/workshops", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${session.access_token}`,
-                },
-                body: JSON.stringify(payload),
-            });
-            const result = await response.json();
-            if (!response.ok) {
-                throw new Error(result.error || "Failed to create workshop.");
-            }
-
+            await createAdminWorkshop(session.access_token, validation.data);
             router.push("/admin/workshops");
         } catch (submitError) {
-            setError(
-                submitError instanceof Error
-                    ? submitError.message
-                    : "Unable to create workshop."
-            );
+            setError(toApiErrorMessage(submitError, "Unable to create workshop."));
         } finally {
             setSaving(false);
         }
@@ -225,8 +283,19 @@ export default function AdminCreateWorkshopPage() {
                 </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-soft p-6 space-y-5">
+            <form
+                onSubmit={handleSubmit}
+                className="bg-white rounded-2xl shadow-soft p-6 space-y-5"
+            >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2 border-b border-gray-100 pb-3">
+                        <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                            Basics
+                        </h2>
+                        <p className="mt-1 text-xs font-inter text-dark-muted">
+                            Core details used across explore listings.
+                        </p>
+                    </div>
                     <div className="md:col-span-2">
                         <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
                             Title
@@ -237,6 +306,7 @@ export default function AdminCreateWorkshopPage() {
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         />
+                        {renderFieldError("title")}
                     </div>
 
                     <div className="md:col-span-2">
@@ -250,6 +320,7 @@ export default function AdminCreateWorkshopPage() {
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         />
+                        {renderFieldError("description")}
                     </div>
 
                     <div>
@@ -257,20 +328,34 @@ export default function AdminCreateWorkshopPage() {
                             Category
                         </label>
                         <select
-                            value={form.category}
-                            onChange={(e) => update("category", e.target.value)}
+                            value={categorySelection}
+                            onChange={(e) => handleCategoryChange(e.target.value)}
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         >
                             <option value="">Select category</option>
-                            {categories
-                                .filter((item) => item.id !== "trending")
-                                .map((item) => (
-                                    <option key={item.id} value={item.label}>
-                                        {item.label}
-                                    </option>
-                                ))}
+                            {categoryOptions.map((item) => (
+                                <option key={item.id} value={item.label}>
+                                    {item.label}
+                                </option>
+                            ))}
+                            <option value="__other__">Other (type below)</option>
                         </select>
+                        {categorySelection === "__other__" && (
+                            <div className="mt-3">
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Custom Category
+                                </label>
+                                <input
+                                    value={customCategory}
+                                    onChange={(e) => handleCustomCategoryChange(e.target.value)}
+                                    placeholder="e.g. Calligraphy"
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    required
+                                />
+                            </div>
+                        )}
+                        {renderFieldError("category")}
                     </div>
 
                     <div>
@@ -284,6 +369,16 @@ export default function AdminCreateWorkshopPage() {
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         />
+                        {renderFieldError("price")}
+                    </div>
+
+                    <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
+                        <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                            Scheduling
+                        </h2>
+                        <p className="mt-1 text-xs font-inter text-dark-muted">
+                            Venue, date, timing and seat capacity.
+                        </p>
                     </div>
 
                     <div>
@@ -296,6 +391,7 @@ export default function AdminCreateWorkshopPage() {
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         />
+                        {renderFieldError("location")}
                     </div>
 
                     <div>
@@ -308,6 +404,7 @@ export default function AdminCreateWorkshopPage() {
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         />
+                        {renderFieldError("city")}
                     </div>
 
                     <div>
@@ -321,6 +418,7 @@ export default function AdminCreateWorkshopPage() {
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         />
+                        {renderFieldError("date")}
                     </div>
 
                     <div>
@@ -334,6 +432,7 @@ export default function AdminCreateWorkshopPage() {
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         />
+                        {renderFieldError("time")}
                     </div>
 
                     <div>
@@ -346,6 +445,7 @@ export default function AdminCreateWorkshopPage() {
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         />
+                        {renderFieldError("duration")}
                     </div>
 
                     <div>
@@ -359,6 +459,16 @@ export default function AdminCreateWorkshopPage() {
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         />
+                        {renderFieldError("maxSeats")}
+                    </div>
+
+                    <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
+                        <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                            Media
+                        </h2>
+                        <p className="mt-1 text-xs font-inter text-dark-muted">
+                            Cover, gallery and optional video.
+                        </p>
                     </div>
 
                     <div className="md:col-span-2">
@@ -366,12 +476,14 @@ export default function AdminCreateWorkshopPage() {
                             Cover Image URL
                         </label>
                         <input
-                            type="url"
+                            type="text"
+                            inputMode="url"
                             value={form.coverImage}
                             onChange={(e) => update("coverImage", e.target.value)}
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         />
+                        {renderFieldError("coverImage")}
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                             <label className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-inter font-semibold text-dark cursor-pointer hover:border-terracotta hover:text-terracotta transition-colors">
                                 {uploadingCover ? (
@@ -405,6 +517,7 @@ export default function AdminCreateWorkshopPage() {
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             placeholder={"https://.../image1.jpg\nhttps://.../image2.jpg"}
                         />
+                        {renderFieldError("galleryImages")}
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                             <label className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-inter font-semibold text-dark cursor-pointer hover:border-terracotta hover:text-terracotta transition-colors">
                                 {uploadingGallery ? (
@@ -433,12 +546,14 @@ export default function AdminCreateWorkshopPage() {
                             Video URL (optional)
                         </label>
                         <input
-                            type="url"
+                            type="text"
+                            inputMode="url"
                             value={form.videoUrl}
                             onChange={(e) => update("videoUrl", e.target.value)}
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             placeholder="https://youtube.com/... or Google Drive link"
                         />
+                        {renderFieldError("videoUrl")}
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                             <label className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-inter font-semibold text-dark cursor-pointer hover:border-terracotta hover:text-terracotta transition-colors">
                                 {uploadingVideo ? (
@@ -461,6 +576,15 @@ export default function AdminCreateWorkshopPage() {
                         </div>
                     </div>
 
+                    <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
+                        <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                            Host & Story
+                        </h2>
+                        <p className="mt-1 text-xs font-inter text-dark-muted">
+                            Profile copy shown in workshop detail pages.
+                        </p>
+                    </div>
+
                     <div>
                         <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
                             Host Name
@@ -471,6 +595,7 @@ export default function AdminCreateWorkshopPage() {
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         />
+                        {renderFieldError("hostName")}
                     </div>
 
                     <div>
@@ -482,6 +607,7 @@ export default function AdminCreateWorkshopPage() {
                             onChange={(e) => update("hostExperience", e.target.value)}
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                         />
+                        {renderFieldError("hostExperience")}
                     </div>
 
                     <div className="md:col-span-2">
@@ -495,6 +621,16 @@ export default function AdminCreateWorkshopPage() {
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         />
+                        {renderFieldError("hostBio")}
+                    </div>
+
+                    <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
+                        <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                            Curriculum
+                        </h2>
+                        <p className="mt-1 text-xs font-inter text-dark-muted">
+                            Teaching outcomes and included materials.
+                        </p>
                     </div>
 
                     <div className="md:col-span-2">
@@ -508,6 +644,7 @@ export default function AdminCreateWorkshopPage() {
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         />
+                        {renderFieldError("whatYouLearn")}
                     </div>
 
                     <div className="md:col-span-2">
@@ -521,12 +658,25 @@ export default function AdminCreateWorkshopPage() {
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         />
+                        {renderFieldError("materialsProvided")}
+                    </div>
+
+                    <div className="md:col-span-2">
+                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                            Badge Labels (newline or comma separated)
+                        </label>
+                        <textarea
+                            value={form.badgeLabels}
+                            onChange={(e) => update("badgeLabels", e.target.value)}
+                            rows={3}
+                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            placeholder={"Beginners welcome\nAll materials included\nPune · Offline workshop"}
+                        />
+                        {renderFieldError("badgeLabels")}
                     </div>
                 </div>
 
-                {error && (
-                    <p className="text-sm font-inter text-red-600">{error}</p>
-                )}
+                {error && <p className="text-sm font-inter text-red-600">{error}</p>}
 
                 <div className="flex gap-3">
                     <Link href="/admin/workshops" className="btn-secondary">

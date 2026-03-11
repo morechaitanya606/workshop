@@ -31,15 +31,14 @@ export default function MobileNav() {
                         <Link
                             key={item.href}
                             href={item.href}
-                            className={`flex flex-col items-center gap-1 py-1.5 rounded-xl transition-colors duration-200 ${isActive ? "text-terracotta" : "text-dark-muted"
-                                }`}
+                            className={`flex flex-col items-center gap-1 py-1.5 rounded-xl transition-colors duration-200 ${
+                                isActive ? "text-terracotta" : "text-dark-muted"
+                            }`}
                         >
                             <Icon
                                 className={`w-5 h-5 ${isActive ? "stroke-[2.5px]" : "stroke-[1.5px]"}`}
                             />
-                            <span className="text-[10px] font-inter font-medium">
-                                {item.label}
-                            </span>
+                            <span className="text-[10px] font-inter font-medium">{item.label}</span>
                         </Link>
                     );
                 })}

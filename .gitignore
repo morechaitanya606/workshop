@@ -12,6 +12,7 @@ node_modules
 /.next/
 /out/
 app/.next/
+app/.next-dev/
 app/out/
 
 # production
@@ -28,11 +29,24 @@ yarn-error.log*
 .pnpm-debug.log*
 .husky/_
 
+
 # local env files
 .env*.local
 
 # vercel
 .vercel
+
+# logs
+*.log
+
+# temp files
+*.tmp
+
+# test artifacts
+test-results/
+
+# storybook output
+storybook-static/
 
 # typescript
 *.tsbuildinfo
