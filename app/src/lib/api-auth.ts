@@ -223,12 +223,19 @@ export async function ensureUserProfile(user: User) {
     if (!isSupabaseServiceConfigured) return;
 
     try {
+        const metadata = (user.user_metadata || {}) as Record<string, unknown>;
+        const dateOfBirth =
+            typeof metadata.date_of_birth === "string" ? metadata.date_of_birth : null;
+        const phoneNumber =
+            typeof metadata.phone_number === "string" ? metadata.phone_number : user.phone || null;
         const serviceClient = createSupabaseServiceClient();
         await serviceClient.from("profiles").upsert(
             {
                 id: user.id,
                 full_name: user.user_metadata?.full_name || null,
                 avatar_url: user.user_metadata?.avatar_url || null,
+                date_of_birth: dateOfBirth,
+                phone_number: phoneNumber,
             },
             { onConflict: "id" }
         );

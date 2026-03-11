@@ -81,9 +81,19 @@ export default function WorkshopCard({
         ? "Sold out"
         : `${workshop.seatsRemaining} seat${workshop.seatsRemaining === 1 ? "" : "s"} available`;
 
-    const isBeginnerFriendly = true;
     const includesMaterials = workshop.materialsProvided.length > 0;
     const isGreatForGroups = workshop.maxSeats >= 6;
+    const badgeLabels = useMemo(() => {
+        const custom = (workshop.badgeLabels || [])
+            .map((label) => String(label).trim())
+            .filter(Boolean);
+        if (custom.length > 0) return custom.slice(0, 3);
+
+        const fallback: string[] = ["Beginners welcome"];
+        if (includesMaterials) fallback.push("All materials included");
+        if (isGreatForGroups) fallback.push("Great for groups");
+        return fallback.slice(0, 3);
+    }, [includesMaterials, isGreatForGroups, workshop.badgeLabels]);
 
     useEffect(() => {
         if (!accessToken) {
@@ -194,7 +204,7 @@ export default function WorkshopCard({
                                     alt={`${workshop.category} workshop: ${workshop.title}`}
                                     fill
                                     sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                                    className={`object-cover transition-opacity duration-500 ease-in-out image-hover-tilt ${
+                                    className={`object-cover transition-opacity duration-500 ease-in-out image-hover-pan ${
                                         isActive ? "opacity-100" : "opacity-0"
                                     }`}
                                     loading={isHovered ? "eager" : "lazy"}
@@ -248,23 +258,18 @@ export default function WorkshopCard({
                         </h3>
 
                         {/* Suitability badges */}
-                        <div className="flex flex-wrap gap-1.5 mb-3">
-                            {isBeginnerFriendly && (
-                                <span className="inline-flex items-center rounded-full bg-cream-100 px-2 py-[3px] text-[10px] font-inter font-semibold uppercase tracking-wide text-dark-muted">
-                                    Beginners welcome
-                                </span>
-                            )}
-                            {includesMaterials && (
-                                <span className="inline-flex items-center rounded-full bg-cream-100 px-2 py-[3px] text-[10px] font-inter font-semibold uppercase tracking-wide text-dark-muted">
-                                    All materials included
-                                </span>
-                            )}
-                            {isGreatForGroups && (
-                                <span className="inline-flex items-center rounded-full bg-cream-100 px-2 py-[3px] text-[10px] font-inter font-semibold uppercase tracking-wide text-dark-muted">
-                                    Great for groups
-                                </span>
-                            )}
-                        </div>
+                        {badgeLabels.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mb-3">
+                                {badgeLabels.map((label) => (
+                                    <span
+                                        key={label}
+                                        className="inline-flex items-center rounded-full bg-cream-100 px-2 py-[3px] text-[10px] font-inter font-semibold uppercase tracking-wide text-dark-muted"
+                                    >
+                                        {label}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
 
                         {/* Location */}
                         {variant === "default" && (

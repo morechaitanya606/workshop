@@ -29,7 +29,7 @@ export function BookingConfirmationEmail({
         <EmailLayout previewText={previewText}>
             <Text style={greeting}>Hi {firstName},</Text>
             <Text style={paragraph}>
-                Thanks for booking with OnlyWorkshop! You are confirmed for{" "}
+                Thanks for booking with Only Workshops! You are confirmed for{" "}
                 <strong>{workshopTitle}</strong>.
             </Text>
 

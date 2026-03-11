@@ -40,10 +40,10 @@ function rankSimilarWorkshops(workshops: Workshop[], currentWorkshop: Workshop) 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
     const workshop = await getWorkshop(params.id);
     if (!workshop) {
-        return { title: "Workshop Not Found | Only Workshop" };
+        return { title: "Workshop Not Found | Only Workshops" };
     }
     return {
-        title: `${workshop.title} | Only Workshop`,
+        title: `${workshop.title} | Only Workshops`,
         description: workshop.description.substring(0, 160),
         openGraph: {
             title: workshop.title,
@@ -110,7 +110,7 @@ export default async function WorkshopDetailPage({ params }: { params: { id: str
             <main className="min-h-screen bg-cream">
                 <Navbar />
                 <div className="pt-32 pb-20 section-padding text-center">
-                    <h1 className="heading-lg mb-3">Workshop not found</h1>
+                    <h1 className="heading-lg font-inter mb-3">Workshop not found</h1>
                     <p className="text-body text-dark-muted mb-8">
                         This workshop may have been removed or the link is incorrect.
                     </p>

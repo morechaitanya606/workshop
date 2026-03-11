@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { BellRing, ChevronRight } from "lucide-react";
 import type { Workshop } from "@/lib/data";
@@ -26,6 +27,7 @@ export default function PastEventHighlight({
     notifyMessage: string | null;
     notifyMessageTone: "success" | "error";
 }) {
+    const router = useRouter();
     const pastEventMotionProps = useMotionProps(shouldReduceMotion, cardReveal, standardTransition);
 
     return (
@@ -39,7 +41,8 @@ export default function PastEventHighlight({
             />
             <motion.div
                 {...pastEventMotionProps}
-                className="bg-white border border-gray-100 rounded-3xl shadow-soft overflow-hidden hover-lift"
+                className="bg-white border border-gray-100 rounded-3xl shadow-soft overflow-hidden hover-lift cursor-pointer"
+                onClick={() => router.push(`/workshop/${pastWorkshop.id}`)}
             >
                 <div className="grid grid-cols-1 lg:grid-cols-[360px,1fr]">
                     <div className="relative min-h-[260px] lg:min-h-full">
@@ -55,7 +58,7 @@ export default function PastEventHighlight({
                         <div className="inline-flex items-center gap-2 bg-terracotta/10 text-terracotta text-xs font-inter font-bold uppercase tracking-wider px-3 py-1.5 rounded-full mb-4">
                             Past Event
                         </div>
-                        <h3 className="font-playfair text-2xl font-bold text-dark mb-2">
+                        <h3 className="font-inter text-2xl font-bold text-dark mb-2">
                             {pastWorkshop.title}
                         </h3>
                         <p className="text-sm font-inter text-dark-muted mb-4">
@@ -82,7 +85,10 @@ export default function PastEventHighlight({
                         <div className="flex flex-wrap gap-3">
                             <button
                                 type="button"
-                                onClick={() => onNotify("similar")}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    onNotify("similar");
+                                }}
                                 disabled={pastNotifyLoading !== null}
                                 className={`inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-inter font-semibold transition-colors ${
                                     notifyState.similar
@@ -99,7 +105,10 @@ export default function PastEventHighlight({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => onNotify("creator")}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    onNotify("creator");
+                                }}
                                 disabled={pastNotifyLoading !== null}
                                 className={`inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-inter font-semibold transition-colors ${
                                     notifyState.creator
@@ -116,6 +125,7 @@ export default function PastEventHighlight({
                             </button>
                             <Link
                                 href={`/workshop/${pastWorkshop.id}`}
+                                onClick={(event) => event.stopPropagation()}
                                 className="inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-inter font-semibold bg-white text-dark-secondary border border-gray-200 hover:border-terracotta hover:text-terracotta transition-colors"
                             >
                                 View Event Page

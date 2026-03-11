@@ -362,7 +362,7 @@ function BookingContent() {
                 key: order.keyId,
                 amount: order.amount,
                 currency: order.currency,
-                name: order.name || "Only Workshop",
+                name: order.name || "Only Workshops",
                 description: order.description || workshop.title,
                 order_id: order.id,
                 prefill: order.prefill,

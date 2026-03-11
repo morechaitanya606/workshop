@@ -76,14 +76,14 @@ export default function Navbar() {
                             <div className="relative w-9 h-9 rounded-lg overflow-hidden transition-transform duration-300 group-hover:scale-110">
                                 <Image
                                     src="/images/logo-black.jpeg"
-                                    alt="Only Workshop"
+                                    alt="Only Workshops"
                                     fill
                                     sizes="36px"
                                     className="object-cover"
                                 />
                             </div>
                             <span className="font-playfair text-xl text-dark hidden sm:block">
-                                Only Workshop
+                                Only Workshops
                             </span>
                         </Link>
 

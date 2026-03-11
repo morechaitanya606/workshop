@@ -173,6 +173,18 @@ export default function WorkshopClient({
         : isSoldOut
           ? "Sold out - all spots are taken"
           : `${availableSeatCount} seat${availableSeatCount === 1 ? "" : "s"} available`;
+    const fallbackBadgeLabels = [
+        "Beginners welcome",
+        ...(workshop.materialsProvided.length > 0 ? ["All materials included"] : []),
+        workshop.city ? `${workshop.city} · Offline workshop` : "Offline workshop",
+    ];
+    const badgeLabels = (workshop.badgeLabels && workshop.badgeLabels.length > 0
+        ? workshop.badgeLabels
+        : fallbackBadgeLabels
+    )
+        .map((label) => String(label).trim())
+        .filter(Boolean)
+        .slice(0, 3);
     const suggestedWorkshops = similarWorkshops
         .filter(
             (item) =>
@@ -838,7 +850,7 @@ export default function WorkshopClient({
                                         Past Event
                                     </div>
                                 )}
-                                <h1 className="heading-lg mb-3">{workshop.title}</h1>
+                                <h1 className="heading-lg font-inter mb-3">{workshop.title}</h1>
                                 <div className="flex flex-wrap items-center gap-4 text-sm font-inter text-dark-secondary">
                                     <div className="flex items-center gap-1.5">
                                         <Star className="w-4 h-4 text-terracotta fill-terracotta" />
@@ -870,17 +882,18 @@ export default function WorkshopClient({
                                     </span>
                                 </div>
                                 {/* Quick suitability strip */}
-                                <div className="mt-4 flex flex-wrap gap-2 text-xs font-inter text-dark-muted">
-                                    <span className="inline-flex items-center rounded-full bg-cream-100 px-2.5 py-1 font-semibold uppercase tracking-wider">
-                                        Beginners welcome
-                                    </span>
-                                    <span className="inline-flex items-center rounded-full bg-cream-100 px-2.5 py-1 font-semibold uppercase tracking-wider">
-                                        All materials included
-                                    </span>
-                                    <span className="inline-flex items-center rounded-full bg-cream-100 px-2.5 py-1 font-semibold uppercase tracking-wider">
-                                        Pune · Offline workshop
-                                    </span>
-                                </div>
+{badgeLabels.length > 0 && (
+    <div className="mt-4 flex flex-wrap gap-2 text-xs font-inter text-dark-muted">
+        {badgeLabels.map((label) => (
+            <span
+                key={label}
+                className="inline-flex items-center rounded-full bg-cream-100 px-2.5 py-1 font-semibold uppercase tracking-wider"
+            >
+                {label}
+            </span>
+        ))}
+    </div>
+)}
                                 {workshop.socialLinks && (
                                     <div className="flex items-center gap-3 mt-4">
                                         {workshop.socialLinks.instagram && (
@@ -1005,7 +1018,7 @@ export default function WorkshopClient({
                                     className="card-section"
                                 >
                                     <span className="eyebrow-label">Snapshot</span>
-                                    <h2 className="heading-sm mb-4">What to expect</h2>
+                                    <h2 className="heading-sm font-inter mb-4">What to expect</h2>
                                     <div className="text-sm font-inter text-dark-secondary space-y-1.5">
                                         <p>
                                             No prior experience needed – this workshop is designed
@@ -1030,7 +1043,7 @@ export default function WorkshopClient({
                                     className="card-section"
                                 >
                                     <span className="eyebrow-label">About</span>
-                                    <h2 className="heading-sm mb-4">About this experience</h2>
+                                    <h2 className="heading-sm font-inter mb-4">About this experience</h2>
                                     <div className="text-body whitespace-pre-line">
                                         {workshop.description}
                                     </div>
@@ -1044,7 +1057,7 @@ export default function WorkshopClient({
                                     className="card-section"
                                 >
                                     <span className="eyebrow-label">Learn</span>
-                                    <h2 className="heading-sm mb-4">What you will learn</h2>
+                                    <h2 className="heading-sm font-inter mb-4">What you will learn</h2>
                                     <ul className="space-y-3">
                                         {workshop.whatYouLearn.map((item, i) => (
                                             <li
@@ -1066,7 +1079,7 @@ export default function WorkshopClient({
                                     className="card-section"
                                 >
                                     <span className="eyebrow-label">Included</span>
-                                    <h2 className="heading-sm mb-4">{"What's included"}</h2>
+                                    <h2 className="heading-sm font-inter mb-4">{"What's included"}</h2>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         {workshop.materialsProvided.map((item, i) => (
                                             <div
@@ -1092,7 +1105,7 @@ export default function WorkshopClient({
                                     className="card-section"
                                 >
                                     <span className="eyebrow-label">Location</span>
-                                    <h2 className="heading-sm mb-4">{"Where you'll be"}</h2>
+                                    <h2 className="heading-sm font-inter mb-4">{"Where you'll be"}</h2>
                                     <div className="relative overflow-hidden rounded-2xl border border-clay/30 bg-white shadow-soft">
                                         <iframe
                                             title={`Map for ${locationQuery}`}
@@ -1133,7 +1146,7 @@ export default function WorkshopClient({
                                     className="card-section"
                                 >
                                     <span className="eyebrow-label">Reviews</span>
-                                    <h2 className="heading-sm mb-4">Workshop feedback</h2>
+                                    <h2 className="heading-sm font-inter mb-4">Workshop feedback</h2>
                                     {publicFeedbackLoading ? (
                                         <p className="text-sm font-inter text-dark-muted">
                                             Loading feedback...
@@ -1681,7 +1694,7 @@ export default function WorkshopClient({
                         }
                         className="rounded-2xl border border-red-200 bg-red-50 p-6"
                     >
-                        <h2 className="heading-sm text-red-800">
+                        <h2 className="heading-sm font-inter text-red-800">
                             All spots are taken for this workshop
                         </h2>
                         <p className="mt-2 text-sm font-inter text-red-700">
@@ -2025,3 +2038,5 @@ export default function WorkshopClient({
         </main>
     );
 }
+
+

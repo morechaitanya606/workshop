@@ -6,7 +6,7 @@ import { FeedbackRequestEmail } from "@/emails/FeedbackRequest";
 import { createSupabaseServiceClient } from "./supabase-server";
 
 const resend = new Resend(process.env.RESEND_API_KEY || "re_dummy");
-const FROM_EMAIL = "OnlyWorkshop <no-reply@updates.onlyworkshop.com>"; // Replace with verified domain
+const FROM_EMAIL = "Only Workshops <no-reply@updates.onlyworkshop.com>"; // Replace with verified domain
 
 interface SendEmailParams {
     to: string;

@@ -105,6 +105,8 @@ export default function ProfilePage() {
     const [uploading, setUploading] = useState(false);
     const [profileName, setProfileName] = useState("");
     const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
+    const [profileDob, setProfileDob] = useState("");
+    const [profilePhone, setProfilePhone] = useState("");
     const [profileLoading, setProfileLoading] = useState(false);
     const [profileSaving, setProfileSaving] = useState(false);
     const [profileMessage, setProfileMessage] = useState<string | null>(null);
@@ -132,6 +134,8 @@ export default function ProfilePage() {
                 const fallbackName = String(user?.user_metadata?.full_name || "").trim();
                 setProfileName(result.profile.fullName || fallbackName);
                 setProfileAvatar(result.profile.avatarUrl || null);
+                setProfileDob(result.profile.dateOfBirth || "");
+                setProfilePhone(result.profile.phoneNumber || "");
             })
             .catch((error) => {
                 if (!active) return;
@@ -409,8 +413,14 @@ export default function ProfilePage() {
     const handleSaveProfile = async () => {
         if (!session?.access_token) return;
         const trimmedName = profileName.trim();
+        const trimmedDob = profileDob.trim();
+        const trimmedPhone = profilePhone.trim();
         if (trimmedName.length < 2) {
             setProfileError("Please enter a username with at least 2 characters.");
+            return;
+        }
+        if (trimmedPhone && trimmedPhone.length < 10) {
+            setProfileError("Please enter a valid phone number with at least 10 digits.");
             return;
         }
 
@@ -421,15 +431,21 @@ export default function ProfilePage() {
             const result = await updateProfile(session.access_token, {
                 fullName: trimmedName,
                 avatarUrl: profileAvatar || "",
+                dateOfBirth: trimmedDob,
+                phoneNumber: trimmedPhone,
             });
             setProfileName(result.profile.fullName || trimmedName);
             setProfileAvatar(result.profile.avatarUrl || profileAvatar || null);
+            setProfileDob(result.profile.dateOfBirth || trimmedDob);
+            setProfilePhone(result.profile.phoneNumber || trimmedPhone);
             setProfileMessage("Profile updated.");
             if (isSupabaseConfigured) {
                 await supabase.auth.updateUser({
                     data: {
                         full_name: trimmedName,
                         avatar_url: profileAvatar || null,
+                        date_of_birth: trimmedDob || null,
+                        phone_number: trimmedPhone || null,
                     },
                 });
             }
@@ -910,6 +926,41 @@ export default function ProfilePage() {
                                                 <p className="text-xs text-dark/50 mt-2">
                                                     This name appears on your public workshop
                                                     reviews.
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-dark/70 mb-2">
+                                                    Date of Birth
+                                                </label>
+                                                <input
+                                                    type="date"
+                                                    value={profileDob}
+                                                    onChange={(event) =>
+                                                        setProfileDob(event.target.value)
+                                                    }
+                                                    className="w-full max-w-md bg-cream-50 border border-dark/10 rounded-xl px-4 py-3 text-dark"
+                                                    disabled={profileLoading}
+                                                />
+                                                <p className="text-xs text-dark/50 mt-2">
+                                                    We use this for age-appropriate recommendations.
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-dark/70 mb-2">
+                                                    Phone Number
+                                                </label>
+                                                <input
+                                                    type="tel"
+                                                    value={profilePhone}
+                                                    onChange={(event) =>
+                                                        setProfilePhone(event.target.value)
+                                                    }
+                                                    placeholder="Enter your phone number"
+                                                    className="w-full max-w-md bg-cream-50 border border-dark/10 rounded-xl px-4 py-3 text-dark"
+                                                    disabled={profileLoading}
+                                                />
+                                                <p className="text-xs text-dark/50 mt-2">
+                                                    We'll only use this for important updates.
                                                 </p>
                                             </div>
                                             <div>

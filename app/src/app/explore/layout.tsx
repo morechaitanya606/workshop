@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-    title: "Explore Workshops | Only Workshop",
+    title: "Explore Workshops | Only Workshops",
     description:
         "Browse and filter creative workshops happening in your city. Pottery, painting, cooking, music and more.",
     openGraph: {
-        title: "Explore Workshops | Only Workshop",
+        title: "Explore Workshops | Only Workshops",
         description:
             "Browse and filter creative workshops happening in your city.",
     },

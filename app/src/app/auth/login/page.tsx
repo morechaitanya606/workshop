@@ -84,13 +84,13 @@ function LoginContent() {
                         <div className="relative w-10 h-10 rounded-xl overflow-hidden">
                             <Image
                                 src="/images/logo-black.jpeg"
-                                alt="Only Workshop"
+                                alt="Only Workshops"
                                 fill
                                 className="object-cover"
                             />
                         </div>
                         <span className="font-playfair text-2xl font-bold text-dark">
-                            Only Workshop
+                            Only Workshops
                         </span>
                     </Link>
 

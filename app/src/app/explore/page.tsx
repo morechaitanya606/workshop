@@ -4,7 +4,7 @@ import { loadExploreWorkshops } from "@/lib/workshop-page-data";
 import ExploreClient from "./ExploreClient";
 
 export const metadata = {
-    title: "Explore Workshops | Only Workshop",
+    title: "Explore Workshops | Only Workshops",
     description: "Find your next creative adventure.",
 };
 

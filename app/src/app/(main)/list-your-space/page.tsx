@@ -135,7 +135,7 @@ export default function ListYourSpacePage() {
                     </span>
                 </h1>
                 <p className="max-w-2xl mx-auto text-lg sm:text-xl font-inter text-dark-muted mb-10 text-balance leading-relaxed">
-                    Partner with Only Workshop to bring vibrant, hands-on experiences to your venue.
+                    Partner with Only Workshops to bring vibrant, hands-on experiences to your venue.
                     Monetize your down-time and introduce your brand to a passionate local
                     community.
                 </p>

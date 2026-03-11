@@ -42,11 +42,13 @@ type CreateWorkshopForm = {
     hostWebsite: string;
     whatYouLearn: string;
     materialsProvided: string;
+    badgeLabels: string;
 };
 
 export default function AdminCreateWorkshopPage() {
     const router = useRouter();
     const { session } = useAuth();
+    const categoryOptions = categories.filter((item) => item.id !== "trending");
     const [saving, setSaving] = useState(false);
     const [uploadingCover, setUploadingCover] = useState(false);
     const [uploadingGallery, setUploadingGallery] = useState(false);
@@ -81,7 +83,10 @@ export default function AdminCreateWorkshopPage() {
         hostWebsite: "",
         whatYouLearn: "",
         materialsProvided: "",
+        badgeLabels: "",
     });
+    const [categorySelection, setCategorySelection] = useState("");
+    const [customCategory, setCustomCategory] = useState("");
 
     const update = (field: keyof CreateWorkshopForm, value: string) => {
         setForm((prev) => ({ ...prev, [field]: value }));
@@ -95,6 +100,22 @@ export default function AdminCreateWorkshopPage() {
         fieldErrors[field] ? (
             <p className="mt-1 text-xs font-inter text-red-600">{fieldErrors[field]}</p>
         ) : null;
+
+    const handleCategoryChange = (value: string) => {
+        setCategorySelection(value);
+        if (value === "__other__") {
+            update("category", customCategory);
+            return;
+        }
+        update("category", value);
+    };
+
+    const handleCustomCategoryChange = (value: string) => {
+        setCustomCategory(value);
+        if (categorySelection === "__other__") {
+            update("category", value);
+        }
+    };
 
     const uploadOneFile = async (file: File) => {
         if (!session?.access_token) {
@@ -162,6 +183,7 @@ export default function AdminCreateWorkshopPage() {
 
         const whatYouLearn = toList(form.whatYouLearn);
         const materialsProvided = toList(form.materialsProvided);
+        const badgeLabels = toList(form.badgeLabels);
 
         const payload = {
             title: form.title.trim(),
@@ -192,6 +214,7 @@ export default function AdminCreateWorkshopPage() {
             },
             whatYouLearn,
             materialsProvided,
+            badgeLabels,
         };
 
         const validation = workshopCreateSchema.safeParse(payload);
@@ -305,20 +328,33 @@ export default function AdminCreateWorkshopPage() {
                             Category
                         </label>
                         <select
-                            value={form.category}
-                            onChange={(e) => update("category", e.target.value)}
+                            value={categorySelection}
+                            onChange={(e) => handleCategoryChange(e.target.value)}
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             required
                         >
                             <option value="">Select category</option>
-                            {categories
-                                .filter((item) => item.id !== "trending")
-                                .map((item) => (
-                                    <option key={item.id} value={item.label}>
-                                        {item.label}
-                                    </option>
-                                ))}
+                            {categoryOptions.map((item) => (
+                                <option key={item.id} value={item.label}>
+                                    {item.label}
+                                </option>
+                            ))}
+                            <option value="__other__">Other (type below)</option>
                         </select>
+                        {categorySelection === "__other__" && (
+                            <div className="mt-3">
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Custom Category
+                                </label>
+                                <input
+                                    value={customCategory}
+                                    onChange={(e) => handleCustomCategoryChange(e.target.value)}
+                                    placeholder="e.g. Calligraphy"
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    required
+                                />
+                            </div>
+                        )}
                         {renderFieldError("category")}
                     </div>
 
@@ -623,6 +659,20 @@ export default function AdminCreateWorkshopPage() {
                             required
                         />
                         {renderFieldError("materialsProvided")}
+                    </div>
+
+                    <div className="md:col-span-2">
+                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                            Badge Labels (newline or comma separated)
+                        </label>
+                        <textarea
+                            value={form.badgeLabels}
+                            onChange={(e) => update("badgeLabels", e.target.value)}
+                            rows={3}
+                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            placeholder={"Beginners welcome\nAll materials included\nPune · Offline workshop"}
+                        />
+                        {renderFieldError("badgeLabels")}
                     </div>
                 </div>
 

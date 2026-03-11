@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-    title: "Book a Workshop | Only Workshop",
+    title: "Book a Workshop | Only Workshops",
     description:
         "Complete your booking for a creative workshop experience. Secure checkout with Razorpay.",
     robots: { index: false, follow: false },

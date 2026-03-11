@@ -20,6 +20,8 @@ import type { Workshop } from "@/lib/data";
 import { toApiErrorMessage, updateWorkshopNotifications } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 
+const OTHER_CATEGORY_VALUE = "__other__";
+
 export default function HomePageClient({
     initialWorkshops,
     source,
@@ -49,8 +51,11 @@ export default function HomePageClient({
     const today = new Date().toISOString().slice(0, 10);
     const selectedCategoryLabel = useMemo(() => {
         const matched = categories.find((item) => item.id === selectedCategory);
-        if (!matched || matched.id === "trending") return "";
-        return matched.label;
+        if (matched) {
+            return matched.id === "trending" ? "" : matched.label;
+        }
+        if (!selectedCategory || selectedCategory === OTHER_CATEGORY_VALUE) return "";
+        return selectedCategory;
     }, [selectedCategory]);
 
     const upcomingWorkshops = allWorkshops.filter((workshop) => workshop.date >= today);
@@ -76,8 +81,8 @@ export default function HomePageClient({
     const newWorkshops = categoryWorkshops.slice(4, 6);
     const upcomingGridClassName =
         newWorkshops.length <= 2
-            ? "grid grid-flow-col auto-cols-[minmax(240px,280px)] justify-center gap-4 sm:gap-6"
-            : "grid grid-flow-col auto-cols-[minmax(240px,280px)] gap-4 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide snap-x snap-mandatory";
+            ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(260px,320px))] justify-center gap-4 sm:gap-6"
+            : "grid grid-flow-col auto-cols-[minmax(220px,280px)] sm:auto-cols-[minmax(240px,280px)] gap-4 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide snap-x snap-mandatory";
     const pastWorkshop = allWorkshops
         .filter((workshop) => workshop.date < today)
         .sort((a, b) => b.date.localeCompare(a.date))
@@ -154,7 +159,7 @@ export default function HomePageClient({
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-clay/40 bg-white shadow-soft px-4 py-4 sm:px-6 sm:py-5">
                         <div className="flex-1 text-sm font-inter text-dark-secondary">
                             <p className="font-semibold text-dark mb-1">
-                                New here? How Only Workshop works:
+                                New here? How Only Workshops works:
                             </p>
                             <p>
                                 1) Pick a weekend workshop · 2) Reserve your seats · 3) Pay securely
@@ -195,6 +200,26 @@ export default function HomePageClient({
                 onCategoryChange={setSelectedCategory}
             />
 
+            <section className="section-padding mt-24 sm:mt-16">
+                <div className="bg-white rounded-3xl shadow-card border border-clay/30 p-6 md:p-8">
+                    <WorkshopGridSection
+                        title="This weekend"
+                        eyebrow="This weekend"
+                        sectionClassName="mt-0"
+                        gridClassName={upcomingGridClassName}
+                        cardWrapperClassName={newWorkshops.length <= 2 ? undefined : "snap-start"}
+                        gridKeyPrefix="upcoming"
+                        selectedCategory={selectedCategory}
+                        shouldReduceMotion={shouldReduceMotion}
+                        workshops={newWorkshops}
+                        emptyTitle="No additional upcoming workshops"
+                        emptyDescription="We could not find more upcoming events for this category. Try another category or browse all workshops."
+                        selectedCategoryLabel={selectedCategoryLabel}
+                        onTryAnotherCategory={() => setSelectedCategory("trending")}
+                    />
+                </div>
+            </section>
+
             <WorkshopGridSection
                 title={trendingTitle}
                 eyebrow="Trending"
@@ -210,26 +235,6 @@ export default function HomePageClient({
                 selectedCategoryLabel={selectedCategoryLabel}
                 onTryAnotherCategory={() => setSelectedCategory("trending")}
             />
-
-            <section className="section-padding mt-24 sm:mt-16">
-                <div className="bg-white rounded-3xl shadow-card border border-clay/30 p-6 md:p-8">
-                    <WorkshopGridSection
-                        title="Upcoming Workshops"
-                        eyebrow="Upcoming"
-                        sectionClassName="mt-0"
-                        gridClassName={upcomingGridClassName}
-                        cardWrapperClassName={newWorkshops.length <= 2 ? undefined : "snap-start"}
-                        gridKeyPrefix="upcoming"
-                        selectedCategory={selectedCategory}
-                        shouldReduceMotion={shouldReduceMotion}
-                        workshops={newWorkshops}
-                        emptyTitle="No additional upcoming workshops"
-                        emptyDescription="We could not find more upcoming events for this category. Try another category or browse all workshops."
-                        selectedCategoryLabel={selectedCategoryLabel}
-                        onTryAnotherCategory={() => setSelectedCategory("trending")}
-                    />
-                </div>
-            </section>
 
             {pastWorkshop && (
                 <PastEventHighlight

@@ -20,7 +20,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-    title: "Only Workshop | Discover Creative Workshops Near You",
+    title: "Only Workshops | Discover Creative Workshops Near You",
     description:
         "Book curated creative workshops and experiences happening in your city. Pottery, painting, cooking, and more — A Better Weekend Awaits.",
     keywords: [
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
         "craft workshops",
     ],
     openGraph: {
-        title: "Only Workshop | A Better Weekend Awaits",
+        title: "Only Workshops | A Better Weekend Awaits",
         description: "Discover creative workshops and experiences happening in your city.",
         type: "website",
     },

@@ -36,7 +36,7 @@ export function FeedbackRequestEmail({
                 </Button>
             </div>
 
-            <Text style={paragraph}>Thanks for being part of the OnlyWorkshop community!</Text>
+            <Text style={paragraph}>Thanks for being part of the Only Workshops community!</Text>
         </EmailLayout>
     );
 }

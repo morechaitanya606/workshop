@@ -78,6 +78,7 @@ export interface Workshop {
     };
     whatYouLearn: string[];
     materialsProvided: string[];
+    badgeLabels?: string[];
     feedbackHighlight?: string;
     feedbackAuthor?: string;
     isNew?: boolean;

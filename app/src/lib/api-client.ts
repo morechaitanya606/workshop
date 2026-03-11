@@ -287,6 +287,8 @@ export type ProfileResponse = {
     profile: {
         fullName: string | null;
         avatarUrl: string | null;
+        dateOfBirth: string | null;
+        phoneNumber: string | null;
     };
 };
 
@@ -302,6 +304,8 @@ export function updateProfile(
     payload: {
         fullName?: string;
         avatarUrl?: string;
+        dateOfBirth?: string;
+        phoneNumber?: string;
     }
 ) {
     return apiRequest<ProfileResponse>("/api/profile", {

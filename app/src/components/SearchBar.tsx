@@ -7,6 +7,8 @@ import { Search, Calendar, MapPin, ArrowRight } from "lucide-react";
 import { categories } from "@/lib/data";
 import { fadeInUp, standardTransition, useMotionProps } from "@/lib/motion-presets";
 
+const OTHER_CATEGORY_VALUE = "__other__";
+
 interface SearchBarProps {
     selectedCategoryId?: string;
 }
@@ -20,8 +22,11 @@ export default function SearchBar({ selectedCategoryId = "trending" }: SearchBar
 
     const selectedCategory = useMemo(() => {
         const matched = categories.find((item) => item.id === selectedCategoryId);
-        if (!matched || matched.id === "trending") return "";
-        return matched.label;
+        if (matched) {
+            return matched.id === "trending" ? "" : matched.label;
+        }
+        if (!selectedCategoryId || selectedCategoryId === OTHER_CATEGORY_VALUE) return "";
+        return selectedCategoryId;
     }, [selectedCategoryId]);
 
     const handleSearch = () => {

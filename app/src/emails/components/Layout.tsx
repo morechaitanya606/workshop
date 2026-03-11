@@ -30,7 +30,7 @@ export function EmailLayout({ previewText, children }: LayoutProps) {
                     <Section style={header}>
                         <Link href={baseUrl}>
                             {/* Assuming a basic text logo for now, or you can use an actual image */}
-                            <Heading style={logoText}>OnlyWorkshop</Heading>
+                            <Heading style={logoText}>Only Workshops</Heading>
                         </Link>
                     </Section>
 
@@ -39,7 +39,7 @@ export function EmailLayout({ previewText, children }: LayoutProps) {
                     <Hr style={hr} />
                     <Section style={footer}>
                         <Text style={footerText}>
-                            OnlyWorkshop — Discover & Book Creative Workshops
+                            Only Workshops — Discover & Book Creative Workshops
                         </Text>
                         <Text style={footerLinks}>
                             <Link href={`${baseUrl}/explore`} style={link}>

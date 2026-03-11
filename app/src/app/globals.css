@@ -331,6 +331,27 @@
         }
     }
 
+    .image-hover-pan {
+        object-position: 50% 50%;
+        transition: object-position 600ms ease;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .group:hover .image-hover-pan,
+        .image-hover-pan:hover {
+            animation: imagePan 4s ease-in-out infinite alternate;
+        }
+    }
+
+    @keyframes imagePan {
+        0% {
+            object-position: 20% 50%;
+        }
+        100% {
+            object-position: 80% 50%;
+        }
+    }
+
     /* Scroll-in helper using CSS animation (optional alternative to JS scroll observers) */
     .scroll-fade-in {
         opacity: 0;

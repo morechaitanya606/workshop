@@ -36,12 +36,14 @@ type WorkshopEditForm = {
     coverImage: string;
     galleryImages: string;
     videoUrl: string;
+    badgeLabels: string;
 };
 
 export default function AdminEditWorkshopPage() {
     const params = useParams<{ id: string }>();
     const { session } = useAuth();
     const workshopId = params?.id;
+    const categoryOptions = categories.filter((item) => item.id !== "trending");
 
     const [loadingWorkshop, setLoadingWorkshop] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -67,7 +69,10 @@ export default function AdminEditWorkshopPage() {
         coverImage: "",
         galleryImages: "",
         videoUrl: "",
+        badgeLabels: "",
     });
+    const [categorySelection, setCategorySelection] = useState("");
+    const [customCategory, setCustomCategory] = useState("");
 
     const update = (field: keyof WorkshopEditForm, value: string) => {
         setForm((prev) => ({ ...prev, [field]: value }));
@@ -81,6 +86,22 @@ export default function AdminEditWorkshopPage() {
         fieldErrors[field] ? (
             <p className="mt-1 text-xs font-inter text-red-600">{fieldErrors[field]}</p>
         ) : null;
+
+    const handleCategoryChange = (value: string) => {
+        setCategorySelection(value);
+        if (value === "__other__") {
+            update("category", customCategory);
+            return;
+        }
+        update("category", value);
+    };
+
+    const handleCustomCategoryChange = (value: string) => {
+        setCustomCategory(value);
+        if (categorySelection === "__other__") {
+            update("category", value);
+        }
+    };
 
     const uploadOneFile = async (file: File) => {
         if (!session?.access_token) {
@@ -154,10 +175,14 @@ export default function AdminEditWorkshopPage() {
                 const result = await getAdminWorkshop(session.access_token, workshopId);
                 const workshop = result.workshop;
                 if (!cancelled && workshop) {
+                    const nextCategory = workshop.category || "";
+                    const isKnownCategory = categoryOptions.some(
+                        (item) => item.label === nextCategory
+                    );
                     setForm({
                         title: workshop.title || "",
                         description: workshop.description || "",
-                        category: workshop.category || "",
+                        category: nextCategory,
                         price: String(workshop.price || ""),
                         location: workshop.location || "",
                         city: workshop.city || "",
@@ -170,7 +195,14 @@ export default function AdminEditWorkshopPage() {
                             ? workshop.galleryImages.join("\n")
                             : "",
                         videoUrl: workshop.videoUrl || "",
+                        badgeLabels: Array.isArray(workshop.badgeLabels)
+                            ? workshop.badgeLabels.join("\n")
+                            : "",
                     });
+                    setCategorySelection(
+                        nextCategory ? (isKnownCategory ? nextCategory : "__other__") : ""
+                    );
+                    setCustomCategory(isKnownCategory ? "" : nextCategory);
                 }
             } catch (fetchError) {
                 if (!cancelled) {
@@ -207,6 +239,7 @@ export default function AdminEditWorkshopPage() {
             coverImage: form.coverImage.trim(),
             galleryImages: toList(form.galleryImages),
             videoUrl: form.videoUrl.trim(),
+            badgeLabels: toList(form.badgeLabels),
         };
 
         const validation = workshopUpdateSchema.safeParse(payload);
@@ -303,26 +336,39 @@ export default function AdminEditWorkshopPage() {
                         </div>
 
                         <div>
-                            <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                Category
-                            </label>
-                            <select
-                                value={form.category}
-                                onChange={(e) => update("category", e.target.value)}
-                                className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
-                                required
-                            >
-                                <option value="">Select category</option>
-                                {categories
-                                    .filter((item) => item.id !== "trending")
-                                    .map((item) => (
-                                        <option key={item.id} value={item.label}>
-                                            {item.label}
-                                        </option>
-                                    ))}
-                            </select>
-                            {renderFieldError("category")}
-                        </div>
+                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                            Category
+                        </label>
+                        <select
+                            value={categorySelection}
+                            onChange={(e) => handleCategoryChange(e.target.value)}
+                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            required
+                        >
+                            <option value="">Select category</option>
+                            {categoryOptions.map((item) => (
+                                <option key={item.id} value={item.label}>
+                                    {item.label}
+                                </option>
+                            ))}
+                            <option value="__other__">Other (type below)</option>
+                        </select>
+                        {categorySelection === "__other__" && (
+                            <div className="mt-3">
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Custom Category
+                                </label>
+                                <input
+                                    value={customCategory}
+                                    onChange={(e) => handleCustomCategoryChange(e.target.value)}
+                                    placeholder="e.g. Calligraphy"
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    required
+                                />
+                            </div>
+                        )}
+                        {renderFieldError("category")}
+                    </div>
 
                         <div>
                             <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
@@ -537,10 +583,33 @@ export default function AdminEditWorkshopPage() {
                                     />
                                 </label>
                                 <p className="text-xs font-inter text-dark-muted">
-                                    MP4, WebM or MOV (up to 50MB).
-                                </p>
-                            </div>
+                                MP4, WebM or MOV (up to 50MB).
+                            </p>
                         </div>
+
+                        <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
+                            <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                                Badges
+                            </h2>
+                            <p className="mt-1 text-xs font-inter text-dark-muted">
+                                Labels shown on workshop cards and detail pages.
+                            </p>
+                        </div>
+
+                        <div className="md:col-span-2">
+                            <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                Badge Labels (newline or comma separated)
+                            </label>
+                            <textarea
+                                value={form.badgeLabels}
+                                onChange={(e) => update("badgeLabels", e.target.value)}
+                                rows={3}
+                                className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                placeholder={"Beginners welcome\nAll materials included\nPune · Offline workshop"}
+                            />
+                            {renderFieldError("badgeLabels")}
+                        </div>
+                    </div>
                     </div>
 
                     {error && <p className="text-sm font-inter text-red-600">{error}</p>}

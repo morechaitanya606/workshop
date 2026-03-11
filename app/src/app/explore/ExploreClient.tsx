@@ -43,6 +43,11 @@ const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
     { value: "rating_desc", label: "Top Rated" },
 ];
 
+const OTHER_CATEGORY_VALUE = "__other__";
+const CATEGORY_OPTIONS = categories
+    .filter((item) => item.id !== "trending")
+    .map((item) => item.label);
+const CATEGORY_OPTION_SET = new Set(CATEGORY_OPTIONS);
 const CITY_OPTIONS = ["", "Pune", "Mumbai", "Bangalore", "Delhi", "Hyderabad"];
 const PAGE_SIZE = 8;
 
@@ -97,9 +102,22 @@ export default function ExploreClient({
         };
     }, [searchParams]);
 
+    const initialCategoryIsKnown =
+        Boolean(parsedQuery.category) && CATEGORY_OPTION_SET.has(parsedQuery.category);
     const [searchQuery, setSearchQuery] = useState(parsedQuery.q);
     const [showFilters, setShowFilters] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState(parsedQuery.category);
+    const [categorySelection, setCategorySelection] = useState(
+        parsedQuery.category
+            ? initialCategoryIsKnown
+                ? parsedQuery.category
+                : OTHER_CATEGORY_VALUE
+            : ""
+    );
+    const [customCategory, setCustomCategory] = useState(
+        parsedQuery.category && !initialCategoryIsKnown ? parsedQuery.category : ""
+    );
+    const [categoryError, setCategoryError] = useState<string | null>(null);
     const [selectedCity, setSelectedCity] = useState(parsedQuery.city);
     const [dateFrom, setDateFrom] = useState(parsedQuery.dateFrom);
     const [dateTo, setDateTo] = useState(parsedQuery.dateTo);
@@ -113,12 +131,23 @@ export default function ExploreClient({
     useEffect(() => {
         setSearchQuery(parsedQuery.q);
         setSelectedCategory(parsedQuery.category);
+        const isKnownCategory =
+            Boolean(parsedQuery.category) && CATEGORY_OPTION_SET.has(parsedQuery.category);
+        setCategorySelection(
+            parsedQuery.category
+                ? isKnownCategory
+                    ? parsedQuery.category
+                    : OTHER_CATEGORY_VALUE
+                : ""
+        );
+        setCustomCategory(parsedQuery.category && !isKnownCategory ? parsedQuery.category : "");
         setSelectedCity(parsedQuery.city);
         setDateFrom(parsedQuery.dateFrom);
         setDateTo(parsedQuery.dateTo);
         setMinPrice(parsedQuery.minPrice);
         setMaxPrice(parsedQuery.maxPrice);
         setSort(parsedQuery.sort);
+        setCategoryError(null);
     }, [
         parsedQuery.category,
         parsedQuery.city,
@@ -213,6 +242,9 @@ export default function ExploreClient({
     const clearFilters = () => {
         setSearchQuery("");
         setSelectedCategory("");
+        setCategorySelection("");
+        setCustomCategory("");
+        setCategoryError(null);
         setSelectedCity("");
         setDateFrom("");
         setDateTo("");
@@ -227,9 +259,7 @@ export default function ExploreClient({
         });
     };
 
-    const categoryOptions = categories
-        .filter((item) => item.id !== "trending")
-        .map((item) => item.label);
+    const categoryOptions = CATEGORY_OPTIONS;
     const cityCount = CITY_OPTIONS.filter(Boolean).length;
     const exploreStats = [
         { label: "Workshops", value: String(total) },
@@ -244,8 +274,19 @@ export default function ExploreClient({
     ].filter(Boolean);
 
     const handleCategoryChange = (value: string) => {
+        setCategorySelection(value);
+        setCategoryError(null);
+        if (value === OTHER_CATEGORY_VALUE) {
+            return;
+        }
+        setCustomCategory("");
         setSelectedCategory(value);
         pushFilters({ category: value, page: 1 });
+    };
+
+    const handleCustomCategoryChange = (value: string) => {
+        setCustomCategory(value);
+        setCategoryError(null);
     };
 
     const handleCityChange = (value: string) => {
@@ -254,7 +295,15 @@ export default function ExploreClient({
     };
 
     const applyFilters = () => {
-        pushFilters({ page: 1 });
+        const trimmedCustomCategory = customCategory.trim();
+        const nextCategory =
+            categorySelection === OTHER_CATEGORY_VALUE ? trimmedCustomCategory : categorySelection;
+        if (categorySelection === OTHER_CATEGORY_VALUE && !trimmedCustomCategory) {
+            setCategoryError("Please enter a custom category.");
+            return;
+        }
+        setSelectedCategory(nextCategory);
+        pushFilters({ category: nextCategory, page: 1 });
         if (isMobileViewport) {
             setShowFilters(false);
         }
@@ -290,7 +339,7 @@ export default function ExploreClient({
     const filterControls = (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <select
-                value={selectedCategory}
+                value={categorySelection}
                 onChange={(event) => handleCategoryChange(event.target.value)}
                 className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
             >
@@ -300,7 +349,22 @@ export default function ExploreClient({
                         {category}
                     </option>
                 ))}
+                <option value={OTHER_CATEGORY_VALUE}>Other (type below)</option>
             </select>
+            {categorySelection === OTHER_CATEGORY_VALUE && (
+                <div className="flex flex-col gap-2">
+                    <input
+                        type="text"
+                        value={customCategory}
+                        onChange={(event) => handleCustomCategoryChange(event.target.value)}
+                        placeholder="Custom category"
+                        className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
+                    />
+                    {categoryError && (
+                        <p className="text-xs font-inter text-red-600">{categoryError}</p>
+                    )}
+                </div>
+            )}
 
             <select
                 value={selectedCity}
@@ -371,6 +435,9 @@ export default function ExploreClient({
             label: selectedCategory,
             onRemove: () => {
                 setSelectedCategory("");
+                setCategorySelection("");
+                setCustomCategory("");
+                setCategoryError(null);
                 pushFilters({ category: "", page: 1 });
             },
         });

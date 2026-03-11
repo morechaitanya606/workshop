@@ -4,14 +4,14 @@ import { Compass, HeartHandshake, ShieldCheck } from "lucide-react";
 export default function AboutPage() {
     return (
         <StaticPage
-            title="About Only Workshop"
-            description="Only Workshop helps people discover and book high-quality creative experiences in their city."
+            title="About Only Workshops"
+            description="Only Workshops helps people discover and book high-quality creative experiences in their city."
             icon={<Compass className="h-5 w-5" aria-hidden />}
         >
             <section>
                 <h2 className="heading-sm mb-2">Our Story</h2>
                 <p>
-                    Only Workshop started to make weekends more meaningful through hands-on creative
+                    Only Workshops started to make weekends more meaningful through hands-on creative
                     experiences. We connect people with local hosts who teach practical skills in
                     welcoming venues.
                 </p>

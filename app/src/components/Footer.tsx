@@ -12,14 +12,14 @@ export default function Footer() {
                             <div className="relative w-8 h-8 rounded-lg overflow-hidden">
                                 <Image
                                     src="/images/logo-black.jpeg"
-                                    alt="Only Workshop"
+                                    alt="Only Workshops"
                                     fill
                                     sizes="32px"
                                     className="object-cover"
                                 />
                             </div>
                             <span className="font-playfair text-lg font-bold text-dark">
-                                Only Workshop
+                                Only Workshops
                             </span>
                         </Link>
                         <p className="text-body-sm max-w-xs">
@@ -82,10 +82,10 @@ export default function Footer() {
             <div className="border-t border-clay/30">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0">
                     <p className="text-xs font-inter text-dark-muted sm:w-1/3 text-center sm:text-left text-balance">
-                        &copy; {new Date().getFullYear()} Only Workshop Inc. All rights reserved.
+                        &copy; {new Date().getFullYear()} Only Workshops Inc. All rights reserved.
                     </p>
                     <p className="text-xs font-inter font-medium text-dark-muted tracking-wide sm:w-1/3 text-center">
-                        Only Workshop <span className="text-terracotta px-1">|</span> Pune Workshops
+                        Only Workshops <span className="text-terracotta px-1">|</span> Pune Workshops
                         &amp; Experiential Learning
                     </p>
                     <div className="flex items-center justify-center sm:justify-end gap-6 sm:w-1/3">

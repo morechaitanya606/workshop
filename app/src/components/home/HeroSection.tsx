@@ -104,9 +104,9 @@ export default function HeroSection({ source }: { source: "supabase" | "mock" | 
                         {...heroHeadlineMotionProps}
                         className="heading-xl text-white max-w-4xl text-balance text-glow-soft"
                     >
-                        Pune weekends,
+                        A Better Weekend
                         <br />
-                        <span className="text-terracotta-300">well spent.</span>
+                        <span className="text-terracotta-300">Awaits.</span>
                     </motion.h1>
                 </div>
 

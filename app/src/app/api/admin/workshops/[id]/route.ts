@@ -121,6 +121,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
                 ? normalizeWorkshopVideoUrlInput(input.videoUrl)
                 : null;
         }
+        if (Array.isArray(input.badgeLabels)) {
+            patch.badge_labels = input.badgeLabels;
+        }
 
         if (typeof input.maxSeats === "number") {
             const currentMaxSeats = Number(existing.max_seats || 0);
