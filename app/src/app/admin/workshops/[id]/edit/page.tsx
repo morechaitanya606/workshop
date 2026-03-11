@@ -1,6 +1,6 @@
 "use client";
 
-import { type ChangeEvent, useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Loader2, Check, Upload } from "lucide-react";
@@ -43,7 +43,10 @@ export default function AdminEditWorkshopPage() {
     const params = useParams<{ id: string }>();
     const { session } = useAuth();
     const workshopId = params?.id;
-    const categoryOptions = categories.filter((item) => item.id !== "trending");
+    const categoryOptions = useMemo(
+        () => categories.filter((item) => item.id !== "trending"),
+        []
+    );
 
     const [loadingWorkshop, setLoadingWorkshop] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -219,7 +222,7 @@ export default function AdminEditWorkshopPage() {
         return () => {
             cancelled = true;
         };
-    }, [session, workshopId]);
+    }, [session, workshopId, categoryOptions]);
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();

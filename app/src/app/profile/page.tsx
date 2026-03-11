@@ -960,7 +960,7 @@ export default function ProfilePage() {
                                                     disabled={profileLoading}
                                                 />
                                                 <p className="text-xs text-dark/50 mt-2">
-                                                    We'll only use this for important updates.
+                                                    We&apos;ll only use this for important updates.
                                                 </p>
                                             </div>
                                             <div>
