@@ -67,8 +67,11 @@ async function sendEmailAndLog({ to, subject, templateName, react, referenceId }
         }
 
         return { success: true, data: resendData };
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Failed to send email:", error);
+
+        const errorMessage =
+            error instanceof Error ? error.message : typeof error === "string" ? error : "Unknown error";
 
         // 3. Update log entry to "failed"
         if (logEntry) {
@@ -76,12 +79,12 @@ async function sendEmailAndLog({ to, subject, templateName, react, referenceId }
                 .from("email_delivery_logs")
                 .update({
                     status: "failed",
-                    error_message: error.message || String(error),
+                    error_message: errorMessage,
                 })
                 .eq("id", logEntry.id);
         }
 
-        return { success: false, error: error.message };
+        return { success: false, error: errorMessage };
     }
 }
 
