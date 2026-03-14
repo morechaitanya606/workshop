@@ -61,6 +61,10 @@ export const workshopCreateSchema = z.object({
     whatYouLearn: z.array(z.string().trim().min(1).max(240)).min(1).max(20),
     materialsProvided: z.array(z.string().trim().min(1).max(240)).min(1).max(20),
     badgeLabels: z.array(z.string().trim().min(1).max(120)).max(8).optional().default([]),
+    eventAddress: z.string().trim().max(300).optional().default(""),
+    latitude: z.coerce.number().min(-90).max(90).optional(),
+    longitude: z.coerce.number().min(-180).max(180).optional(),
+    locationImages: z.array(mediaUrl).max(10).optional().default([]),
 });
 
 export type WorkshopCreateInput = z.infer<typeof workshopCreateSchema>;
@@ -81,6 +85,10 @@ export const workshopUpdateSchema = z
         galleryImages: z.array(mediaUrl).max(20).optional(),
         videoUrl: mediaUrlOrEmpty.optional(),
         badgeLabels: z.array(z.string().trim().min(1).max(120)).max(8).optional(),
+        eventAddress: z.string().trim().max(300).optional(),
+        latitude: z.coerce.number().min(-90).max(90).optional(),
+        longitude: z.coerce.number().min(-180).max(180).optional(),
+        locationImages: z.array(mediaUrl).max(10).optional(),
     })
     .refine((value) => Object.keys(value).length > 0, {
         message: "Provide at least one field to update.",

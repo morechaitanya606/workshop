@@ -361,8 +361,12 @@ export default function WorkshopClient({
     const total = subtotal + serviceFee;
     const locationQuery = `${workshop.location}, ${workshop.city}`.trim();
     const encodedLocationQuery = encodeURIComponent(locationQuery);
-    const mapEmbedUrl = `https://www.google.com/maps?q=${encodedLocationQuery}&output=embed`;
-    const mapOpenUrl = `https://www.google.com/maps/search/?api=1&query=${encodedLocationQuery}`;
+    const mapEmbedUrl = typeof workshop.latitude === "number" && typeof workshop.longitude === "number"
+        ? `https://www.google.com/maps?q=${workshop.latitude},${workshop.longitude}&output=embed`
+        : `https://www.google.com/maps?q=${encodedLocationQuery}&output=embed`;
+    const mapOpenUrl = typeof workshop.latitude === "number" && typeof workshop.longitude === "number"
+        ? `https://www.google.com/maps/search/?api=1&query=${workshop.latitude},${workshop.longitude}`
+        : `https://www.google.com/maps/search/?api=1&query=${encodedLocationQuery}`;
     const workshopPath = `/workshop/${workshop.id}`;
     const loginRedirectHref = `/auth/login?redirect=${encodeURIComponent(workshopPath)}`;
     const MAX_FEEDBACK_PHOTOS = 4;
@@ -1106,7 +1110,7 @@ export default function WorkshopClient({
                                 >
                                     <span className="eyebrow-label">Location</span>
                                     <h2 className="heading-sm font-inter mb-4">{"Where you'll be"}</h2>
-                                    <div className="relative overflow-hidden rounded-2xl border border-clay/30 bg-white shadow-soft">
+                                    <div className="relative overflow-hidden rounded-2xl border border-clay/30 bg-white shadow-soft mb-4">
                                         <iframe
                                             title={`Map for ${locationQuery}`}
                                             src={mapEmbedUrl}
@@ -1121,8 +1125,7 @@ export default function WorkshopClient({
                                                     {workshop.location}
                                                 </p>
                                                 <p className="text-xs font-inter text-dark-muted truncate">
-                                                    {workshop.city} &bull; Exact address sent upon
-                                                    booking
+                                                    {workshop.city} &bull; {workshop.eventAddress ? workshop.eventAddress : "Exact address sent upon booking"}
                                                 </p>
                                             </div>
                                             <a
@@ -1136,6 +1139,22 @@ export default function WorkshopClient({
                                             </a>
                                         </div>
                                     </div>
+
+                                    {workshop.locationImages && workshop.locationImages.length > 0 && (
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
+                                            {workshop.locationImages.map((img, i) => (
+                                                <div key={i} className="relative aspect-[4/3] rounded-xl overflow-hidden border border-clay/30 shadow-sm">
+                                                    <Image
+                                                        src={img}
+                                                        alt={`Location image ${i + 1}`}
+                                                        fill
+                                                        className="object-cover"
+                                                        sizes="(max-width: 640px) 50vw, 33vw"
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </motion.div>
 
                                 <motion.div

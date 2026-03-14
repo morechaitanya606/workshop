@@ -96,6 +96,12 @@ export function mapWorkshopRowToWorkshop(row: DbTable<"workshops">): Workshop {
             : [],
         isNew: row.is_new,
         isBestseller: row.is_bestseller,
+        eventAddress: row.event_address || undefined,
+        latitude: row.latitude !== null ? Number(row.latitude) : undefined,
+        longitude: row.longitude !== null ? Number(row.longitude) : undefined,
+        locationImages: Array.isArray(row.location_images)
+            ? row.location_images.map((img) => normalizeWorkshopImageUrl(String(img))).filter((img) => img.length > 0)
+            : [],
     };
 }
 
@@ -144,6 +150,10 @@ export function buildWorkshopInsertPayload(
         is_new: true,
         created_by: createdBy,
         host_user_id: createdBy,
+        event_address: input.eventAddress || null,
+        latitude: input.latitude !== undefined ? Number(input.latitude) : null,
+        longitude: input.longitude !== undefined ? Number(input.longitude) : null,
+        location_images: input.locationImages ? input.locationImages.map((item) => normalizeWorkshopImageUrlInput(item)) : [],
     };
 
     return payload;
@@ -252,6 +262,10 @@ export async function ensureWorkshopSeededFromMock(
         badge_labels: mockWorkshop.badgeLabels ?? null,
         is_bestseller: Boolean(mockWorkshop.isBestseller),
         is_new: Boolean(mockWorkshop.isNew),
+        event_address: mockWorkshop.eventAddress || null,
+        latitude: mockWorkshop.latitude !== undefined ? Number(mockWorkshop.latitude) : null,
+        longitude: mockWorkshop.longitude !== undefined ? Number(mockWorkshop.longitude) : null,
+        location_images: mockWorkshop.locationImages || [],
     };
 
     const { error } = await serviceClient.from("workshops").upsert(insertPayload, {

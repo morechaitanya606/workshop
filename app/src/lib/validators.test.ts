@@ -28,6 +28,7 @@ describe("bookingCheckoutSchema", () => {
         firstName: "Ada",
         lastName: "Lovelace",
         email: "ada@example.com",
+        phone: "1234567890",
     };
 
     it("accepts payload without razorpay fields during order creation", () => {

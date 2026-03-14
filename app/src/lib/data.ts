@@ -83,6 +83,10 @@ export interface Workshop {
     feedbackAuthor?: string;
     isNew?: boolean;
     isBestseller?: boolean;
+    eventAddress?: string;
+    latitude?: number;
+    longitude?: number;
+    locationImages?: string[];
 }
 
 export const categories = [

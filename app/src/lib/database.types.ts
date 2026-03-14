@@ -64,6 +64,10 @@ export type Database = {
                       what_you_learn: string[];
                       materials_provided: string[];
                       badge_labels: string[] | null;
+                      event_address: string | null;
+                      latitude: number | null;
+                      longitude: number | null;
+                      location_images: string[] | null;
                       is_bestseller: boolean;
                       is_new: boolean;
                       host_id: string | null;
@@ -97,6 +101,10 @@ export type Database = {
                       what_you_learn?: string[];
                       materials_provided?: string[];
                       badge_labels?: string[] | null;
+                      event_address?: string | null;
+                      latitude?: number | null;
+                      longitude?: number | null;
+                      location_images?: string[] | null;
                       is_bestseller?: boolean;
                       is_new?: boolean;
                       host_id?: string | null;
@@ -130,6 +138,10 @@ export type Database = {
                       what_you_learn?: string[];
                       materials_provided?: string[];
                       badge_labels?: string[] | null;
+                      event_address?: string | null;
+                      latitude?: number | null;
+                      longitude?: number | null;
+                      location_images?: string[] | null;
                       is_bestseller?: boolean;
                       is_new?: boolean;
                     host_id?: string | null;

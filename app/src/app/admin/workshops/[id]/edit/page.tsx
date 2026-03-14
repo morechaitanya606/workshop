@@ -37,6 +37,10 @@ type WorkshopEditForm = {
     galleryImages: string;
     videoUrl: string;
     badgeLabels: string;
+    eventAddress: string;
+    latitude: string;
+    longitude: string;
+    locationImages: string;
 };
 
 export default function AdminEditWorkshopPage() {
@@ -53,6 +57,7 @@ export default function AdminEditWorkshopPage() {
     const [uploadingCover, setUploadingCover] = useState(false);
     const [uploadingGallery, setUploadingGallery] = useState(false);
     const [uploadingVideo, setUploadingVideo] = useState(false);
+    const [uploadingLocation, setUploadingLocation] = useState(false);
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof WorkshopEditForm, string>>>(
@@ -73,6 +78,10 @@ export default function AdminEditWorkshopPage() {
         galleryImages: "",
         videoUrl: "",
         badgeLabels: "",
+        eventAddress: "",
+        latitude: "",
+        longitude: "",
+        locationImages: "",
     });
     const [categorySelection, setCategorySelection] = useState("");
     const [customCategory, setCustomCategory] = useState("");
@@ -166,6 +175,24 @@ export default function AdminEditWorkshopPage() {
         }
     };
 
+    const handleLocationUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(event.target.files || []);
+        event.target.value = "";
+        if (!files.length) return;
+
+        setUploadingLocation(true);
+        setError(null);
+        try {
+            const urls = await Promise.all(files.map((file) => uploadOneFile(file)));
+            const merged = Array.from(new Set([...toList(form.locationImages), ...urls]));
+            update("locationImages", merged.join("\n"));
+        } catch (uploadError) {
+            setError(toApiErrorMessage(uploadError, "Unable to upload location images."));
+        } finally {
+            setUploadingLocation(false);
+        }
+    };
+
     useEffect(() => {
         let cancelled = false;
 
@@ -200,6 +227,12 @@ export default function AdminEditWorkshopPage() {
                         videoUrl: workshop.videoUrl || "",
                         badgeLabels: Array.isArray(workshop.badgeLabels)
                             ? workshop.badgeLabels.join("\n")
+                            : "",
+                        eventAddress: workshop.eventAddress || "",
+                        latitude: typeof workshop.latitude === "number" ? String(workshop.latitude) : "",
+                        longitude: typeof workshop.longitude === "number" ? String(workshop.longitude) : "",
+                        locationImages: Array.isArray(workshop.locationImages)
+                            ? workshop.locationImages.join("\n")
                             : "",
                     });
                     setCategorySelection(
@@ -243,6 +276,10 @@ export default function AdminEditWorkshopPage() {
             galleryImages: toList(form.galleryImages),
             videoUrl: form.videoUrl.trim(),
             badgeLabels: toList(form.badgeLabels),
+            eventAddress: form.eventAddress.trim(),
+            latitude: form.latitude ? Number(form.latitude) : undefined,
+            longitude: form.longitude ? Number(form.longitude) : undefined,
+            locationImages: toList(form.locationImages),
         };
 
         const validation = workshopUpdateSchema.safeParse(payload);
@@ -398,7 +435,7 @@ export default function AdminEditWorkshopPage() {
 
                         <div>
                             <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                Location
+                                Location Title
                             </label>
                             <input
                                 value={form.location}
@@ -407,6 +444,46 @@ export default function AdminEditWorkshopPage() {
                                 required
                             />
                             {renderFieldError("location")}
+                        </div>
+
+                        <div className="md:col-span-2">
+                            <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                Event Address
+                            </label>
+                            <input
+                                value={form.eventAddress}
+                                onChange={(e) => update("eventAddress", e.target.value)}
+                                className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            />
+                            {renderFieldError("eventAddress")}
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                Latitude (Optional)
+                            </label>
+                            <input
+                                type="number"
+                                step="any"
+                                value={form.latitude}
+                                onChange={(e) => update("latitude", e.target.value)}
+                                className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            />
+                            {renderFieldError("latitude")}
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                Longitude (Optional)
+                            </label>
+                            <input
+                                type="number"
+                                step="any"
+                                value={form.longitude}
+                                onChange={(e) => update("longitude", e.target.value)}
+                                className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            />
+                            {renderFieldError("longitude")}
                         </div>
 
                         <div>
@@ -553,6 +630,37 @@ export default function AdminEditWorkshopPage() {
                                 <p className="text-xs font-inter text-dark-muted">
                                     You can also paste public Google Drive image links.
                                 </p>
+                            </div>
+                        </div>
+
+                        <div className="md:col-span-2">
+                            <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                Location Image URLs (newline or comma separated)
+                            </label>
+                            <textarea
+                                value={form.locationImages}
+                                onChange={(e) => update("locationImages", e.target.value)}
+                                rows={3}
+                                className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            />
+                            {renderFieldError("locationImages")}
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <label className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-inter font-semibold text-dark cursor-pointer hover:border-terracotta hover:text-terracotta transition-colors">
+                                    {uploadingLocation ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                        <Upload className="w-3.5 h-3.5" />
+                                    )}
+                                    Upload Location Images
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        className="hidden"
+                                        onChange={handleLocationUpload}
+                                        disabled={uploadingLocation || saving}
+                                    />
+                                </label>
                             </div>
                         </div>
 
