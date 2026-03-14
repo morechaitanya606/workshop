@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Loader2, Plus, PencilLine, MapPin, CalendarDays, Trash2 } from "lucide-react";
+import { Loader2, Plus, PencilLine, MapPin, CalendarDays, Trash2, Users } from "lucide-react";
 import type { Workshop } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -146,6 +146,13 @@ export default function AdminWorkshopsPage() {
                                         {formatCurrency(workshop.price)}
                                     </p>
                                     <div className="flex items-center gap-2">
+                                        <Link
+                                            href={`/host/workshops/${workshop.id}/attendees`}
+                                            className="btn-secondary !py-2 !px-4 text-sm"
+                                        >
+                                            <Users className="w-4 h-4" />
+                                            Attendees
+                                        </Link>
                                         <Link
                                             href={`/admin/workshops/${workshop.id}/edit`}
                                             className="btn-secondary !py-2 !px-4 text-sm"

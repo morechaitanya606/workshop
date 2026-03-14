@@ -157,6 +157,13 @@ export default function WorkshopClient({
     const [publicFeedbackError, setPublicFeedbackError] = useState<string | null>(null);
     const videoModalRef = useRef<HTMLDivElement | null>(null);
 
+    // Waitlist state
+    const [showWaitlistModal, setShowWaitlistModal] = useState(false);
+    const [waitlistEmail, setWaitlistEmail] = useState("");
+    const [waitlistLoading, setWaitlistLoading] = useState(false);
+    const [waitlistError, setWaitlistError] = useState<string | null>(null);
+    const [waitlistSuccess, setWaitlistSuccess] = useState(false);
+
     const today = new Date().toISOString().slice(0, 10);
     const workshopDateTime = new Date(`${workshop.date}T${workshop.time || "00:00"}:00`);
 
@@ -275,6 +282,8 @@ export default function WorkshopClient({
 
     useEffect(() => {
         setLiveAvailableSeatCount(null);
+        setWaitlistSuccess(false);
+        setShowWaitlistModal(false);
     }, [workshop.id]);
 
     useEffect(() => {
@@ -298,12 +307,12 @@ export default function WorkshopClient({
     }, [availableSeatCount, isSoldOut]);
 
     useEffect(() => {
-        if (!showVideo) {
+        if (!showVideo && !showWaitlistModal) {
             return;
         }
 
         const previousActive = document.activeElement as HTMLElement | null;
-        const modalNode = videoModalRef.current;
+        const modalNode = showVideo ? videoModalRef.current : document.getElementById("waitlist-modal");
         if (!modalNode) {
             return;
         }
@@ -354,7 +363,7 @@ export default function WorkshopClient({
             document.removeEventListener("keydown", handleKeyDown);
             previousActive?.focus();
         };
-    }, [showVideo]);
+    }, [showVideo, showWaitlistModal]);
 
     const serviceFee = 99;
     const subtotal = workshop.price * guests;
@@ -390,6 +399,46 @@ export default function WorkshopClient({
     useEffect(() => {
         void loadPublicFeedback();
     }, [loadPublicFeedback]);
+
+    useEffect(() => {
+        if (user && user.email) {
+            setWaitlistEmail(user.email);
+        }
+    }, [user]);
+
+    const handleJoinWaitlist = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setWaitlistError(null);
+        if (!waitlistEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(waitlistEmail)) {
+            setWaitlistError("Please enter a valid email address.");
+            return;
+        }
+
+        setWaitlistLoading(true);
+        try {
+            const res = await fetch(`/api/workshops/${workshop.id}/waitlist`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    email: waitlistEmail,
+                    userId: user?.id,
+                }),
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to join waitlist.");
+            }
+
+            setWaitlistSuccess(true);
+            toast.success("Joined waitlist", data.message || "We will email you if a spot opens up.");
+        } catch (err: any) {
+            setWaitlistError(err.message || "An unexpected error occurred.");
+            toast.error("Error", err.message || "Could not join waitlist.");
+        } finally {
+            setWaitlistLoading(false);
+        }
+    };
 
     const handleBooking = async () => {
         setHoldError(null);
@@ -1641,10 +1690,10 @@ export default function WorkshopClient({
 
                                     {isSoldOut ? (
                                         <button
-                                            disabled
-                                            className="w-full cursor-not-allowed rounded-full bg-gray-100 py-4 text-center text-base font-inter font-semibold text-dark-muted"
+                                            onClick={() => setShowWaitlistModal(true)}
+                                            className="btn-secondary w-full text-center !py-4 text-base"
                                         >
-                                            Sold Out
+                                            Join Waitlist
                                         </button>
                                     ) : user ? (
                                         <button
@@ -1671,7 +1720,7 @@ export default function WorkshopClient({
                                     )}
                                     <p className="text-center text-xs font-inter text-dark-muted mt-3">
                                         {isSoldOut
-                                            ? "All spots are taken. Explore similar workshops below."
+                                            ? "All spots are taken. Join the waitlist to be notified if someone cancels."
                                             : user
                                               ? "Secure payments via Razorpay. You won't be charged twice even if something goes wrong."
                                               : "Log in to book. Payments are processed securely via Razorpay."}
@@ -2013,10 +2062,10 @@ export default function WorkshopClient({
                         </div>
                         {isSoldOut ? (
                             <button
-                                disabled
-                                className="cursor-not-allowed rounded-full bg-gray-100 px-6 py-3 text-sm font-inter font-semibold text-dark-muted"
+                                onClick={() => setShowWaitlistModal(true)}
+                                className="rounded-full bg-white border border-terracotta text-terracotta px-6 py-3 text-sm font-inter font-semibold hover:bg-terracotta hover:text-white transition-colors"
                             >
-                                Sold Out
+                                Join Waitlist
                             </button>
                         ) : user ? (
                             <button
@@ -2054,6 +2103,83 @@ export default function WorkshopClient({
 
             <Footer />
             <MobileNav />
+
+            {/* ═══ WAITLIST MODAL ═══ */}
+            {showWaitlistModal && (
+                <div
+                    className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+                    onClick={() => setShowWaitlistModal(false)}
+                >
+                    <div
+                        id="waitlist-modal"
+                        className="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-card relative"
+                        onClick={e => e.stopPropagation()}
+                        role="dialog"
+                        aria-modal="true"
+                    >
+                        <button
+                            onClick={() => setShowWaitlistModal(false)}
+                            className="absolute top-4 right-4 p-2 rounded-full hover:bg-cream-100 text-dark-muted transition-colors"
+                            aria-label="Close modal"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+
+                        <div className="text-center mb-6">
+                            <div className="w-12 h-12 bg-terracotta/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <BellRing className="w-6 h-6 text-terracotta" />
+                            </div>
+                            <h3 className="heading-sm mb-2">Join the Waitlist</h3>
+                            <p className="text-sm font-inter text-dark-secondary">
+                                This workshop is currently full. We&apos;ll email you immediately if a spot opens up.
+                            </p>
+                        </div>
+
+                        {waitlistSuccess ? (
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+                                <Check className="w-6 h-6 text-emerald-600 mx-auto mb-2" />
+                                <p className="text-sm font-inter font-semibold text-emerald-800">You&apos;re on the list!</p>
+                                <p className="text-xs font-inter text-emerald-700 mt-1">We&apos;ll notify {waitlistEmail} if seats become available.</p>
+                                <button
+                                    onClick={() => setShowWaitlistModal(false)}
+                                    className="btn-primary w-full mt-4 !py-2.5"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        ) : (
+                            <form onSubmit={handleJoinWaitlist} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                        Email Address
+                                    </label>
+                                    <input
+                                        type="email"
+                                        value={waitlistEmail}
+                                        onChange={(e) => {
+                                            setWaitlistEmail(e.target.value);
+                                            setWaitlistError(null);
+                                        }}
+                                        required
+                                        placeholder="Enter your email"
+                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter focus:outline-none focus:border-terracotta/50 focus:ring-1 focus:ring-terracotta/30"
+                                    />
+                                    {waitlistError && (
+                                        <p className="text-xs font-inter text-red-600 mt-1.5">{waitlistError}</p>
+                                    )}
+                                </div>
+                                <button
+                                    type="submit"
+                                    disabled={waitlistLoading}
+                                    className="btn-primary w-full !py-3 disabled:opacity-70 disabled:cursor-not-allowed"
+                                >
+                                    {waitlistLoading ? "Joining..." : "Join Waitlist"}
+                                </button>
+                            </form>
+                        )}
+                    </div>
+                </div>
+            )}
         </main>
     );
 }

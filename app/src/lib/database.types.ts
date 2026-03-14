@@ -201,6 +201,7 @@ export type Database = {
                     phone: string | null;
                     notes: string | null;
                     created_at: string;
+                    attended: boolean;
                 };
                 Insert: {
                     id?: string;
@@ -220,6 +221,7 @@ export type Database = {
                     phone?: string | null;
                     notes?: string | null;
                     created_at?: string;
+                    attended?: boolean;
                 };
                 Update: {
                     id?: string;
@@ -239,6 +241,7 @@ export type Database = {
                     phone?: string | null;
                     notes?: string | null;
                     created_at?: string;
+                    attended?: boolean;
                 };
                 Relationships: [];
             };
@@ -530,6 +533,33 @@ export type Database = {
                 };
                 Relationships: [];
             };
+            waitlists: {
+                Row: {
+                    id: string;
+                    workshop_id: string;
+                    user_id: string | null;
+                    email: string;
+                    status: "pending" | "notified" | "joined";
+                    created_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    workshop_id: string;
+                    user_id?: string | null;
+                    email: string;
+                    status?: "pending" | "notified" | "joined";
+                    created_at?: string;
+                };
+                Update: {
+                    id?: string;
+                    workshop_id?: string;
+                    user_id?: string | null;
+                    email?: string;
+                    status?: "pending" | "notified" | "joined";
+                    created_at?: string;
+                };
+                Relationships: [];
+            };
         };
         Views: {
             [_ in never]: never;
@@ -590,3 +620,14 @@ type PublicSchema = Database["public"];
 export type DbTable<T extends keyof PublicSchema["Tables"]> = PublicSchema["Tables"][T]["Row"];
 export type DbInsert<T extends keyof PublicSchema["Tables"]> = PublicSchema["Tables"][T]["Insert"];
 export type DbUpdate<T extends keyof PublicSchema["Tables"]> = PublicSchema["Tables"][T]["Update"];
+
+// --- PATCH: Waitlist & Checkin Additions ---
+export type WaitlistStatus = "pending" | "notified" | "joined";
+export type DbWaitlist = {
+    id: string;
+    workshop_id: string;
+    user_id: string | null;
+    email: string;
+    status: WaitlistStatus;
+    created_at: string;
+};
