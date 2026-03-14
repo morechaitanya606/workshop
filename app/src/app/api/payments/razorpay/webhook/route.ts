@@ -293,21 +293,23 @@ export async function POST(request: Request) {
                 await upsertHostEarningsForBookings(serviceClient, freshlyConfirmedBookings);
 
                 const { sendBookingConfirmation } = await import("@/lib/email");
-                for (const booking of freshlyConfirmedBookings) {
-                    await sendBookingConfirmation(booking.id).catch((error) => {
-                        Sentry.captureException(error, {
-                            tags: {
-                                layer: "payments",
-                                provider: "razorpay",
-                                route: "razorpay_webhook",
-                                action: "booking_confirmation_email",
-                            },
-                            extra: {
-                                bookingId: booking.id,
-                            },
-                        });
-                    });
-                }
+                await Promise.all(
+                    freshlyConfirmedBookings.map((booking) =>
+                        sendBookingConfirmation(booking.id).catch((error) => {
+                            Sentry.captureException(error, {
+                                tags: {
+                                    layer: "payments",
+                                    provider: "razorpay",
+                                    route: "razorpay_webhook",
+                                    action: "booking_confirmation_email",
+                                },
+                                extra: {
+                                    bookingId: booking.id,
+                                },
+                            });
+                        })
+                    )
+                );
             }
 
             if (event.event === "payment.failed" && paymentId) {
