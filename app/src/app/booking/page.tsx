@@ -16,6 +16,7 @@ import {
     Check,
     Star,
     Loader2,
+    CalendarPlus,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -32,6 +33,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { trackEvent } from "@/lib/analytics";
 import { scaleIn, standardTransition } from "@/lib/motion-presets";
+import { downloadICSFile, generateGoogleCalendarUrl, parseDurationToMinutes, type CalendarEventData } from "@/lib/calendar";
 
 const SERVICE_FEE = 99;
 
@@ -477,6 +479,16 @@ function BookingContent() {
         const bookingWorkshopDate = confirmedBooking?.workshop?.date || workshop.date;
         const bookingWorkshopTime = confirmedBooking?.workshop?.time || workshop.time;
         const bookingCover = confirmedBooking?.workshop?.cover_image || workshop.coverImage;
+        const locationDetails = workshop.eventAddress ? `${workshop.eventAddress}, ${workshop.city}` : `${workshop.location}, ${workshop.city}`;
+
+        const calendarData: CalendarEventData = {
+            title: bookingWorkshopTitle,
+            description: workshop.description,
+            location: locationDetails,
+            startDate: bookingWorkshopDate,
+            startTime: bookingWorkshopTime,
+            durationMinutes: parseDurationToMinutes(workshop.duration),
+        };
 
         return (
             <>
@@ -534,13 +546,37 @@ function BookingContent() {
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex gap-3 justify-center">
+                            <div className="flex gap-3 justify-center mb-6">
                                 <Link href="/profile" className="btn-primary">
                                     View My Tickets
                                 </Link>
                                 <Link href="/explore" className="btn-secondary">
                                     Explore More
                                 </Link>
+                            </div>
+
+                            <div className="border-t border-gray-100 pt-6 mt-2">
+                                <h3 className="text-sm font-inter font-bold text-dark-muted uppercase tracking-wider mb-4 text-center">
+                                    Add to Calendar
+                                </h3>
+                                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                                    <button
+                                        onClick={() => downloadICSFile(calendarData, `${workshop.id}.ics`)}
+                                        className="btn-secondary inline-flex items-center gap-2"
+                                    >
+                                        <CalendarPlus className="w-4 h-4" />
+                                        Apple / Outlook (.ics)
+                                    </button>
+                                    <a
+                                        href={generateGoogleCalendarUrl(calendarData)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="btn-secondary inline-flex items-center gap-2"
+                                    >
+                                        <CalendarPlus className="w-4 h-4" />
+                                        Google Calendar
+                                    </a>
+                                </div>
                             </div>
                         </motion.div>
                     </div>
