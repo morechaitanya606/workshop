@@ -43,6 +43,10 @@ type CreateWorkshopForm = {
     whatYouLearn: string;
     materialsProvided: string;
     badgeLabels: string;
+    eventAddress: string;
+    latitude: string;
+    longitude: string;
+    locationImages: string;
 };
 
 export default function AdminCreateWorkshopPage() {
@@ -53,6 +57,7 @@ export default function AdminCreateWorkshopPage() {
     const [uploadingCover, setUploadingCover] = useState(false);
     const [uploadingGallery, setUploadingGallery] = useState(false);
     const [uploadingVideo, setUploadingVideo] = useState(false);
+    const [uploadingLocation, setUploadingLocation] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [fieldErrors, setFieldErrors] = useState<
         Partial<Record<keyof CreateWorkshopForm, string>>
@@ -84,6 +89,10 @@ export default function AdminCreateWorkshopPage() {
         whatYouLearn: "",
         materialsProvided: "",
         badgeLabels: "",
+        eventAddress: "",
+        latitude: "",
+        longitude: "",
+        locationImages: "",
     });
     const [categorySelection, setCategorySelection] = useState("");
     const [customCategory, setCustomCategory] = useState("");
@@ -160,6 +169,24 @@ export default function AdminCreateWorkshopPage() {
         }
     };
 
+    const handleLocationUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(event.target.files || []);
+        event.target.value = "";
+        if (!files.length) return;
+
+        setUploadingLocation(true);
+        setError(null);
+        try {
+            const urls = await Promise.all(files.map((file) => uploadOneFile(file)));
+            const merged = Array.from(new Set([...toList(form.locationImages), ...urls]));
+            update("locationImages", merged.join("\n"));
+        } catch (uploadError) {
+            setError(toApiErrorMessage(uploadError, "Unable to upload location images."));
+        } finally {
+            setUploadingLocation(false);
+        }
+    };
+
     const handleVideoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         event.target.value = "";
@@ -215,6 +242,10 @@ export default function AdminCreateWorkshopPage() {
             whatYouLearn,
             materialsProvided,
             badgeLabels,
+            eventAddress: form.eventAddress.trim() || undefined,
+            latitude: form.latitude.trim() ? Number(form.latitude) : undefined,
+            longitude: form.longitude.trim() ? Number(form.longitude) : undefined,
+            locationImages: toList(form.locationImages),
         };
 
         const validation = workshopCreateSchema.safeParse(payload);
@@ -405,6 +436,78 @@ export default function AdminCreateWorkshopPage() {
                             required
                         />
                         {renderFieldError("city")}
+                    </div>
+
+                    <div className="md:col-span-2">
+                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                            Event Address (Exact)
+                        </label>
+                        <textarea
+                            value={form.eventAddress}
+                            onChange={(e) => update("eventAddress", e.target.value)}
+                            rows={2}
+                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            placeholder="Exact address of the event venue"
+                        />
+                        {renderFieldError("eventAddress")}
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                            Latitude
+                        </label>
+                        <input
+                            value={form.latitude}
+                            onChange={(e) => update("latitude", e.target.value)}
+                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            placeholder="e.g. 18.5204"
+                        />
+                        {renderFieldError("latitude")}
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                            Longitude
+                        </label>
+                        <input
+                            value={form.longitude}
+                            onChange={(e) => update("longitude", e.target.value)}
+                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            placeholder="e.g. 73.8567"
+                        />
+                        {renderFieldError("longitude")}
+                    </div>
+
+                    <div className="md:col-span-2">
+                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                            Location Image URLs (newline or comma separated)
+                        </label>
+                        <textarea
+                            value={form.locationImages}
+                            onChange={(e) => update("locationImages", e.target.value)}
+                            rows={2}
+                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            placeholder={"https://.../loc1.jpg\nhttps://.../loc2.jpg"}
+                        />
+                        {renderFieldError("locationImages")}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <label className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-inter font-semibold text-dark cursor-pointer hover:border-terracotta hover:text-terracotta transition-colors">
+                                {uploadingLocation ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                    <Upload className="w-3.5 h-3.5" />
+                                )}
+                                Upload Location Images
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    className="hidden"
+                                    onChange={handleLocationUpload}
+                                    disabled={uploadingLocation || saving}
+                                />
+                            </label>
+                        </div>
                     </div>
 
                     <div>

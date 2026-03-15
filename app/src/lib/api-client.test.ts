@@ -131,6 +131,8 @@ describe("admin API client methods", () => {
             whatYouLearn: ["Wheel control", "Glazing basics"],
             materialsProvided: ["Clay", "Tools"],
             badgeLabels: [],
+            eventAddress: "",
+            locationImages: [],
         };
 
         await createAdminWorkshop(accessToken, payload);

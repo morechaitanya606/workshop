@@ -124,6 +124,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         if (Array.isArray(input.badgeLabels)) {
             patch.badge_labels = input.badgeLabels;
         }
+        if ("eventAddress" in input) patch.event_address = input.eventAddress ?? null;
+        if ("latitude" in input) patch.latitude = input.latitude ?? null;
+        if ("longitude" in input) patch.longitude = input.longitude ?? null;
+        if (Array.isArray(input.locationImages)) {
+            patch.location_images = input.locationImages.map((item) =>
+                normalizeWorkshopImageUrlInput(item)
+            );
+        }
 
         if (typeof input.maxSeats === "number") {
             const currentMaxSeats = Number(existing.max_seats || 0);

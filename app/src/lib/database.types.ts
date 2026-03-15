@@ -64,6 +64,10 @@ export type Database = {
                       what_you_learn: string[];
                       materials_provided: string[];
                       badge_labels: string[] | null;
+                      event_address: string | null;
+                      latitude: number | null;
+                      longitude: number | null;
+                      location_images: string[] | null;
                       is_bestseller: boolean;
                       is_new: boolean;
                       host_id: string | null;
@@ -97,6 +101,10 @@ export type Database = {
                       what_you_learn?: string[];
                       materials_provided?: string[];
                       badge_labels?: string[] | null;
+                      event_address?: string | null;
+                      latitude?: number | null;
+                      longitude?: number | null;
+                      location_images?: string[] | null;
                       is_bestseller?: boolean;
                       is_new?: boolean;
                       host_id?: string | null;
@@ -130,6 +138,10 @@ export type Database = {
                       what_you_learn?: string[];
                       materials_provided?: string[];
                       badge_labels?: string[] | null;
+                      event_address?: string | null;
+                      latitude?: number | null;
+                      longitude?: number | null;
+                      location_images?: string[] | null;
                       is_bestseller?: boolean;
                       is_new?: boolean;
                     host_id?: string | null;
@@ -189,6 +201,7 @@ export type Database = {
                     phone: string | null;
                     notes: string | null;
                     created_at: string;
+                    attended: boolean;
                 };
                 Insert: {
                     id?: string;
@@ -208,6 +221,7 @@ export type Database = {
                     phone?: string | null;
                     notes?: string | null;
                     created_at?: string;
+                    attended?: boolean;
                 };
                 Update: {
                     id?: string;
@@ -227,6 +241,7 @@ export type Database = {
                     phone?: string | null;
                     notes?: string | null;
                     created_at?: string;
+                    attended?: boolean;
                 };
                 Relationships: [];
             };
@@ -518,6 +533,33 @@ export type Database = {
                 };
                 Relationships: [];
             };
+            waitlists: {
+                Row: {
+                    id: string;
+                    workshop_id: string;
+                    user_id: string | null;
+                    email: string;
+                    status: "pending" | "notified" | "joined";
+                    created_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    workshop_id: string;
+                    user_id?: string | null;
+                    email: string;
+                    status?: "pending" | "notified" | "joined";
+                    created_at?: string;
+                };
+                Update: {
+                    id?: string;
+                    workshop_id?: string;
+                    user_id?: string | null;
+                    email?: string;
+                    status?: "pending" | "notified" | "joined";
+                    created_at?: string;
+                };
+                Relationships: [];
+            };
         };
         Views: {
             [_ in never]: never;
@@ -578,3 +620,14 @@ type PublicSchema = Database["public"];
 export type DbTable<T extends keyof PublicSchema["Tables"]> = PublicSchema["Tables"][T]["Row"];
 export type DbInsert<T extends keyof PublicSchema["Tables"]> = PublicSchema["Tables"][T]["Insert"];
 export type DbUpdate<T extends keyof PublicSchema["Tables"]> = PublicSchema["Tables"][T]["Update"];
+
+// --- PATCH: Waitlist & Checkin Additions ---
+export type WaitlistStatus = "pending" | "notified" | "joined";
+export type DbWaitlist = {
+    id: string;
+    workshop_id: string;
+    user_id: string | null;
+    email: string;
+    status: WaitlistStatus;
+    created_at: string;
+};
