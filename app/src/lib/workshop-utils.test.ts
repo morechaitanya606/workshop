@@ -35,7 +35,6 @@ function buildWorkshopRow(overrides: Partial<DbTable<"workshops">> = {}): DbTabl
         host_user_id: null,
         created_at: "2026-03-08T00:00:00Z",
         updated_at: "2026-03-08T00:00:00Z",
-        badge_labels: null,
         event_address: null,
         latitude: null,
         longitude: null,
