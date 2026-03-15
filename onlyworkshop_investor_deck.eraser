@@ -1,0 +1,592 @@
+
+# OnlyWorkshop — Platform Architecture & Business Overview
+
+> Prepared for: Clients, Investors & Stakeholders | March 2026 | v1.0
+
+---
+
+## 1. Executive Summary
+
+**OnlyWorkshop** is a modern marketplace SaaS platform connecting creative workshop hosts (potters, painters, bakers, woodworkers) with learners looking for hands-on experiences across Indian cities. Think **"BookMyShow for Creative Workshops"**.
+
+The platform handles discovery, booking, payments, host management, and post-experience feedback — creating a full-lifecycle ecosystem for the experience economy.
+
+---
+
+## 2. System Architecture
+
+<!-- eraser-diagram -->
+```
+// System Architecture Diagram
+
+// Frontend Layer
+"Frontend (Next.js 14)" [icon: nextjs, color: black] {
+  Homepage [icon: home, color: blue]
+  "Explore / Search" [icon: search, color: blue]
+  "Workshop Detail" [icon: eye, color: blue]
+  "Booking Flow" [icon: shopping-cart, color: blue]
+  "User Dashboard" [icon: layout, color: blue]
+  "Admin Panel" [icon: shield, color: red]
+  "Host Dashboard" [icon: briefcase, color: green]
+}
+
+// API Layer
+"API Routes (Next.js)" [icon: server, color: purple] {
+  "Auth API" [icon: lock, color: purple]
+  "Workshops API" [icon: layers, color: purple]
+  "Bookings API" [icon: calendar, color: purple]
+  "Payments API" [icon: credit-card, color: purple]
+  "Host API" [icon: user, color: purple]
+  "Admin API" [icon: shield, color: purple]
+  "Upload API" [icon: upload, color: purple]
+  "Cron Jobs" [icon: clock, color: purple]
+}
+
+// Infrastructure
+Supabase [icon: supabase, color: green] {
+  PostgreSQL [icon: database, color: green]
+  "Supabase Auth" [icon: key, color: green]
+  "Row Level Security" [icon: shield, color: green]
+}
+
+Razorpay [icon: credit-card, color: blue]
+"Resend Email" [icon: mail, color: orange]
+Sentry [icon: alert-triangle, color: red]
+PostHog [icon: bar-chart, color: yellow]
+"Cloudflare R2" [icon: hard-drive, color: orange]
+"Mappls Maps" [icon: map-pin, color: green]
+"Vercel (Deploy)" [icon: cloud, color: black]
+
+// Connections
+Homepage > "Auth API"
+"Workshop Detail" > "Workshops API"
+"Booking Flow" > "Bookings API"
+"Booking Flow" > "Payments API"
+"User Dashboard" > "Bookings API"
+"Host Dashboard" > "Host API"
+"Admin Panel" > "Admin API"
+
+"Auth API" > "Supabase Auth"
+"Workshops API" > PostgreSQL
+"Bookings API" > PostgreSQL
+"Payments API" > Razorpay
+"Host API" > PostgreSQL
+"Admin API" > PostgreSQL
+"Cron Jobs" > "Resend Email"
+"Upload API" > "Cloudflare R2"
+```
+<!-- end-eraser-diagram -->
+
+---
+
+## 3. User Booking Journey — Flow Chart
+
+<!-- eraser-diagram -->
+```
+// User Booking Journey
+
+"Visit Homepage" [shape: oval, icon: home, color: blue]
+"Browse Categories" [icon: grid, color: blue]
+"Search Workshops" [icon: search, color: blue]
+"View Workshop Details" [icon: eye, color: blue]
+"Select Guests and Date" [icon: users, color: green]
+"Seat Hold Created (15 min)" [icon: clock, color: orange]
+"Fill Booking Details" [icon: edit, color: green]
+"Pay via Razorpay" [icon: credit-card, color: green]
+"Booking Confirmed" [shape: oval, icon: check, color: green]
+"Email Sent" [icon: mail, color: orange]
+"View in Dashboard" [icon: layout, color: blue]
+"Attend Workshop" [icon: star, color: yellow]
+"Leave Feedback" [icon: message-circle, color: yellow]
+"Host Gets Paid" [shape: oval, icon: dollar-sign, color: green]
+
+// Connections
+"Visit Homepage" > "Browse Categories"
+"Browse Categories" > "Search Workshops"
+"Search Workshops" > "View Workshop Details"
+"View Workshop Details" > "Select Guests and Date"
+"Select Guests and Date" > "Seat Hold Created (15 min)"
+"Seat Hold Created (15 min)" > "Fill Booking Details"
+"Fill Booking Details" > "Pay via Razorpay"
+"Pay via Razorpay" > "Booking Confirmed"
+"Booking Confirmed" > "Email Sent"
+"Email Sent" > "View in Dashboard"
+"View in Dashboard" > "Attend Workshop"
+"Attend Workshop" > "Leave Feedback"
+"Leave Feedback" > "Host Gets Paid"
+```
+<!-- end-eraser-diagram -->
+
+---
+
+## 4. Booking & Payment Sequence Diagram
+
+<!-- eraser-diagram -->
+```
+User [icon: user, color: blue] > Frontend [icon: monitor, color: blue]: Select workshop, guests, date
+Frontend > API [icon: server, color: purple]: POST /api/bookings/hold
+API > Database [icon: database, color: green]: RPC create_booking_hold()
+
+activate Database
+Database > Database: Atomically decrement seats, create 15-min hold
+deactivate Database
+
+Database > API: hold_id
+API > Frontend: hold_id + expiry timer
+
+User > Frontend: Fill guest info, proceed to pay
+Frontend > API: POST /api/bookings/checkout
+API > Razorpay [icon: credit-card, color: blue]: Create Razorpay Order
+Razorpay > API: order_id
+API > Frontend: order_id + key
+
+Frontend > Razorpay: Open Checkout Modal
+User > Razorpay: Complete Payment
+Razorpay > Frontend: payment_id, signature
+
+Frontend > API: POST /api/payments/razorpay (verify)
+
+activate API
+API > API: Verify HMAC signature
+deactivate API
+
+API > Database: RPC confirm_booking_from_hold()
+
+activate Database
+Database > Database: Hold confirmed, Booking created, Earning entry added
+deactivate Database
+
+Database > API: booking_id
+API > "Resend Email" [icon: mail, color: orange]: Send confirmation email
+"Resend Email" > User: Booking Confirmation Email
+API > Frontend: Success + booking details
+
+// CRON note
+opt [label: Every 5 minutes] {
+  API > Database: Release expired holds, restore seats
+}
+```
+<!-- end-eraser-diagram -->
+
+---
+
+## 5. Database Schema (ERD)
+
+<!-- eraser-diagram -->
+```
+profiles [icon: user, color: blue] {
+  id uuid pk
+  full_name text
+  avatar_url text
+  date_of_birth date
+  phone_number text
+  role enum "user | host | admin"
+  created_at timestamp
+  updated_at timestamp
+}
+
+workshops [icon: layers, color: green] {
+  id uuid pk
+  title text
+  description text
+  category text
+  price decimal
+  location text
+  city text
+  date date
+  time text
+  duration text
+  max_seats int
+  seats_remaining int
+  cover_image text
+  gallery_images text[]
+  video_url text
+  host_name text
+  host_bio text
+  host_id uuid fk
+  host_user_id uuid fk
+  latitude float
+  longitude float
+  is_bestseller boolean
+  is_new boolean
+  created_at timestamp
+}
+
+hosts [icon: briefcase, color: green] {
+  id uuid pk
+  user_id uuid fk
+  name text
+  bio text
+  avatar_url text
+  social_links jsonb
+  created_at timestamp
+}
+
+host_applications [icon: file-text, color: orange] {
+  id uuid pk
+  user_id uuid fk
+  name text
+  email text
+  bio text
+  application_type text
+  details jsonb
+  status enum "pending | approved | rejected"
+  created_at timestamp
+}
+
+booking_holds [icon: clock, color: orange] {
+  id uuid pk
+  user_id uuid fk
+  workshop_id uuid fk
+  guests int
+  status enum "active | confirmed | expired | released"
+  expires_at timestamp
+  created_at timestamp
+}
+
+bookings [icon: calendar, color: blue] {
+  id uuid pk
+  user_id uuid fk
+  workshop_id uuid fk
+  hold_id uuid fk
+  guests int
+  subtotal decimal
+  service_fee decimal
+  total decimal
+  status enum "confirmed | cancelled | refunded"
+  payment_provider text
+  payment_intent_id text
+  first_name text
+  last_name text
+  email text
+  attended boolean
+  created_at timestamp
+}
+
+host_earnings [icon: dollar-sign, color: green] {
+  id uuid pk
+  host_id uuid fk
+  booking_id uuid fk
+  amount decimal
+  fee_deducted decimal
+  status enum "pending | available | paid"
+  created_at timestamp
+}
+
+payouts [icon: credit-card, color: green] {
+  id uuid pk
+  host_id uuid fk
+  amount decimal
+  status enum "processing | completed"
+  created_at timestamp
+}
+
+user_favorites [icon: heart, color: red] {
+  id uuid pk
+  user_id uuid fk
+  workshop_id uuid fk
+  created_at timestamp
+}
+
+workshop_feedback [icon: star, color: yellow] {
+  id uuid pk
+  user_id uuid fk
+  workshop_id uuid fk
+  rating int
+  comment text
+  photos text[]
+  created_at timestamp
+}
+
+waitlists [icon: list, color: orange] {
+  id uuid pk
+  workshop_id uuid fk
+  user_id uuid fk
+  email text
+  status enum "pending | notified | joined"
+  created_at timestamp
+}
+
+payment_webhook_events [icon: zap, color: purple] {
+  id uuid pk
+  provider text
+  event_key text
+  event_type text
+  payload jsonb
+  received_at timestamp
+}
+
+email_delivery_logs [icon: mail, color: orange] {
+  id uuid pk
+  recipient_email text
+  subject text
+  template_name text
+  status enum "pending | sent | failed"
+  created_at timestamp
+}
+
+// Relationships
+profiles.id < bookings.user_id
+profiles.id < booking_holds.user_id
+profiles.id < user_favorites.user_id
+profiles.id < workshop_feedback.user_id
+profiles.id < host_applications.user_id
+workshops.id < bookings.workshop_id
+workshops.id < booking_holds.workshop_id
+workshops.id < waitlists.workshop_id
+workshops.id < workshop_feedback.workshop_id
+hosts.id < workshops.host_id
+hosts.id < host_earnings.host_id
+hosts.id < payouts.host_id
+bookings.id < host_earnings.booking_id
+```
+<!-- end-eraser-diagram -->
+
+---
+
+## 6. Host Onboarding & Earnings Flow
+
+<!-- eraser-diagram -->
+```
+// Host Onboarding Flow
+
+"Creator or Venue visits Become a Host" [shape: oval, icon: user-plus, color: blue]
+"Application Type?" [shape: diamond, icon: help-circle, color: orange]
+
+"Creator Path" [color: green] {
+  "Fill Creator Details" [icon: edit, color: green]
+}
+
+"Venue Path" [color: blue] {
+  "Fill Venue Details" [icon: map-pin, color: blue]
+}
+
+"Submit Application" [icon: send, color: purple]
+"Admin Reviews" [icon: shield, color: red]
+"Application Decision?" [shape: diamond, icon: check-circle, color: orange]
+"Profile Role set to Host" [icon: check, color: green]
+"Rejection Notification" [icon: x, color: red]
+"Create Workshops" [icon: plus, color: green]
+"Workshops Go Live" [icon: globe, color: green]
+"Users Book Workshops" [icon: shopping-cart, color: blue]
+"Earning Created per Booking" [icon: dollar-sign, color: green]
+"Admin Processes Payout" [icon: credit-card, color: purple]
+"Host Receives Payment" [shape: oval, icon: check-circle, color: green]
+
+// Connections
+"Creator or Venue visits Become a Host" > "Application Type?"
+"Application Type?" > "Fill Creator Details": Creator
+"Application Type?" > "Fill Venue Details": Venue
+"Fill Creator Details" > "Submit Application"
+"Fill Venue Details" > "Submit Application"
+"Submit Application" > "Admin Reviews"
+"Admin Reviews" > "Application Decision?"
+"Application Decision?" > "Profile Role set to Host": Approved
+"Application Decision?" > "Rejection Notification": Rejected
+"Profile Role set to Host" > "Create Workshops"
+"Create Workshops" > "Workshops Go Live"
+"Workshops Go Live" > "Users Book Workshops"
+"Users Book Workshops" > "Earning Created per Booking"
+"Earning Created per Booking" > "Admin Processes Payout"
+"Admin Processes Payout" > "Host Receives Payment"
+```
+<!-- end-eraser-diagram -->
+
+---
+
+## 7. Tech Stack Overview
+
+<!-- eraser-diagram -->
+```
+// Tech Stack Architecture
+
+"Client Layer" [icon: monitor, color: blue] {
+  "Next.js 14 (App Router)" [icon: nextjs, color: black]
+  "React 18" [icon: react, color: blue]
+  "TypeScript 5.7" [icon: typescript, color: blue]
+  "Tailwind CSS 3.4" [icon: tailwindcss, color: blue]
+  "Framer Motion 11" [icon: play, color: pink]
+  "Zustand 5 (State)" [icon: box, color: purple]
+}
+
+"API Layer" [icon: server, color: purple] {
+  "Next.js API Routes" [icon: server, color: purple]
+  "Zod Validation" [icon: shield, color: orange]
+  "Rate Limiting" [icon: alert-triangle, color: red]
+  "Idempotency Keys" [icon: key, color: yellow]
+}
+
+"Data and Auth" [icon: database, color: green] {
+  "Supabase PostgreSQL" [icon: supabase, color: green]
+  "Supabase Auth (OAuth)" [icon: lock, color: green]
+  "Row Level Security" [icon: shield, color: green]
+}
+
+Payments [icon: credit-card, color: blue] {
+  "Razorpay Gateway" [icon: credit-card, color: blue]
+  "Webhook Handlers" [icon: zap, color: blue]
+  "HMAC Verification" [icon: shield, color: blue]
+}
+
+Infrastructure [icon: cloud, color: orange] {
+  "Vercel Deployment" [icon: cloud, color: black]
+  "Sentry Monitoring" [icon: alert-triangle, color: red]
+  "PostHog Analytics" [icon: bar-chart, color: yellow]
+  "Resend Email" [icon: mail, color: orange]
+  "Cloudflare R2 Media" [icon: hard-drive, color: orange]
+  "Mappls Maps" [icon: map-pin, color: green]
+}
+
+// Connections
+"Next.js 14 (App Router)" > "Next.js API Routes"
+"Next.js API Routes" > "Supabase PostgreSQL"
+"Next.js API Routes" > "Supabase Auth (OAuth)"
+"Next.js API Routes" > "Razorpay Gateway"
+"Next.js API Routes" > "Resend Email"
+"Next.js 14 (App Router)" > "Sentry Monitoring"
+"Next.js 14 (App Router)" > "PostHog Analytics"
+```
+<!-- end-eraser-diagram -->
+
+---
+
+## 8. Key Platform Features
+
+| Category | Feature | Status |
+|---|---|---|
+| **User** | Smart Search & Filters | ✅ Live |
+| **User** | City-based Discovery | ✅ Live |
+| **User** | Favorites & Wishlists | ✅ Live |
+| **User** | Booking History Dashboard | ✅ Live |
+| **User** | Ratings & Reviews | ✅ Live |
+| **User** | Email Notifications | ✅ Live |
+| **User** | Waitlist for Full Workshops | ✅ Live |
+| **User** | Profile Management | ✅ Live |
+| **Host** | Workshop Creation | ✅ Live |
+| **Host** | Booking Dashboard | ✅ Live |
+| **Host** | Earnings Tracking | ✅ Live |
+| **Host** | Payout Management | ✅ Live |
+| **Host** | Media Upload | ✅ Live |
+| **Host** | Social Links Integration | ✅ Live |
+| **Host** | Attendee Check-in | ✅ Live |
+| **Admin** | Platform Analytics | ✅ Live |
+| **Admin** | Host Application Review | ✅ Live |
+| **Admin** | Workshop Moderation | ✅ Live |
+| **Admin** | Payout Processing | ✅ Live |
+| **Admin** | Email Delivery Logs | ✅ Live |
+
+---
+
+## 9. Revenue Model
+
+| Revenue Stream | Description | Model |
+|---|---|---|
+| **Service Fee (60%)** | Platform fee on each booking transaction | % of booking value |
+| **Host Premium (15%)** | Premium listing features for hosts | Monthly subscription |
+| **Featured Placement (15%)** | Promoted workshop slots on homepage | Pay-per-placement |
+| **Venue Partnerships (10%)** | Commission on venue-hosted workshops | Revenue share |
+
+---
+
+## 10. Growth Roadmap
+
+| Phase | Name | Key Deliverables | Status |
+|---|---|---|---|
+| **Phase 1** | Foundation | Homepage, Explore, Workshop Detail, Auth (Email + Google OAuth), Razorpay Payments, Booking Engine with Seat Holds, Admin Panel | ✅ Done |
+| **Phase 2** | Growth | Host Onboarding (Creator + Venue), Host Dashboard, User Reviews, Waitlist System, Transactional Emails via Resend | 🚧 In Progress |
+| **Phase 3** | Scale | AI Recommendations, Multi-City Expansion (Tier 2 & 3), Mobile App (React Native/Flutter), Corporate B2B Packages, Subscription Pass Model | 📋 Planned |
+| **Phase 4** | Platform | Live Streaming (Virtual/Hybrid), Marketplace APIs, International Expansion (SEA), Creator Tools (Video Courses, Kits), Community Forums & Groups | 🔮 Vision |
+
+---
+
+## 11. Future Technology — User Benefits
+
+| Technology | Benefit | Impact |
+|---|---|---|
+| **AI-Powered Recommendations** | Personalized workshop suggestions based on interests & history | Higher engagement, repeat bookings |
+| **Smart Search with NLP** | Natural language queries like "pottery classes this weekend near me" | Faster discovery, better UX |
+| **AR/VR Previews** | Virtual tour of workshop spaces before booking | Increased confidence & conversions |
+| **Push Notifications** | Real-time booking updates, new workshop alerts, waitlist notifications | Better retention |
+| **Social Features** | Follow creators, share experiences, group bookings | Viral growth, community building |
+| **Workshop Passes** | Monthly subscription for unlimited/discounted workshops | Revenue predictability, user loyalty |
+| **In-App Messaging** | Direct chat between users and hosts | Better pre-booking experience |
+
+---
+
+## 12. Future Technology — Business Growth
+
+| Technology | Benefit | Impact |
+|---|---|---|
+| **PostHog Analytics** | Product usage insights, conversion funnel tracking | Data-driven decisions |
+| **Sentry Monitoring** | Real-time error tracking, performance monitoring | 99.9% uptime reliability |
+| **Automated Payouts** | Scheduled host payouts with ledger tracking | Scalable host operations |
+| **CRON Email Engine** | Automated reminders, follow-ups, re-engagement | Reduced no-shows, better retention |
+| **Rate Limiting & Security** | Protection against abuse, DDoS, fraudulent bookings | Platform integrity |
+| **CDN (Cloudflare R2)** | Fast global media delivery for workshop images & videos | Better performance worldwide |
+| **Vercel Edge Network** | Global CDN + serverless deployment | Sub-second page loads globally |
+| **CI/CD Pipeline** | Automated testing (Vitest + Playwright) and deployment | Rapid feature delivery |
+
+---
+
+## 13. Three-Actor Platform Model
+
+<!-- eraser-diagram -->
+```
+// Three-Actor Platform Model
+
+"Learner (User)" [icon: user, color: blue]
+"OnlyWorkshop Platform" [icon: layers, color: purple]
+"Creator / Host" [icon: briefcase, color: green]
+"Venue / Space" [icon: map-pin, color: orange]
+"Payment Gateway" [icon: credit-card, color: blue]
+"Admin Team" [icon: shield, color: red]
+
+// Connections
+"Learner (User)" > "OnlyWorkshop Platform": Browse, Search, Book
+"OnlyWorkshop Platform" > "Learner (User)": Workshop Listings, Confirmations
+"Creator / Host" > "OnlyWorkshop Platform": Create Workshops, Manage Bookings
+"OnlyWorkshop Platform" > "Creator / Host": Bookings, Earnings, Payouts
+"Venue / Space" > "OnlyWorkshop Platform": Register Space, List Amenities
+"OnlyWorkshop Platform" > "Venue / Space": Bookings, Revenue Share
+"OnlyWorkshop Platform" <> "Payment Gateway": Payments, Refunds, Webhooks
+"Admin Team" > "OnlyWorkshop Platform": Review Apps, Moderate, Process Payouts
+```
+<!-- end-eraser-diagram -->
+
+---
+
+## 14. Security and Compliance
+
+| Layer | Implementation |
+|---|---|
+| **Authentication** | Supabase Auth (JWT tokens, email + Google OAuth) |
+| **Authorization** | Row Level Security (RLS) policies in PostgreSQL |
+| **API Security** | Rate limiting, idempotency keys, HMAC signature verification |
+| **Payment Security** | PCI DSS compliant via Razorpay (no card data touches our servers) |
+| **Data Validation** | Zod schema validation on all API inputs |
+| **Error Monitoring** | Sentry for real-time error tracking |
+| **HTTPS** | Enforced across all endpoints via Vercel |
+
+---
+
+## 15. Competitive Positioning
+
+| Platform | Focus | Tech Level | Weakness vs OnlyWorkshop |
+|---|---|---|---|
+| **OnlyWorkshop** | Creative workshops only | Modern full-stack SaaS | — |
+| Eventbrite | General events | High | Not specialized for workshops |
+| BookMyShow | Movies + live events | High | No hands-on experience focus |
+| Local FB Groups | Community workshops | Low | No booking, no payments |
+| Instagram DMs | Casual booking | Low | No structured flow |
+| WhatsApp Groups | Informal | Low | No discoverability |
+
+**OnlyWorkshop's Edge:**
+- Vertical focus on creative/hands-on workshops (not general events)
+- Purpose-built booking flow with seat holds & real-time availability
+- Two-sided marketplace with host earnings, payouts & analytics
+- India-first with Razorpay, Mappls Maps, INR pricing
+- Modern tech stack enabling rapid iteration and premium UX
+
+---
+
+> Contact: hello@onlyworkshop.com | Website: onlyworkshop.com
