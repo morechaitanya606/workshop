@@ -27,7 +27,7 @@ function buildWorkshopRow(overrides: Partial<DbTable<"workshops">> = {}): DbTabl
         host_social_links: { youtube: "https://youtube.com/@anita" },
         what_you_learn: ["Wheel centering"],
         materials_provided: ["Clay", "Apron"],
-        badge_labels: [],
+        badge_labels: null,
         is_bestseller: true,
         is_new: false,
         host_id: null,
