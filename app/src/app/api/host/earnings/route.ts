@@ -37,10 +37,12 @@ export async function GET(request: NextRequest) {
             throw hostError;
         }
         if (!host) {
-            return NextResponse.json(
-                { error: "No host profile found for this account." },
-                { status: 404 }
-            );
+            return NextResponse.json({
+                host: null,
+                summary: { pending: 0, available: 0, paid: 0 },
+                earnings: [],
+                payouts: [],
+            });
         }
 
         const { data: earningsRows, error: earningsError } = await service.client

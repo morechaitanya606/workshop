@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Search, CalendarDays, User } from "lucide-react";
+import { Home, Search, CalendarDays, LayoutDashboard, User } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 export default function MobileNav() {
@@ -13,6 +13,9 @@ export default function MobileNav() {
         { href: "/explore", label: "Discover", icon: Search },
         ...(user && !roleLoading && role === "admin"
             ? [{ href: "/admin/dashboard", label: "Dashboard", icon: CalendarDays }]
+            : []),
+        ...(user && !roleLoading && role === "host"
+            ? [{ href: "/host/dashboard", label: "Host Panel", icon: LayoutDashboard }]
             : []),
         { href: user ? "/profile" : "/auth/login", label: "Profile", icon: User },
     ];

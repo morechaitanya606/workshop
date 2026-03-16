@@ -155,6 +155,14 @@ export default function Navbar() {
                                     Dashboard
                                 </Link>
                             )}
+                            {user && !roleLoading && role === "host" && (
+                                <Link
+                                    href="/host/dashboard"
+                                    className="text-sm font-inter font-medium text-dark-secondary hover:text-terracotta transition-colors duration-300"
+                                >
+                                    Host Panel
+                                </Link>
+                            )}
                             {!loading && !user && (
                                 <>
                                     <Link
@@ -274,6 +282,9 @@ export default function Navbar() {
                                 ...(user ? [{ href: "/profile", label: "Profile" }] : []),
                                 ...(user && !roleLoading && role === "admin"
                                     ? [{ href: "/admin/dashboard", label: "Dashboard" }]
+                                    : []),
+                                ...(user && !roleLoading && role === "host"
+                                    ? [{ href: "/host/dashboard", label: "Host Panel" }]
                                     : []),
                                 { href: "mailto:hello@onlyworkshop.com", label: "Contact Us" },
                             ].map((link, i) => (

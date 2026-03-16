@@ -2,6 +2,16 @@ import "@testing-library/jest-dom/vitest";
 import React from "react";
 import { vi } from "vitest";
 
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+}
+if (
+    !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY &&
+    !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+) {
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "test-publishable-key";
+}
+
 vi.mock("next/image", () => ({
     default: (props: React.ImgHTMLAttributes<HTMLImageElement> & { fill?: boolean }) => {
         const { fill: _fill, ...rest } = props;

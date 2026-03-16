@@ -703,7 +703,7 @@ export type HostEarningsResponse = {
         id: string;
         name: string;
         user_id: string | null;
-    };
+    } | null;
     summary: {
         pending: number;
         available: number;
@@ -797,6 +797,17 @@ export type HostLedgerResponse = {
 
 export function getHostLedger(accessToken: string) {
     return apiRequest<HostLedgerResponse>("/api/host/ledger", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export type HostWorkshopsResponse = {
+    data: Workshop[];
+};
+
+export function getHostWorkshops(accessToken: string) {
+    return apiRequest<HostWorkshopsResponse>("/api/host/workshops", {
         accessToken,
         cache: "no-store",
     });

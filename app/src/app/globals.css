@@ -87,6 +87,11 @@
            motion-safe:hover:shadow-hover motion-safe:hover:-translate-y-1.5 motion-safe:hover:scale-[1.01];
     }
 
+    .card-workshop-past {
+        @apply opacity-75;
+        filter: grayscale(0.25);
+    }
+
     .light-sweep,
     .btn-primary {
         position: relative;

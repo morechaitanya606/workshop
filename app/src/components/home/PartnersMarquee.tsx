@@ -48,15 +48,15 @@ export default function PartnersMarquee({ shouldReduceMotion }: { shouldReduceMo
                             key={index}
                             className="flex flex-col items-center justify-center gap-3 bg-white px-6 py-5 rounded-2xl shadow-sm border border-clay/30 min-w-[220px] text-center motion-safe:hover:scale-[1.03] hover:shadow-hover transition-all duration-300"
                         >
-                            <div className="w-12 h-12 rounded-full overflow-hidden bg-cream border border-clay/50">
+                            <div className="w-16 h-16 rounded-full overflow-hidden bg-white border border-clay/50 flex items-center justify-center p-1.5">
                                 <Image
                                     src={partner.img}
                                     alt={partner.name}
-                                    width={48}
-                                    height={48}
-                                    className="w-full h-full object-cover"
-                                    sizes="48px"
-                                    quality={70}
+                                    width={64}
+                                    height={64}
+                                    className="w-full h-full object-contain"
+                                    sizes="64px"
+                                    quality={80}
                                 />
                             </div>
                             <span className="font-playfair font-bold text-lg text-dark">

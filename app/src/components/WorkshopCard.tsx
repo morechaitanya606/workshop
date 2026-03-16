@@ -5,7 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { Calendar, MapPin, Star, Heart } from "lucide-react";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatTime, truncateText } from "@/lib/utils";
+import { getWorkshopDateTime } from "@/lib/booking-time";
 import { addFavorite, getFavorites, removeFavorite } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import type { Workshop } from "@/lib/data";
@@ -57,6 +58,12 @@ export default function WorkshopCard({
     const [isHovered, setIsHovered] = useState(false);
     const [imageIndex, setImageIndex] = useState(0);
 
+    const today = new Date().toISOString().slice(0, 10);
+    const workshopDateTime = getWorkshopDateTime(workshop.date, workshop.time);
+    const isPastWorkshop = workshopDateTime
+        ? workshopDateTime.getTime() < Date.now()
+        : workshop.date < today;
+
     const imagePool = useMemo(() => {
         const items = [workshop.coverImage, ...(workshop.galleryImages || [])]
             .map((item) => item?.trim())
@@ -65,18 +72,20 @@ export default function WorkshopCard({
         return unique.length ? unique : [workshop.coverImage];
     }, [workshop.coverImage, workshop.galleryImages]);
 
-    const highlightedBadge = workshop.isBestseller
-        ? {
-              label: "Bestseller",
-              className: "bg-dark text-white",
-          }
-        : workshop.isNew
+    const highlightedBadge = isPastWorkshop
+        ? null
+        : workshop.isBestseller
           ? {
-                label: "New",
-                className: "bg-emerald-500 text-white",
+                label: "Bestseller",
+                className: "bg-dark text-white",
             }
-          : null;
-    const isSoldOut = workshop.seatsRemaining <= 0;
+          : workshop.isNew
+            ? {
+                  label: "New",
+                  className: "bg-emerald-500 text-white",
+              }
+            : null;
+    const isSoldOut = !isPastWorkshop && workshop.seatsRemaining <= 0;
     const seatsLabel = isSoldOut
         ? "Sold out"
         : `${workshop.seatsRemaining} seat${workshop.seatsRemaining === 1 ? "" : "s"} available`;
@@ -189,7 +198,7 @@ export default function WorkshopCard({
                 onBlur={() => setIsHovered(false)}
             >
                 <div
-                    className="card-workshop light-sweep hover-lift"
+                    className={`card-workshop light-sweep hover-lift${isPastWorkshop ? " card-workshop-past" : ""}`}
                     onMouseEnter={() => setIsHovered(true)}
                     onMouseLeave={() => setIsHovered(false)}
                 >
@@ -249,13 +258,18 @@ export default function WorkshopCard({
                         <div className="flex items-center gap-1.5 mb-2">
                             <Calendar className="w-3.5 h-3.5 text-dark-muted" />
                             <span className="text-xs font-inter text-dark-muted">
-                                {formatDate(workshop.date)} &bull; {workshop.time}
+                                {formatDate(workshop.date)} &bull; {formatTime(workshop.time)}
                             </span>
                         </div>
 
-                        <h3 className="font-inter text-lg sm:text-xl font-bold text-dark leading-snug mb-2 tracking-tight line-clamp-2 group-hover:text-terracotta transition-colors duration-300">
+                        <h3 className="font-inter text-lg sm:text-xl font-bold text-dark leading-snug mb-1 tracking-tight line-clamp-2 group-hover:text-terracotta transition-colors duration-300">
                             {workshop.title}
                         </h3>
+
+                        {/* Description snippet */}
+                        <p className="text-xs font-inter text-dark-muted leading-relaxed mb-2 line-clamp-1">
+                            {truncateText(workshop.description, 80)}
+                        </p>
 
                         {/* Suitability badges */}
                         {badgeLabels.length > 0 && (
@@ -271,7 +285,7 @@ export default function WorkshopCard({
                             </div>
                         )}
 
-                        {/* Location */}
+                        {/* Host & Location */}
                         {variant === "default" && (
                             <div className="flex items-center gap-1.5 mb-3">
                                 {workshop.hostAvatar ? (
@@ -287,8 +301,8 @@ export default function WorkshopCard({
                                 ) : (
                                     <MapPin className="w-3.5 h-3.5 text-dark-muted" />
                                 )}
-                                <span className="text-xs font-inter text-dark-muted">
-                                    {workshop.location}, {workshop.city}
+                                <span className="text-xs font-inter text-dark-muted truncate">
+                                    {workshop.hostName} &bull; {workshop.location}, {workshop.city}
                                 </span>
                             </div>
                         )}
@@ -306,10 +320,15 @@ export default function WorkshopCard({
                                             ({workshop.reviewCount})
                                         </span>
                                     </>
+                                ) : isPastWorkshop ? (
+                                    <span className="text-xs font-inter text-dark-muted flex items-center gap-1">
+                                        <Star className="w-3.5 h-3.5" />
+                                        No reviews
+                                    </span>
                                 ) : (
                                     <span className="text-xs font-inter font-semibold text-emerald-600 flex items-center gap-1">
                                         <Star className="w-3.5 h-3.5" />
-                                        NEW
+                                        New
                                     </span>
                                 )}
                             </div>
@@ -318,31 +337,40 @@ export default function WorkshopCard({
                             </span>
                         </div>
 
-                        {/* Seats indicator */}
+                        {/* Seats / Status indicator */}
                         <div className="mt-2">
-                            {workshop.seatsRemaining > 0 && workshop.seatsRemaining <= 5 && (
-                                <div className="mb-2 flex items-center gap-1.5">
-                                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
-                                        <div
-                                            className="h-full rounded-full bg-terracotta transition-all duration-500"
-                                            style={{
-                                                width: `${((workshop.maxSeats - workshop.seatsRemaining) / workshop.maxSeats) * 100}%`,
-                                            }}
-                                        />
-                                    </div>
-                                </div>
+                            {isPastWorkshop ? (
+                                <span className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-inter font-semibold uppercase tracking-wider border bg-gray-100 text-gray-500 border-gray-200">
+                                    Event ended
+                                </span>
+                            ) : (
+                                <>
+                                    {workshop.seatsRemaining > 0 &&
+                                        workshop.seatsRemaining <= 5 && (
+                                            <div className="mb-2 flex items-center gap-1.5">
+                                                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                                                    <div
+                                                        className="h-full rounded-full bg-terracotta transition-all duration-500"
+                                                        style={{
+                                                            width: `${((workshop.maxSeats - workshop.seatsRemaining) / workshop.maxSeats) * 100}%`,
+                                                        }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                    <span
+                                        className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-inter font-semibold uppercase tracking-wider border ${
+                                            isSoldOut
+                                                ? "bg-red-100 text-red-700 border-red-200"
+                                                : workshop.seatsRemaining <= 5
+                                                  ? "bg-terracotta/10 text-terracotta border-terracotta/20"
+                                                  : "bg-emerald-50 text-emerald-800 border-emerald-100"
+                                        }`}
+                                    >
+                                        {seatsLabel}
+                                    </span>
+                                </>
                             )}
-                            <span
-                                className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-inter font-semibold uppercase tracking-wider border ${
-                                    isSoldOut
-                                        ? "bg-red-100 text-red-700 border-red-200"
-                                        : workshop.seatsRemaining <= 5
-                                          ? "bg-terracotta/10 text-terracotta border-terracotta/20"
-                                          : "bg-emerald-50 text-emerald-800 border-emerald-100"
-                                }`}
-                            >
-                                {seatsLabel}
-                            </span>
                         </div>
                     </div>
                 </div>

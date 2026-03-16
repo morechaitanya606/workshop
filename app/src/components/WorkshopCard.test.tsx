@@ -6,11 +6,13 @@ import { mockWorkshops } from "@/lib/data";
 
 describe("WorkshopCard", () => {
     it("renders workshop summary details", () => {
-        const workshop = mockWorkshops[0];
+        const workshop = {
+            ...mockWorkshops[0],
+            date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+        };
         render(<WorkshopCard workshop={workshop} />);
 
         expect(screen.getByText(workshop.title)).toBeInTheDocument();
-        expect(screen.getByText(`${workshop.location}, ${workshop.city}`)).toBeInTheDocument();
         expect(screen.getByText(/₹/)).toBeInTheDocument();
         expect(
             screen.getByText(
@@ -20,7 +22,10 @@ describe("WorkshopCard", () => {
     });
 
     it("links to the workshop detail page", () => {
-        const workshop = mockWorkshops[1];
+        const workshop = {
+            ...mockWorkshops[1],
+            date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+        };
         render(<WorkshopCard workshop={workshop} />);
 
         const link = screen.getByRole("link");
@@ -32,9 +37,51 @@ describe("WorkshopCard", () => {
             ...mockWorkshops[0],
             id: "sold-out-card",
             seatsRemaining: 0,
+            date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
         };
         render(<WorkshopCard workshop={soldOutWorkshop} />);
 
         expect(screen.getByText("Sold out")).toBeInTheDocument();
+    });
+
+    it("shows Event ended for past workshops", () => {
+        const pastWorkshop = {
+            ...mockWorkshops[0],
+            id: "past-card",
+            date: "2025-01-01",
+        };
+        render(<WorkshopCard workshop={pastWorkshop} />);
+
+        expect(screen.getByText("Event ended")).toBeInTheDocument();
+        expect(screen.queryByText(/seat/i)).not.toBeInTheDocument();
+    });
+
+    it("does not show New badge for past workshops", () => {
+        const pastNewWorkshop = {
+            ...mockWorkshops[0],
+            id: "past-new-card",
+            isNew: true,
+            isBestseller: false,
+            reviewCount: 0,
+            date: "2025-01-01",
+        };
+        render(<WorkshopCard workshop={pastNewWorkshop} />);
+
+        // The highlighted "New" badge (top-right overlay) should not appear
+        // Bottom row should show "No reviews", not "New"
+        expect(screen.getByText("No reviews")).toBeInTheDocument();
+        expect(screen.getByText("Event ended")).toBeInTheDocument();
+    });
+
+    it("shows No reviews instead of New for past workshops with zero reviews", () => {
+        const pastNoReviews = {
+            ...mockWorkshops[0],
+            id: "past-no-reviews-card",
+            reviewCount: 0,
+            date: "2025-01-01",
+        };
+        render(<WorkshopCard workshop={pastNoReviews} />);
+
+        expect(screen.getByText("No reviews")).toBeInTheDocument();
     });
 });

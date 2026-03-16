@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { requireAuthenticatedUser } from "@/lib/api-auth";
+import { requireHostOrAdmin } from "@/lib/api-auth";
 import { handleApiError } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
 
 export async function GET(request: NextRequest) {
-    const auth = await requireAuthenticatedUser(request);
+    const auth = await requireHostOrAdmin(request);
     if (!auth.ok) return auth.response;
 
     const service = requireSupabaseService();
@@ -17,13 +17,14 @@ export async function GET(request: NextRequest) {
             .from("hosts")
             .select("id")
             .eq("user_id", auth.user.id)
-            .single();
+            .maybeSingle();
 
-        if (hostError || !host) {
-            return handleApiError(
-                "Host record not found for this user.",
-                new Error("Host record not found for this user.")
-            );
+        if (hostError) throw hostError;
+        if (!host) {
+            return NextResponse.json({
+                earnings: [],
+                payouts: [],
+            });
         }
 
         // 2. Fetch Earnings
