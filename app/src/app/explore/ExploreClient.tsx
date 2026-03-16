@@ -48,7 +48,7 @@ const CATEGORY_OPTIONS = categories
     .filter((item) => item.id !== "trending")
     .map((item) => item.label);
 const CATEGORY_OPTION_SET = new Set(CATEGORY_OPTIONS);
-const CITY_OPTIONS = ["", "Pune", "Mumbai", "Bangalore", "Delhi", "Hyderabad"];
+const CITY_OPTIONS = ["", "City", "Mumbai", "Bangalore", "Delhi", "Hyderabad"];
 const PAGE_SIZE = 8;
 
 function buildFilterParams(next: FilterState) {

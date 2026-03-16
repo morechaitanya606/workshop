@@ -118,7 +118,7 @@ export default function ListYourSpacePage() {
                 </div>
                 <h1 className="font-playfair text-4xl sm:text-6xl md:text-7xl font-bold text-dark tracking-tight mb-8">
                     Turn your Space into a <br className="hidden md:block" />
-                    <span className="text-terracotta italic relative inline-block">
+                    <span className="text-terracotta relative inline-block">
                         Creative Hub
                         <svg
                             className="absolute w-full h-3 -bottom-1 left-0 text-terracotta/30"
@@ -135,8 +135,8 @@ export default function ListYourSpacePage() {
                     </span>
                 </h1>
                 <p className="max-w-2xl mx-auto text-lg sm:text-xl font-inter text-dark-muted mb-10 text-balance leading-relaxed">
-                    Partner with Only Workshops to bring vibrant, hands-on experiences to your venue.
-                    Monetize your down-time and introduce your brand to a passionate local
+                    Partner with Only Workshops to bring vibrant, hands-on experiences to your
+                    venue. Monetize your down-time and introduce your brand to a passionate local
                     community.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -192,7 +192,7 @@ export default function ListYourSpacePage() {
                 <div className="bg-white rounded-3xl border border-clay/20 shadow-soft p-8 sm:p-12">
                     <div className="text-center mb-10">
                         <h2 className="font-playfair text-3xl sm:text-4xl font-bold text-dark mb-4">
-                            Apply to become a Venue
+                            Apply to become a Partner
                         </h2>
                         <p className="font-inter text-dark-muted">
                             Submit your details to explore a workshop partnership.
@@ -253,7 +253,8 @@ export default function ListYourSpacePage() {
                                     <div className="grid sm:grid-cols-2 gap-6">
                                         <div>
                                             <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
-                                                Venue Name
+                                                Venue Name{" "}
+                                                <span className="text-terracotta">*</span>
                                             </label>
                                             <input
                                                 value={name}
@@ -268,7 +269,8 @@ export default function ListYourSpacePage() {
 
                                         <div>
                                             <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
-                                                Contact Email
+                                                Contact Email{" "}
+                                                <span className="text-terracotta">*</span>
                                             </label>
                                             <input
                                                 type="email"
@@ -284,7 +286,8 @@ export default function ListYourSpacePage() {
                                     <div className="grid sm:grid-cols-2 gap-6">
                                         <div>
                                             <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
-                                                Owner Name
+                                                Owner Name{" "}
+                                                <span className="text-terracotta">*</span>
                                             </label>
                                             <input
                                                 value={ownerName}
@@ -300,7 +303,8 @@ export default function ListYourSpacePage() {
                                         </div>
                                         <div>
                                             <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
-                                                Owner Mobile Number
+                                                Owner Mobile Number{" "}
+                                                <span className="text-terracotta">*</span>
                                             </label>
                                             <input
                                                 type="tel"
@@ -318,7 +322,8 @@ export default function ListYourSpacePage() {
                                     <div className="grid sm:grid-cols-2 gap-6">
                                         <div>
                                             <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
-                                                Location / City
+                                                Location / City{" "}
+                                                <span className="text-terracotta">*</span>
                                             </label>
                                             <input
                                                 value={location}
@@ -333,7 +338,8 @@ export default function ListYourSpacePage() {
 
                                         <div>
                                             <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
-                                                Max Seating Capacity
+                                                Max Seating Capacity{" "}
+                                                <span className="text-terracotta">*</span>
                                             </label>
                                             <input
                                                 type="number"
@@ -351,7 +357,7 @@ export default function ListYourSpacePage() {
 
                                     <div>
                                         <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
-                                            Space Type
+                                            Space Type <span className="text-terracotta">*</span>
                                         </label>
                                         <select
                                             value={spaceType}
@@ -375,7 +381,8 @@ export default function ListYourSpacePage() {
 
                                     <div>
                                         <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
-                                            Space Description
+                                            Space Description{" "}
+                                            <span className="text-terracotta">*</span>
                                         </label>
                                         <textarea
                                             value={bio}
@@ -391,7 +398,7 @@ export default function ListYourSpacePage() {
 
                                     <div>
                                         <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
-                                            Website or Instagram (Optional)
+                                            Website or Instagram
                                         </label>
                                         <input
                                             type="url"

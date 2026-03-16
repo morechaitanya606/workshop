@@ -107,7 +107,7 @@ describe("admin API client methods", () => {
             category: "Pottery",
             price: 1800,
             location: "Koregaon Park Studio",
-            city: "Pune",
+            city: "City",
             duration: "3 hours",
             date: "2026-03-30",
             time: "11:00",

@@ -4,7 +4,7 @@ import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Loader2, Check, Upload } from "lucide-react";
-import { categories } from "@/lib/data";
+import { categories, PAST_EVENTS_CATEGORY_ID } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import AdminShell from "@/components/admin/AdminShell";
 import {
@@ -48,7 +48,10 @@ export default function AdminEditWorkshopPage() {
     const { session } = useAuth();
     const workshopId = params?.id;
     const categoryOptions = useMemo(
-        () => categories.filter((item) => item.id !== "trending"),
+        () =>
+            categories.filter(
+                (item) => item.id !== "trending" && item.id !== PAST_EVENTS_CATEGORY_ID
+            ),
         []
     );
 
@@ -229,8 +232,12 @@ export default function AdminEditWorkshopPage() {
                             ? workshop.badgeLabels.join("\n")
                             : "",
                         eventAddress: workshop.eventAddress || "",
-                        latitude: typeof workshop.latitude === "number" ? String(workshop.latitude) : "",
-                        longitude: typeof workshop.longitude === "number" ? String(workshop.longitude) : "",
+                        latitude:
+                            typeof workshop.latitude === "number" ? String(workshop.latitude) : "",
+                        longitude:
+                            typeof workshop.longitude === "number"
+                                ? String(workshop.longitude)
+                                : "",
                         locationImages: Array.isArray(workshop.locationImages)
                             ? workshop.locationImages.join("\n")
                             : "",
@@ -376,39 +383,39 @@ export default function AdminEditWorkshopPage() {
                         </div>
 
                         <div>
-                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                            Category
-                        </label>
-                        <select
-                            value={categorySelection}
-                            onChange={(e) => handleCategoryChange(e.target.value)}
-                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
-                            required
-                        >
-                            <option value="">Select category</option>
-                            {categoryOptions.map((item) => (
-                                <option key={item.id} value={item.label}>
-                                    {item.label}
-                                </option>
-                            ))}
-                            <option value="__other__">Other (type below)</option>
-                        </select>
-                        {categorySelection === "__other__" && (
-                            <div className="mt-3">
-                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                    Custom Category
-                                </label>
-                                <input
-                                    value={customCategory}
-                                    onChange={(e) => handleCustomCategoryChange(e.target.value)}
-                                    placeholder="e.g. Calligraphy"
-                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
-                                    required
-                                />
-                            </div>
-                        )}
-                        {renderFieldError("category")}
-                    </div>
+                            <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                Category
+                            </label>
+                            <select
+                                value={categorySelection}
+                                onChange={(e) => handleCategoryChange(e.target.value)}
+                                className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                required
+                            >
+                                <option value="">Select category</option>
+                                {categoryOptions.map((item) => (
+                                    <option key={item.id} value={item.label}>
+                                        {item.label}
+                                    </option>
+                                ))}
+                                <option value="__other__">Other (type below)</option>
+                            </select>
+                            {categorySelection === "__other__" && (
+                                <div className="mt-3">
+                                    <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                        Custom Category
+                                    </label>
+                                    <input
+                                        value={customCategory}
+                                        onChange={(e) => handleCustomCategoryChange(e.target.value)}
+                                        placeholder="e.g. Calligraphy"
+                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                        required
+                                    />
+                                </div>
+                            )}
+                            {renderFieldError("category")}
+                        </div>
 
                         <div>
                             <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
@@ -694,33 +701,35 @@ export default function AdminEditWorkshopPage() {
                                     />
                                 </label>
                                 <p className="text-xs font-inter text-dark-muted">
-                                MP4, WebM or MOV (up to 50MB).
-                            </p>
-                        </div>
+                                    MP4, WebM or MOV (up to 50MB).
+                                </p>
+                            </div>
 
-                        <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
-                            <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
-                                Badges
-                            </h2>
-                            <p className="mt-1 text-xs font-inter text-dark-muted">
-                                Labels shown on workshop cards and detail pages.
-                            </p>
-                        </div>
+                            <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
+                                <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                                    Badges
+                                </h2>
+                                <p className="mt-1 text-xs font-inter text-dark-muted">
+                                    Labels shown on workshop cards and detail pages.
+                                </p>
+                            </div>
 
-                        <div className="md:col-span-2">
-                            <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                Badge Labels (newline or comma separated)
-                            </label>
-                            <textarea
-                                value={form.badgeLabels}
-                                onChange={(e) => update("badgeLabels", e.target.value)}
-                                rows={3}
-                                className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
-                                placeholder={"Beginners welcome\nAll materials included\nPune · Offline workshop"}
-                            />
-                            {renderFieldError("badgeLabels")}
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Badge Labels (newline or comma separated)
+                                </label>
+                                <textarea
+                                    value={form.badgeLabels}
+                                    onChange={(e) => update("badgeLabels", e.target.value)}
+                                    rows={3}
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    placeholder={
+                                        "Beginners welcome\nAll materials included\nCity · Offline workshop"
+                                    }
+                                />
+                                {renderFieldError("badgeLabels")}
+                            </div>
                         </div>
-                    </div>
                     </div>
 
                     {error && <p className="text-sm font-inter text-red-600">{error}</p>}

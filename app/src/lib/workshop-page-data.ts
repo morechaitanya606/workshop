@@ -4,6 +4,7 @@ import * as Sentry from "@sentry/core";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { workshopQuerySchema } from "@/lib/validators";
 import { mapWorkshopRowToWorkshop, queryMockWorkshops } from "@/lib/workshop-utils";
+import { PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
 
 export type WorkshopPageSource = "supabase" | "mock" | "error";
@@ -128,8 +129,19 @@ export async function loadExploreWorkshops(searchParams: {
                     `title.ilike.%${q}%,description.ilike.%${q}%,location.ilike.%${q}%,city.ilike.%${q}%`
                 );
             }
-            if (query.category) {
+            const isPastEventsCategory =
+                query.category.toLowerCase() === PAST_EVENTS_CATEGORY_LABEL.toLowerCase();
+            const hasDateFilter = Boolean(query.dateFrom || query.dateTo);
+            if (query.category && !isPastEventsCategory) {
                 dbQuery = dbQuery.eq("category", query.category);
+            }
+            if (isPastEventsCategory) {
+                const today = new Date().toISOString().slice(0, 10);
+                dbQuery = dbQuery.lt("date", today);
+            }
+            if (!isPastEventsCategory && !hasDateFilter) {
+                const today = new Date().toISOString().slice(0, 10);
+                dbQuery = dbQuery.gte("date", today);
             }
             if (query.city) {
                 dbQuery = dbQuery.eq("city", query.city);

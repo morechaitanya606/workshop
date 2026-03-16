@@ -3,46 +3,20 @@
 import Image from "next/image";
 
 const CAFE_PARTNERS = [
-    {
-        name: "The Daily Brew",
-        img: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&q=70&w=200&h=200",
-    },
-    {
-        name: "Cafe Atelier",
-        img: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&q=70&w=200&h=200",
-    },
-    {
-        name: "Studio Beans",
-        img: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=70&w=200&h=200",
-    },
-    {
-        name: "Roast & Ritual",
-        img: "https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&q=70&w=200&h=200",
-    },
-    {
-        name: "Brew Lab",
-        img: "https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&q=70&w=200&h=200",
-    },
-    {
-        name: "Clay Cup Cafe",
-        img: "https://images.unsplash.com/photo-1497935586351-b67a49e012bf?auto=format&fit=crop&q=70&w=200&h=200",
-    },
-    {
-        name: "Boka Cafe",
-        img: "https://images.unsplash.com/photo-1600093463592-8e36ae95ef56?auto=format&fit=crop&q=70&w=200&h=200",
-    },
-    {
-        name: "Third Space Cafe",
-        img: "https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&q=70&w=200&h=200",
-    },
-    {
-        name: "Third Place Cafe",
-        img: "https://images.unsplash.com/photo-1453614512568-c4024d13c247?auto=format&fit=crop&q=70&w=200&h=200",
-    },
-    {
-        name: "Raaha Cafe",
-        img: "https://images.unsplash.com/photo-1525610553991-2bede1a236e2?auto=format&fit=crop&q=70&w=200&h=200",
-    },
+    { name: "Blue Tokai", img: "/images/partners/blue-tokai-logo.png" },
+    { name: "Boka Book Cafe", img: "/images/partners/boka-book-cafe.jpg" },
+    { name: "Cafe Peter Kothrud", img: "/images/partners/cafe-peter-kothrud.jpg" },
+    { name: "Cafe Peter", img: "/images/partners/cafe-peter.jpg" },
+    { name: "Cafe Raaha", img: "/images/partners/cafe-raaha-logo.png" },
+    { name: "Doolally", img: "/images/partners/doolally.png" },
+    { name: "Hippie @ Heart", img: "/images/partners/hippie-at-heart.jpg" },
+    { name: "Iyagi studio", img: "/images/partners/iyagi-studio.jpg" },
+    { name: "La Ven", img: "/images/partners/la-ven-logo.jpg" },
+    { name: "Starbucks", img: "/images/partners/starbucks-logo.jpg" },
+    { name: "Third Place Cafe", img: "/images/partners/third-place-cafe.jpg" },
+    { name: "Third Space Cafe", img: "/images/partners/third-space-cafe.jpg" },
+    { name: "Third Wave Coffee", img: "/images/partners/third-wave-coffee.png" },
+    { name: "Tipplr Cafe & Bar", img: "/images/partners/tipplr-cafe-bar.jpeg" },
 ];
 
 export default function PartnersMarquee({ shouldReduceMotion }: { shouldReduceMotion: boolean }) {

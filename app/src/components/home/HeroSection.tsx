@@ -95,7 +95,7 @@ export default function HeroSection({ source }: { source: "supabase" | "mock" | 
                 >
                     <Sparkles className="w-4 h-4 text-terracotta-300" />
                     <span className="text-sm font-inter font-medium text-white/90">
-                        Creative experiences in Pune
+                        Creative experiences in the city
                     </span>
                 </motion.div>
 
@@ -115,8 +115,7 @@ export default function HeroSection({ source }: { source: "supabase" | "mock" | 
                         {...heroBodyMotionProps}
                         className="text-lg sm:text-xl font-inter text-white/80 max-w-xl"
                     >
-                        Discover pottery, painting, cooking and more with handpicked hosts across
-                        Pune.
+                        Celebrate through experience. Connect through creativity.
                     </motion.p>
                 </div>
 

@@ -106,7 +106,7 @@ export default function SearchBar({ selectedCategoryId = "trending" }: SearchBar
                                 className="w-full bg-transparent outline-none text-sm font-inter text-dark appearance-none cursor-pointer focus-visible:outline-none"
                             >
                                 <option value="">All Cities</option>
-                                <option>Pune</option>
+                                <option>City</option>
                                 <option>Mumbai</option>
                                 <option>Bangalore</option>
                                 <option>Delhi</option>

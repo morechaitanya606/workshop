@@ -18,6 +18,7 @@ export default function BecomeAHostPage() {
     const [phone, setPhone] = useState("");
     const [bio, setBio] = useState("");
     const [portfolioUrl, setPortfolioUrl] = useState("");
+    const [location, setLocation] = useState("");
     const [expertise, setExpertise] = useState("");
     const [instagram, setInstagram] = useState("");
     const [youtube, setYoutube] = useState("");
@@ -55,6 +56,7 @@ export default function BecomeAHostPage() {
                 applicationType: "creator",
                 details: {
                     expertise: expertise.trim(),
+                    location: location.trim(),
                     phone: phone.trim(),
                     socialLinks: {
                         instagram: instagram.trim(),
@@ -195,6 +197,19 @@ export default function BecomeAHostPage() {
                                         onChange={(event) => setExpertise(event.target.value)}
                                         required
                                         placeholder="e.g., Pottery, Digital Marketing, Yoga"
+                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
+                                        Where are you based at ?
+                                    </label>
+                                    <input
+                                        value={location}
+                                        onChange={(event) => setLocation(event.target.value)}
+                                        required
+                                        placeholder="e.g., Andheri West, Mumbai"
                                         className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
                                     />
                                 </div>

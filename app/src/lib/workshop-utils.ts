@@ -1,5 +1,5 @@
 import type { Workshop } from "@/lib/data";
-import { mockWorkshops } from "@/lib/data";
+import { mockWorkshops, PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
 import type { DbInsert, DbTable, Json } from "@/lib/database.types";
 import type { SupabaseServerClient } from "@/lib/supabase-server";
 import type { WorkshopCreateInput, WorkshopQueryInput } from "@/lib/validators";
@@ -100,7 +100,9 @@ export function mapWorkshopRowToWorkshop(row: DbTable<"workshops">): Workshop {
         latitude: row.latitude !== null ? Number(row.latitude) : undefined,
         longitude: row.longitude !== null ? Number(row.longitude) : undefined,
         locationImages: Array.isArray(row.location_images)
-            ? row.location_images.map((img) => normalizeWorkshopImageUrl(String(img))).filter((img) => img.length > 0)
+            ? row.location_images
+                  .map((img) => normalizeWorkshopImageUrl(String(img)))
+                  .filter((img) => img.length > 0)
             : [],
     };
 }
@@ -153,7 +155,9 @@ export function buildWorkshopInsertPayload(
         event_address: input.eventAddress || null,
         latitude: input.latitude !== undefined ? Number(input.latitude) : null,
         longitude: input.longitude !== undefined ? Number(input.longitude) : null,
-        location_images: input.locationImages ? input.locationImages.map((item) => normalizeWorkshopImageUrlInput(item)) : [],
+        location_images: input.locationImages
+            ? input.locationImages.map((item) => normalizeWorkshopImageUrlInput(item))
+            : [],
     };
 
     return payload;
@@ -163,6 +167,8 @@ function matchesWorkshopQuery(workshop: Workshop, query: WorkshopQueryInput) {
     const q = query.q.toLowerCase().trim();
     const category = query.category.toLowerCase().trim();
     const city = query.city.toLowerCase().trim();
+    const isPastEventsCategory = category === PAST_EVENTS_CATEGORY_LABEL.toLowerCase();
+    const today = new Date().toISOString().slice(0, 10);
 
     const matchesText =
         !q ||
@@ -170,7 +176,8 @@ function matchesWorkshopQuery(workshop: Workshop, query: WorkshopQueryInput) {
         workshop.description.toLowerCase().includes(q) ||
         workshop.location.toLowerCase().includes(q) ||
         workshop.city.toLowerCase().includes(q);
-    const matchesCategory = !category || workshop.category.toLowerCase() === category;
+    const matchesCategory =
+        !category || isPastEventsCategory || workshop.category.toLowerCase() === category;
     const matchesCity = !city || workshop.city.toLowerCase() === city;
 
     const price = workshop.price;
@@ -179,6 +186,10 @@ function matchesWorkshopQuery(workshop: Workshop, query: WorkshopQueryInput) {
     const matchesDateFrom = query.dateFrom ? workshop.date >= query.dateFrom : true;
     const matchesDateTo = query.dateTo ? workshop.date <= query.dateTo : true;
 
+    const hasDateFilter = Boolean(query.dateFrom || query.dateTo);
+    const matchesDefaultUpcoming = isPastEventsCategory || hasDateFilter || workshop.date >= today;
+    const matchesPastEvents = !isPastEventsCategory || workshop.date < today;
+
     return (
         matchesText &&
         matchesCategory &&
@@ -186,7 +197,9 @@ function matchesWorkshopQuery(workshop: Workshop, query: WorkshopQueryInput) {
         matchesMinPrice &&
         matchesMaxPrice &&
         matchesDateFrom &&
-        matchesDateTo
+        matchesDateTo &&
+        matchesDefaultUpcoming &&
+        matchesPastEvents
     );
 }
 

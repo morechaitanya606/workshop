@@ -6,6 +6,7 @@ import { bookingHoldSchema } from "@/lib/validators";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
+import { BOOKING_CUTOFF_HOURS, isBookingClosedNow } from "@/lib/booking-time";
 
 const HOLD_DURATION_MINUTES = 15;
 
@@ -48,6 +49,23 @@ export async function POST(request: NextRequest) {
                 "Workshop not found in database and no mock seed exists for this id.",
                 404
             );
+        }
+
+        const { data: workshopTiming, error: timingError } = await serviceClient
+            .from("workshops")
+            .select("id, date, time")
+            .eq("id", workshopId)
+            .single();
+
+        if (timingError || !workshopTiming) {
+            return jsonError("Workshop not found.", 404);
+        }
+
+        if (isBookingClosedNow(workshopTiming.date, workshopTiming.time)) {
+            return jsonError("Bookings close 3 hours before the workshop starts.", 409, {
+                code: "BOOKING_CLOSED",
+                cutoffHours: BOOKING_CUTOFF_HOURS,
+            });
         }
 
         // Release any existing active holds by the SAME user for THIS workshop

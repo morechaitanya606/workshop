@@ -4,7 +4,7 @@ import { type ChangeEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Upload } from "lucide-react";
-import { categories } from "@/lib/data";
+import { categories, PAST_EVENTS_CATEGORY_ID } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import AdminShell from "@/components/admin/AdminShell";
 import { createAdminWorkshop, toApiErrorMessage, uploadMedia } from "@/lib/api-client";
@@ -52,7 +52,9 @@ type CreateWorkshopForm = {
 export default function AdminCreateWorkshopPage() {
     const router = useRouter();
     const { session } = useAuth();
-    const categoryOptions = categories.filter((item) => item.id !== "trending");
+    const categoryOptions = categories.filter(
+        (item) => item.id !== "trending" && item.id !== PAST_EVENTS_CATEGORY_ID
+    );
     const [saving, setSaving] = useState(false);
     const [uploadingCover, setUploadingCover] = useState(false);
     const [uploadingGallery, setUploadingGallery] = useState(false);
@@ -773,7 +775,9 @@ export default function AdminCreateWorkshopPage() {
                             onChange={(e) => update("badgeLabels", e.target.value)}
                             rows={3}
                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
-                            placeholder={"Beginners welcome\nAll materials included\nPune · Offline workshop"}
+                            placeholder={
+                                "Beginners welcome\nAll materials included\nCity · Offline workshop"
+                            }
                         />
                         {renderFieldError("badgeLabels")}
                     </div>

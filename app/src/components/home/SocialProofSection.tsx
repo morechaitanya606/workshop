@@ -47,9 +47,9 @@ export default function SocialProofSection({
                     {...socialHeaderMotionProps}
                     className="relative z-10 text-center mb-12"
                 >
-                    <h2 className="heading-lg text-white mb-4">Pune’s Creative Community</h2>
+                    <h2 className="heading-lg text-white mb-4">Join Creative Community</h2>
                     <p className="text-body text-white/60 max-w-lg mx-auto mb-8">
-                        Friends, couples and teams across Pune are discovering new hobbies and
+                        Friends, couples and teams across the city are discovering new hobbies and
                         meeting people through our workshops.
                     </p>
                     <a

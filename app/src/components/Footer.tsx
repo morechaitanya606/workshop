@@ -23,8 +23,8 @@ export default function Footer() {
                             </span>
                         </Link>
                         <p className="text-body-sm max-w-xs">
-                            Curating the best weekend experiences in Pune so you can stop scrolling
-                            and start doing.
+                            Curating the best weekend experiences in the city so you can stop
+                            scrolling and start doing.
                         </p>
                     </div>
 
@@ -85,7 +85,7 @@ export default function Footer() {
                         &copy; {new Date().getFullYear()} Only Workshops Inc. All rights reserved.
                     </p>
                     <p className="text-xs font-inter font-medium text-dark-muted tracking-wide sm:w-1/3 text-center">
-                        Only Workshops <span className="text-terracotta px-1">|</span> Pune Workshops
+                        Only Workshops <span className="text-terracotta px-1">|</span> Workshops
                         &amp; Experiential Learning
                     </p>
                     <div className="flex items-center justify-center sm:justify-end gap-6 sm:w-1/3">

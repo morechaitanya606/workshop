@@ -15,6 +15,7 @@ import {
 import type { SupabaseServerClient } from "@/lib/supabase-server";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 import { sendPaymentNotification } from "@/lib/payment-notifications";
+import { BOOKING_CUTOFF_HOURS, isBookingClosedNow } from "@/lib/booking-time";
 
 const SERVICE_FEE = 99;
 const PAYMENT_CURRENCY = "INR";
@@ -32,6 +33,8 @@ type HoldWithWorkshop = {
         title: string;
         price: number;
         seats_remaining: number;
+        date?: string | null;
+        time?: string | null;
     } | null;
 };
 
@@ -190,7 +193,9 @@ export async function POST(request: NextRequest) {
                     id,
                     title,
                     price,
-                    seats_remaining
+                    seats_remaining,
+                    date,
+                    time
                 )
             `
             )
@@ -236,6 +241,16 @@ export async function POST(request: NextRequest) {
                 userId: auth.user.id,
                 holdId: payload.holdId,
                 workshopId: payload.workshopId,
+            });
+        }
+
+        if (workshop.date && isBookingClosedNow(workshop.date, workshop.time)) {
+            return paymentError("Bookings close 3 hours before the workshop starts.", 409, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                code: "BOOKING_CLOSED",
+                cutoffHours: BOOKING_CUTOFF_HOURS,
             });
         }
 

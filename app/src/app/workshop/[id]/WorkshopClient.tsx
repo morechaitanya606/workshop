@@ -47,6 +47,7 @@ import {
     uploadMedia,
 } from "@/lib/api-client";
 import { formatCurrency, formatDate, getInitials } from "@/lib/utils";
+import { BOOKING_CUTOFF_HOURS, getWorkshopDateTime, isBookingClosedNow } from "@/lib/booking-time";
 import { useAuth } from "@/lib/auth-context";
 import { trackEvent } from "@/lib/analytics";
 import {
@@ -165,29 +166,33 @@ export default function WorkshopClient({
     const [waitlistSuccess, setWaitlistSuccess] = useState(false);
 
     const today = new Date().toISOString().slice(0, 10);
-    const workshopDateTime = new Date(`${workshop.date}T${workshop.time || "00:00"}:00`);
+    const workshopDateTime = getWorkshopDateTime(workshop.date, workshop.time);
 
     const isPastWorkshop = (() => {
-        if (Number.isNaN(workshopDateTime.getTime())) {
+        if (!workshopDateTime) {
             return workshop.date < today;
         }
         return workshopDateTime.getTime() < Date.now();
     })();
+    const isBookingClosed = isPastWorkshop || isBookingClosedNow(workshop.date, workshop.time);
     const availableSeatCount = Math.max(0, liveAvailableSeatCount ?? workshop.seatsRemaining);
     const isSoldOut = !isPastWorkshop && availableSeatCount <= 0;
     const seatAvailabilityLabel = isPastWorkshop
         ? "Event completed"
-        : isSoldOut
-          ? "Sold out - all spots are taken"
-          : `${availableSeatCount} seat${availableSeatCount === 1 ? "" : "s"} available`;
+        : isBookingClosed
+          ? "Booking closed"
+          : isSoldOut
+            ? "Sold out - all spots are taken"
+            : `${availableSeatCount} seat${availableSeatCount === 1 ? "" : "s"} available`;
     const fallbackBadgeLabels = [
         "Beginners welcome",
         ...(workshop.materialsProvided.length > 0 ? ["All materials included"] : []),
         workshop.city ? `${workshop.city} · Offline workshop` : "Offline workshop",
     ];
-    const badgeLabels = (workshop.badgeLabels && workshop.badgeLabels.length > 0
-        ? workshop.badgeLabels
-        : fallbackBadgeLabels
+    const badgeLabels = (
+        workshop.badgeLabels && workshop.badgeLabels.length > 0
+            ? workshop.badgeLabels
+            : fallbackBadgeLabels
     )
         .map((label) => String(label).trim())
         .filter(Boolean)
@@ -312,7 +317,9 @@ export default function WorkshopClient({
         }
 
         const previousActive = document.activeElement as HTMLElement | null;
-        const modalNode = showVideo ? videoModalRef.current : document.getElementById("waitlist-modal");
+        const modalNode = showVideo
+            ? videoModalRef.current
+            : document.getElementById("waitlist-modal");
         if (!modalNode) {
             return;
         }
@@ -370,12 +377,14 @@ export default function WorkshopClient({
     const total = subtotal + serviceFee;
     const locationQuery = `${workshop.location}, ${workshop.city}`.trim();
     const encodedLocationQuery = encodeURIComponent(locationQuery);
-    const mapEmbedUrl = typeof workshop.latitude === "number" && typeof workshop.longitude === "number"
-        ? `https://www.google.com/maps?q=${workshop.latitude},${workshop.longitude}&output=embed`
-        : `https://www.google.com/maps?q=${encodedLocationQuery}&output=embed`;
-    const mapOpenUrl = typeof workshop.latitude === "number" && typeof workshop.longitude === "number"
-        ? `https://www.google.com/maps/search/?api=1&query=${workshop.latitude},${workshop.longitude}`
-        : `https://www.google.com/maps/search/?api=1&query=${encodedLocationQuery}`;
+    const mapEmbedUrl =
+        typeof workshop.latitude === "number" && typeof workshop.longitude === "number"
+            ? `https://www.google.com/maps?q=${workshop.latitude},${workshop.longitude}&output=embed`
+            : `https://www.google.com/maps?q=${encodedLocationQuery}&output=embed`;
+    const mapOpenUrl =
+        typeof workshop.latitude === "number" && typeof workshop.longitude === "number"
+            ? `https://www.google.com/maps/search/?api=1&query=${workshop.latitude},${workshop.longitude}`
+            : `https://www.google.com/maps/search/?api=1&query=${encodedLocationQuery}`;
     const workshopPath = `/workshop/${workshop.id}`;
     const loginRedirectHref = `/auth/login?redirect=${encodeURIComponent(workshopPath)}`;
     const MAX_FEEDBACK_PHOTOS = 4;
@@ -431,7 +440,10 @@ export default function WorkshopClient({
             }
 
             setWaitlistSuccess(true);
-            toast.success("Joined waitlist", data.message || "We will email you if a spot opens up.");
+            toast.success(
+                "Joined waitlist",
+                data.message || "We will email you if a spot opens up."
+            );
         } catch (err: any) {
             setWaitlistError(err.message || "An unexpected error occurred.");
             toast.error("Error", err.message || "Could not join waitlist.");
@@ -442,6 +454,12 @@ export default function WorkshopClient({
 
     const handleBooking = async () => {
         setHoldError(null);
+        if (isBookingClosed) {
+            const message = `Bookings close ${BOOKING_CUTOFF_HOURS} hours before the workshop starts.`;
+            setHoldError(message);
+            toast.info("Booking closed", message);
+            return;
+        }
         if (isSoldOut) {
             const message = "This workshop is sold out. Please choose a similar workshop.";
             setHoldError(message);
@@ -935,18 +953,18 @@ export default function WorkshopClient({
                                     </span>
                                 </div>
                                 {/* Quick suitability strip */}
-{badgeLabels.length > 0 && (
-    <div className="mt-4 flex flex-wrap gap-2 text-xs font-inter text-dark-muted">
-        {badgeLabels.map((label) => (
-            <span
-                key={label}
-                className="inline-flex items-center rounded-full bg-cream-100 px-2.5 py-1 font-semibold uppercase tracking-wider"
-            >
-                {label}
-            </span>
-        ))}
-    </div>
-)}
+                                {badgeLabels.length > 0 && (
+                                    <div className="mt-4 flex flex-wrap gap-2 text-xs font-inter text-dark-muted">
+                                        {badgeLabels.map((label) => (
+                                            <span
+                                                key={label}
+                                                className="inline-flex items-center rounded-full bg-cream-100 px-2.5 py-1 font-semibold uppercase tracking-wider"
+                                            >
+                                                {label}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
                                 {workshop.socialLinks && (
                                     <div className="flex items-center gap-3 mt-4">
                                         {workshop.socialLinks.instagram && (
@@ -1078,7 +1096,7 @@ export default function WorkshopClient({
                                             for complete beginners as well as hobbyists.
                                         </p>
                                         <p>
-                                            Small group session in Pune with all core materials
+                                            Small group session in the city with all core materials
                                             provided at the studio.
                                         </p>
                                         <p>
@@ -1096,7 +1114,9 @@ export default function WorkshopClient({
                                     className="card-section"
                                 >
                                     <span className="eyebrow-label">About</span>
-                                    <h2 className="heading-sm font-inter mb-4">About this experience</h2>
+                                    <h2 className="heading-sm font-inter mb-4">
+                                        About this experience
+                                    </h2>
                                     <div className="text-body whitespace-pre-line">
                                         {workshop.description}
                                     </div>
@@ -1110,7 +1130,9 @@ export default function WorkshopClient({
                                     className="card-section"
                                 >
                                     <span className="eyebrow-label">Learn</span>
-                                    <h2 className="heading-sm font-inter mb-4">What you will learn</h2>
+                                    <h2 className="heading-sm font-inter mb-4">
+                                        What you will learn
+                                    </h2>
                                     <ul className="space-y-3">
                                         {workshop.whatYouLearn.map((item, i) => (
                                             <li
@@ -1132,7 +1154,9 @@ export default function WorkshopClient({
                                     className="card-section"
                                 >
                                     <span className="eyebrow-label">Included</span>
-                                    <h2 className="heading-sm font-inter mb-4">{"What's included"}</h2>
+                                    <h2 className="heading-sm font-inter mb-4">
+                                        {"What's included"}
+                                    </h2>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         {workshop.materialsProvided.map((item, i) => (
                                             <div
@@ -1158,7 +1182,9 @@ export default function WorkshopClient({
                                     className="card-section"
                                 >
                                     <span className="eyebrow-label">Location</span>
-                                    <h2 className="heading-sm font-inter mb-4">{"Where you'll be"}</h2>
+                                    <h2 className="heading-sm font-inter mb-4">
+                                        {"Where you'll be"}
+                                    </h2>
                                     <div className="relative overflow-hidden rounded-2xl border border-clay/30 bg-white shadow-soft mb-4">
                                         <iframe
                                             title={`Map for ${locationQuery}`}
@@ -1174,7 +1200,10 @@ export default function WorkshopClient({
                                                     {workshop.location}
                                                 </p>
                                                 <p className="text-xs font-inter text-dark-muted truncate">
-                                                    {workshop.city} &bull; {workshop.eventAddress ? workshop.eventAddress : "Exact address sent upon booking"}
+                                                    {workshop.city} &bull;{" "}
+                                                    {workshop.eventAddress
+                                                        ? workshop.eventAddress
+                                                        : "Exact address sent upon booking"}
                                                 </p>
                                             </div>
                                             <a
@@ -1189,21 +1218,25 @@ export default function WorkshopClient({
                                         </div>
                                     </div>
 
-                                    {workshop.locationImages && workshop.locationImages.length > 0 && (
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
-                                            {workshop.locationImages.map((img, i) => (
-                                                <div key={i} className="relative aspect-[4/3] rounded-xl overflow-hidden border border-clay/30 shadow-sm">
-                                                    <Image
-                                                        src={img}
-                                                        alt={`Location image ${i + 1}`}
-                                                        fill
-                                                        className="object-cover"
-                                                        sizes="(max-width: 640px) 50vw, 33vw"
-                                                    />
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
+                                    {workshop.locationImages &&
+                                        workshop.locationImages.length > 0 && (
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
+                                                {workshop.locationImages.map((img, i) => (
+                                                    <div
+                                                        key={i}
+                                                        className="relative aspect-[4/3] rounded-xl overflow-hidden border border-clay/30 shadow-sm"
+                                                    >
+                                                        <Image
+                                                            src={img}
+                                                            alt={`Location image ${i + 1}`}
+                                                            fill
+                                                            className="object-cover"
+                                                            sizes="(max-width: 640px) 50vw, 33vw"
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                 </motion.div>
 
                                 <motion.div
@@ -1214,7 +1247,9 @@ export default function WorkshopClient({
                                     className="card-section"
                                 >
                                     <span className="eyebrow-label">Reviews</span>
-                                    <h2 className="heading-sm font-inter mb-4">Workshop feedback</h2>
+                                    <h2 className="heading-sm font-inter mb-4">
+                                        Workshop feedback
+                                    </h2>
                                     {publicFeedbackLoading ? (
                                         <p className="text-sm font-inter text-dark-muted">
                                             Loading feedback...
@@ -1688,7 +1723,15 @@ export default function WorkshopClient({
                                         </div>
                                     )}
 
-                                    {isSoldOut ? (
+                                    {isBookingClosed ? (
+                                        <button
+                                            type="button"
+                                            disabled
+                                            className="btn-secondary w-full text-center !py-4 text-base cursor-not-allowed opacity-70"
+                                        >
+                                            Booking Closed
+                                        </button>
+                                    ) : isSoldOut ? (
                                         <button
                                             onClick={() => setShowWaitlistModal(true)}
                                             className="btn-secondary w-full text-center !py-4 text-base"
@@ -1719,11 +1762,13 @@ export default function WorkshopClient({
                                         </Link>
                                     )}
                                     <p className="text-center text-xs font-inter text-dark-muted mt-3">
-                                        {isSoldOut
-                                            ? "All spots are taken. Join the waitlist to be notified if someone cancels."
-                                            : user
-                                              ? "Secure payments via Razorpay. You won't be charged twice even if something goes wrong."
-                                              : "Log in to book. Payments are processed securely via Razorpay."}
+                                        {isBookingClosed
+                                            ? `Bookings close ${BOOKING_CUTOFF_HOURS} hours before the workshop starts.`
+                                            : isSoldOut
+                                              ? "All spots are taken. Join the waitlist to be notified if someone cancels."
+                                              : user
+                                                ? "Secure payments via Razorpay. You won't be charged twice even if something goes wrong."
+                                                : "Log in to book. Payments are processed securely via Razorpay."}
                                     </p>
                                     {holdError && (
                                         <p className="text-center text-xs font-inter text-red-600 mt-2">
@@ -2060,7 +2105,15 @@ export default function WorkshopClient({
                                 {seatAvailabilityLabel}
                             </p>
                         </div>
-                        {isSoldOut ? (
+                        {isBookingClosed ? (
+                            <button
+                                type="button"
+                                disabled
+                                className="rounded-full bg-gray-100 text-dark-muted px-6 py-3 text-sm font-inter font-semibold cursor-not-allowed"
+                            >
+                                Booking Closed
+                            </button>
+                        ) : isSoldOut ? (
                             <button
                                 onClick={() => setShowWaitlistModal(true)}
                                 className="rounded-full bg-white border border-terracotta text-terracotta px-6 py-3 text-sm font-inter font-semibold hover:bg-terracotta hover:text-white transition-colors"
@@ -2113,7 +2166,7 @@ export default function WorkshopClient({
                     <div
                         id="waitlist-modal"
                         className="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-card relative"
-                        onClick={e => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
                         role="dialog"
                         aria-modal="true"
                     >
@@ -2131,15 +2184,20 @@ export default function WorkshopClient({
                             </div>
                             <h3 className="heading-sm mb-2">Join the Waitlist</h3>
                             <p className="text-sm font-inter text-dark-secondary">
-                                This workshop is currently full. We&apos;ll email you immediately if a spot opens up.
+                                This workshop is currently full. We&apos;ll email you immediately if
+                                a spot opens up.
                             </p>
                         </div>
 
                         {waitlistSuccess ? (
                             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
                                 <Check className="w-6 h-6 text-emerald-600 mx-auto mb-2" />
-                                <p className="text-sm font-inter font-semibold text-emerald-800">You&apos;re on the list!</p>
-                                <p className="text-xs font-inter text-emerald-700 mt-1">We&apos;ll notify {waitlistEmail} if seats become available.</p>
+                                <p className="text-sm font-inter font-semibold text-emerald-800">
+                                    You&apos;re on the list!
+                                </p>
+                                <p className="text-xs font-inter text-emerald-700 mt-1">
+                                    We&apos;ll notify {waitlistEmail} if seats become available.
+                                </p>
                                 <button
                                     onClick={() => setShowWaitlistModal(false)}
                                     className="btn-primary w-full mt-4 !py-2.5"
@@ -2165,7 +2223,9 @@ export default function WorkshopClient({
                                         className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter focus:outline-none focus:border-terracotta/50 focus:ring-1 focus:ring-terracotta/30"
                                     />
                                     {waitlistError && (
-                                        <p className="text-xs font-inter text-red-600 mt-1.5">{waitlistError}</p>
+                                        <p className="text-xs font-inter text-red-600 mt-1.5">
+                                            {waitlistError}
+                                        </p>
                                     )}
                                 </div>
                                 <button
@@ -2183,5 +2243,3 @@ export default function WorkshopClient({
         </main>
     );
 }
-
-
