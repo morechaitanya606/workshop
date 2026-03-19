@@ -484,6 +484,7 @@ export type Database = {
                 Row: {
                     created_at: string;
                     date_of_birth: string | null;
+                    avatar_url?: string | null;
                     full_name: string | null;
                     id: string;
                     phone_number: string | null;
@@ -493,6 +494,7 @@ export type Database = {
                 Insert: {
                     created_at?: string;
                     date_of_birth?: string | null;
+                    avatar_url?: string | null;
                     full_name?: string | null;
                     id: string;
                     phone_number?: string | null;
@@ -502,6 +504,7 @@ export type Database = {
                 Update: {
                     created_at?: string;
                     date_of_birth?: string | null;
+                    avatar_url?: string | null;
                     full_name?: string | null;
                     id?: string;
                     phone_number?: string | null;
@@ -621,6 +624,27 @@ export type Database = {
                     },
                 ];
             };
+            waitlists: {
+                Row: {
+                    id: string;
+                    user_id: string;
+                    workshop_id: string;
+                    created_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    user_id: string;
+                    workshop_id: string;
+                    created_at?: string;
+                };
+                Update: {
+                    id?: string;
+                    user_id?: string;
+                    workshop_id?: string;
+                    created_at?: string;
+                };
+                Relationships: [];
+            };
             workshops: {
                 Row: {
                     category: string;
@@ -653,6 +677,11 @@ export type Database = {
                     updated_at: string;
                     video_url: string | null;
                     what_you_learn: string[];
+                    badge_labels?: string[] | null;
+                    event_address?: string | null;
+                    latitude?: number | null;
+                    longitude?: number | null;
+                    location_images?: string[] | null;
                 };
                 Insert: {
                     category: string;
@@ -685,6 +714,11 @@ export type Database = {
                     updated_at?: string;
                     video_url?: string | null;
                     what_you_learn?: string[];
+                    badge_labels?: string[] | null;
+                    event_address?: string | null;
+                    latitude?: number | null;
+                    longitude?: number | null;
+                    location_images?: string[] | null;
                 };
                 Update: {
                     category?: string;
@@ -717,6 +751,11 @@ export type Database = {
                     updated_at?: string;
                     video_url?: string | null;
                     what_you_learn?: string[];
+                    badge_labels?: string[] | null;
+                    event_address?: string | null;
+                    latitude?: number | null;
+                    longitude?: number | null;
+                    location_images?: string[] | null;
                 };
                 Relationships: [
                     {
@@ -780,7 +819,7 @@ type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">;
 
 type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">];
 
-export type Tables<
+export type DbTable<
     DefaultSchemaTableNameOrOptions extends
         | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
         | { schema: keyof DatabaseWithoutInternals },
@@ -809,7 +848,7 @@ export type Tables<
           : never
       : never;
 
-export type TablesInsert<
+export type DbInsert<
     DefaultSchemaTableNameOrOptions extends
         | keyof DefaultSchema["Tables"]
         | { schema: keyof DatabaseWithoutInternals },
@@ -834,7 +873,7 @@ export type TablesInsert<
           : never
       : never;
 
-export type TablesUpdate<
+export type DbUpdate<
     DefaultSchemaTableNameOrOptions extends
         | keyof DefaultSchema["Tables"]
         | { schema: keyof DatabaseWithoutInternals },
