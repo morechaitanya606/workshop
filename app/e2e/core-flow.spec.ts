@@ -42,10 +42,12 @@ test("explore to detail to booking start redirects unauthenticated users", async
 
         const pastEventBadge = page.getByText(/Past Event/i).first();
         const waitlistButton = page.getByRole("button", { name: /Join Waitlist/i }).first();
+        const bookingClosedButton = page.getByRole("button", { name: /Booking Closed/i }).first();
         const isPastEvent = await pastEventBadge.isVisible().catch(() => false);
         const isWaitlistOnly = await waitlistButton.isVisible().catch(() => false);
+        const isBookingClosed = await bookingClosedButton.isVisible().catch(() => false);
 
-        if (isPastEvent || isWaitlistOnly) {
+        if (isPastEvent || isWaitlistOnly || isBookingClosed) {
             await page.goto("/explore");
             await expect(page).toHaveURL(/\/explore/);
             await expect(page.getByText(/workshops found/i)).toBeVisible();
@@ -57,7 +59,7 @@ test("explore to detail to booking start redirects unauthenticated users", async
     }
 
     if (!navigatedToBookableWorkshop) {
-        throw new Error("No upcoming workshop with available seats found on explore page.");
+        throw new Error("No upcoming workshop with open booking found on explore page.");
     }
 
     await expect(page.locator('iframe[title^="Map for"]')).toBeVisible();
