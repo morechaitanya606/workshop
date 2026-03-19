@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import SocialShareButtons from "@/components/SocialShareButtons";
+import WorkshopFAQ from "@/components/WorkshopFAQ";
 import MobileNav from "@/components/MobileNav";
 import { useToast } from "@/components/ToastProvider";
 import type { Workshop } from "@/lib/data";
@@ -46,6 +48,7 @@ import {
     updateWorkshopNotifications,
     uploadMedia,
 } from "@/lib/api-client";
+import { addRecentlyViewed } from "@/lib/recently-viewed";
 import { formatCurrency, formatDate, getInitials } from "@/lib/utils";
 import { BOOKING_CUTOFF_HOURS, getWorkshopDateTime, isBookingClosedNow } from "@/lib/booking-time";
 import { useAuth } from "@/lib/auth-context";
@@ -231,6 +234,10 @@ export default function WorkshopClient({
             cancelled = true;
         };
     }, [accessToken, workshop.id]);
+
+    useEffect(() => {
+        addRecentlyViewed(workshop.id);
+    }, [workshop.id]);
 
     useEffect(() => {
         if (!isPastWorkshop) {
@@ -738,7 +745,10 @@ export default function WorkshopClient({
                             Home
                         </Link>
                         <ChevronRight className="w-3.5 h-3.5" />
-                        <Link href="/explore" className="hover:text-terracotta transition-colors">
+                        <Link
+                            href={`/explore?category=${encodeURIComponent(workshop.category)}`}
+                            className="hover:text-terracotta transition-colors"
+                        >
                             {workshop.category}
                         </Link>
                         <ChevronRight className="w-3.5 h-3.5" />
@@ -1002,6 +1012,24 @@ export default function WorkshopClient({
                                         )}
                                     </div>
                                 )}
+
+                                {/* Share with friends */}
+                                <div className="mt-4 pt-4 border-t border-clay/20">
+                                    <p className="text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                        Share with friends
+                                    </p>
+                                    <SocialShareButtons
+                                        title={workshop.title}
+                                        date={formatDate(workshop.date)}
+                                        city={workshop.city}
+                                        seatsRemaining={availableSeatCount}
+                                        url={
+                                            typeof window !== "undefined"
+                                                ? window.location.href
+                                                : ""
+                                        }
+                                    />
+                                </div>
                             </motion.div>
 
                             <hr className="my-8 border-clay/30" />
@@ -1237,6 +1265,15 @@ export default function WorkshopClient({
                                                 ))}
                                             </div>
                                         )}
+                                </motion.div>
+
+                                <motion.div
+                                    variants={prefersReducedMotion ? undefined : fadeInUp}
+                                    transition={
+                                        prefersReducedMotion ? { duration: 0 } : quickTransition
+                                    }
+                                >
+                                    <WorkshopFAQ />
                                 </motion.div>
 
                                 <motion.div
@@ -1692,6 +1729,12 @@ export default function WorkshopClient({
                                                     <Plus className="h-4 w-4" />
                                                 </button>
                                             </div>
+                                            {workshop.maxSeats >= 6 && (
+                                                <p className="mt-2 text-xs font-inter text-dark-muted bg-violet-50 border border-violet-100 rounded-lg px-3 py-2">
+                                                    🎉 Great for groups! Bring 3+ friends for a
+                                                    memorable weekend.
+                                                </p>
+                                            )}
                                         </div>
                                     )}
 
@@ -2237,6 +2280,47 @@ export default function WorkshopClient({
                                 </button>
                             </form>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* ═══ STICKY MOBILE BOOKING BAR ═══ */}
+            {!isPastWorkshop && !isBookingClosed && (
+                <div className="fixed bottom-0 inset-x-0 z-40 lg:hidden">
+                    <div className="bg-white/95 backdrop-blur-xl border-t border-clay/30 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] px-4 py-3">
+                        <div className="flex items-center justify-between gap-4 max-w-lg mx-auto">
+                            <div>
+                                <span className="font-playfair text-lg font-bold text-dark">
+                                    {formatCurrency(workshop.price)}
+                                </span>
+                                <span className="text-xs font-inter text-dark-muted ml-1">
+                                    / person
+                                </span>
+                            </div>
+                            {isSoldOut ? (
+                                <button
+                                    onClick={() => setShowWaitlistModal(true)}
+                                    className="btn-secondary !py-2.5 !px-6 text-sm"
+                                >
+                                    Join Waitlist
+                                </button>
+                            ) : user ? (
+                                <button
+                                    onClick={handleBooking}
+                                    disabled={bookingLoading}
+                                    className="btn-primary !py-2.5 !px-6 text-sm disabled:opacity-60"
+                                >
+                                    {bookingLoading ? "Reserving..." : "Reserve Spot →"}
+                                </button>
+                            ) : (
+                                <Link
+                                    href={loginRedirectHref}
+                                    className="btn-primary !py-2.5 !px-6 text-sm"
+                                >
+                                    Log in to Book
+                                </Link>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

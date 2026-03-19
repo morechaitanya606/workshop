@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState, type MouseEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
-import { Calendar, MapPin, Star, Heart } from "lucide-react";
+import { Calendar, MapPin, Star, Heart, Clock } from "lucide-react";
 import { formatCurrency, formatDate, formatTime, truncateText } from "@/lib/utils";
 import { getWorkshopDateTime } from "@/lib/booking-time";
 import { addFavorite, getFavorites, removeFavorite } from "@/lib/api-client";
@@ -60,9 +60,15 @@ export default function WorkshopCard({
 
     const today = new Date().toISOString().slice(0, 10);
     const workshopDateTime = getWorkshopDateTime(workshop.date, workshop.time);
+    const now = Date.now();
     const isPastWorkshop = workshopDateTime
-        ? workshopDateTime.getTime() < Date.now()
+        ? workshopDateTime.getTime() < now
         : workshop.date < today;
+
+    const hoursUntil = workshopDateTime
+        ? (workshopDateTime.getTime() - now) / (1000 * 60 * 60)
+        : null;
+    const isStartingSoon = hoursUntil !== null && hoursUntil > 0 && hoursUntil <= 48;
 
     const imagePool = useMemo(() => {
         const items = [workshop.coverImage, ...(workshop.galleryImages || [])]
@@ -74,17 +80,23 @@ export default function WorkshopCard({
 
     const highlightedBadge = isPastWorkshop
         ? null
-        : workshop.isBestseller
+        : isStartingSoon
           ? {
-                label: "Bestseller",
-                className: "bg-dark text-white",
+                label: `Starts in ${Math.ceil(hoursUntil!)}h`,
+                className: "bg-terracotta text-white animate-pulse shadow-md shadow-terracotta/20",
+                icon: Clock,
             }
-          : workshop.isNew
+          : workshop.isBestseller
             ? {
-                  label: "New",
-                  className: "bg-emerald-500 text-white",
+                  label: "Bestseller",
+                  className: "bg-dark text-white",
               }
-            : null;
+            : workshop.isNew
+              ? {
+                    label: "New",
+                    className: "bg-emerald-500 text-white",
+                }
+              : null;
     const isSoldOut = !isPastWorkshop && workshop.seatsRemaining <= 0;
     const seatsLabel = isSoldOut
         ? "Sold out"
@@ -225,8 +237,11 @@ export default function WorkshopCard({
                         {highlightedBadge && (
                             <div className="absolute top-3 right-3">
                                 <span
-                                    className={`inline-flex items-center text-[10px] font-inter font-bold uppercase tracking-wider px-3 py-1 rounded-full ${highlightedBadge.className}`}
+                                    className={`inline-flex items-center gap-1.5 text-[10px] font-inter font-bold uppercase tracking-wider px-3 py-1.5 rounded-full ${highlightedBadge.className}`}
                                 >
+                                    {highlightedBadge.icon && (
+                                        <highlightedBadge.icon className="w-3 h-3" />
+                                    )}
                                     {highlightedBadge.label}
                                 </span>
                             </div>

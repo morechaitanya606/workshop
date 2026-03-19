@@ -17,8 +17,8 @@ import {
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
-import ExploreToolbarSection from "@/components/explore/ExploreToolbarSection";
 import ExploreResultsSection from "@/components/explore/ExploreResultsSection";
+import ExploreToolbarSection from "@/components/explore/ExploreToolbarSection";
 
 type SortOption = "date_asc" | "date_desc" | "price_asc" | "price_desc" | "rating_desc";
 
@@ -127,6 +127,11 @@ export default function ExploreClient({
     const [isMobileViewport, setIsMobileViewport] = useState(false);
 
     const totalPages = Math.max(1, Math.ceil(total / parsedQuery.pageSize));
+
+    const selectedCategoryLabel = useMemo(() => {
+        if (!parsedQuery.category) return null;
+        return categories.find((c) => c.id === parsedQuery.category)?.label || parsedQuery.category;
+    }, [parsedQuery.category]);
 
     useEffect(() => {
         setSearchQuery(parsedQuery.q);
@@ -237,6 +242,10 @@ export default function ExploreClient({
             });
             router.push(`/explore?${nextParamsString}`);
         });
+    };
+
+    const handleSearch = () => {
+        pushFilters({ q: searchQuery, page: 1 });
     };
 
     const clearFilters = () => {
@@ -497,18 +506,18 @@ export default function ExploreClient({
                     exploreStats={exploreStats}
                     searchQuery={searchQuery}
                     onSearchQueryChange={setSearchQuery}
-                    onSearchEnter={() => pushFilters({ page: 1 })}
+                    onSearchEnter={handleSearch}
                     onClearSearch={() => setSearchQuery("")}
                     showFilters={showFilters}
-                    onToggleFilters={() => setShowFilters((prev) => !prev)}
+                    onToggleFilters={() => setShowFilters(!showFilters)}
                     activeFilterCount={activeFilterCount}
                     sort={sort}
                     sortOptions={SORT_OPTIONS}
                     onSortChange={(value) => {
                         setSort(value);
-                        pushFilters({ sort: value, page: 1 });
+                        pushFilters({ sort: value });
                     }}
-                    onSearch={() => pushFilters({ page: 1 })}
+                    onSearch={handleSearch}
                     activeChips={activeChips}
                     filterControls={filterControls}
                     filterActions={filterActions}

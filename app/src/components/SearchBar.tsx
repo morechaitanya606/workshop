@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { Search, Calendar, MapPin, ArrowRight } from "lucide-react";
 import { categories } from "@/lib/data";
@@ -15,10 +15,11 @@ interface SearchBarProps {
 
 export default function SearchBar({ selectedCategoryId = "trending" }: SearchBarProps) {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const prefersReducedMotion = useReducedMotion();
-    const [query, setQuery] = useState("");
-    const [date, setDate] = useState("");
-    const [city, setCity] = useState("");
+    const [query, setQuery] = useState(searchParams?.get("q") || "");
+    const [date, setDate] = useState(searchParams?.get("dateFrom") || "");
+    const [city, setCity] = useState(searchParams?.get("city") || "");
 
     const selectedCategory = useMemo(() => {
         const matched = categories.find((item) => item.id === selectedCategoryId);

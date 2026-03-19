@@ -4,6 +4,7 @@ import "./globals.css";
 import AnalyticsProvider from "@/components/AnalyticsProvider";
 import ToastProvider from "@/components/ToastProvider";
 import { AuthProvider } from "@/lib/auth-context";
+import SupportChatbot from "@/components/SupportChatbot";
 
 const playfair = Playfair_Display({
     subsets: ["latin"],
@@ -49,7 +50,10 @@ export default function RootLayout({
             <body className="min-h-screen bg-cream antialiased">
                 <AnalyticsProvider>
                     <ToastProvider>
-                        <AuthProvider>{children}</AuthProvider>
+                        <AuthProvider>
+                            {children}
+                            <SupportChatbot />
+                        </AuthProvider>
                     </ToastProvider>
                 </AnalyticsProvider>
             </body>

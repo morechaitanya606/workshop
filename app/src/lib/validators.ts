@@ -115,6 +115,7 @@ export const bookingCheckoutSchema = z
         razorpayOrderId: z.string().trim().min(1).max(80).optional(),
         razorpayPaymentId: z.string().trim().min(1).max(80).optional(),
         razorpaySignature: z.string().trim().min(1).max(256).optional(),
+        couponCode: z.string().trim().min(1).max(50).optional(),
     })
     .superRefine((value, ctx) => {
         const hasOrderId = Boolean(value.razorpayOrderId);
@@ -158,8 +159,7 @@ export const profileUpdateSchema = z
             .trim()
             .optional()
             .refine(
-                (value) =>
-                    value === undefined || value === "" || /^\d{4}-\d{2}-\d{2}$/.test(value),
+                (value) => value === undefined || value === "" || /^\d{4}-\d{2}-\d{2}$/.test(value),
                 {
                     message: "Date of birth must be in YYYY-MM-DD format.",
                 }
@@ -169,12 +169,9 @@ export const profileUpdateSchema = z
             .trim()
             .max(32)
             .optional()
-            .refine(
-                (value) => value === undefined || value === "" || value.length >= 10,
-                {
-                    message: "Phone number must be at least 10 digits.",
-                }
-            ),
+            .refine((value) => value === undefined || value === "" || value.length >= 10, {
+                message: "Phone number must be at least 10 digits.",
+            }),
     })
     .refine(
         (value) =>

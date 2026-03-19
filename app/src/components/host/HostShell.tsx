@@ -5,7 +5,15 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
-import { LayoutDashboard, Calendar, Wallet, Settings, Plus, Loader2 } from "lucide-react";
+import {
+    LayoutDashboard,
+    Calendar,
+    Wallet,
+    Settings,
+    Plus,
+    Loader2,
+    Headphones,
+} from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
@@ -20,6 +28,7 @@ const navItems = [
     { href: "/host/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/host/workshops", label: "My Workshops", icon: Calendar },
     { href: "/host/earnings", label: "Earnings", icon: Wallet },
+    { href: "/host/support", label: "Support", icon: Headphones },
     { href: "/host/settings", label: "Settings", icon: Settings },
 ];
 

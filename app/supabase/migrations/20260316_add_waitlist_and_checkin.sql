@@ -1,49 +1,59 @@
-CREATE TYPE waitlist_status AS ENUM ('pending', 'notified', 'joined');
+-- Migration: 20260316_add_waitlist_and_checkin.sql
+-- Notes:
+-- - Keep statements idempotent (safe to re-apply).
+-- - Admin check uses profiles.role = 'admin' (no profiles.is_admin column).
 
-CREATE TABLE waitlists (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    workshop_id text REFERENCES workshops(id) ON DELETE CASCADE,
-    user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
-    email text NOT NULL,
-    status waitlist_status DEFAULT 'pending' NOT NULL,
-    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+do $$
+begin
+    create type public.waitlist_status as enum ('pending', 'notified', 'joined');
+exception
+    when duplicate_object then null;
+end;
+$$;
+
+create table if not exists public.waitlists (
+    id uuid primary key default gen_random_uuid(),
+    workshop_id text references public.workshops(id) on delete cascade,
+    user_id uuid references auth.users(id) on delete set null,
+    email text not null,
+    status public.waitlist_status not null default 'pending',
+    created_at timestamptz not null default timezone('utc'::text, now())
 );
 
-ALTER TABLE bookings
-ADD COLUMN attended boolean DEFAULT false NOT NULL;
+alter table public.bookings
+    add column if not exists attended boolean not null default false;
 
--- Indexes for performance
-CREATE INDEX idx_waitlists_workshop ON waitlists(workshop_id);
-CREATE INDEX idx_waitlists_user ON waitlists(user_id);
-CREATE INDEX idx_waitlists_email ON waitlists(email);
+create index if not exists idx_waitlists_workshop on public.waitlists(workshop_id);
+create index if not exists idx_waitlists_user on public.waitlists(user_id);
+create index if not exists idx_waitlists_email on public.waitlists(email);
 
--- Enable RLS
-ALTER TABLE waitlists ENABLE ROW LEVEL SECURITY;
+alter table public.waitlists enable row level security;
 
--- RLS Policies for waitlists
-CREATE POLICY "Users can insert their own waitlist entries"
-    ON waitlists FOR INSERT
-    WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
+drop policy if exists "Users can insert their own waitlist entries" on public.waitlists;
+drop policy if exists "Users can view their own waitlist entries" on public.waitlists;
+drop policy if exists "Hosts can view waitlists for their workshops" on public.waitlists;
+drop policy if exists "Admins can do anything on waitlists" on public.waitlists;
 
-CREATE POLICY "Users can view their own waitlist entries"
-    ON waitlists FOR SELECT
-    USING (auth.uid() = user_id);
+create policy "Users can insert their own waitlist entries"
+    on public.waitlists for insert
+    with check (auth.uid() = user_id or user_id is null);
 
-CREATE POLICY "Hosts can view waitlists for their workshops"
-    ON waitlists FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM workshops
-            WHERE workshops.id = waitlists.workshop_id
-            AND workshops.host_user_id = auth.uid()
+create policy "Users can view their own waitlist entries"
+    on public.waitlists for select
+    using (auth.uid() = user_id);
+
+create policy "Hosts can view waitlists for their workshops"
+    on public.waitlists for select
+    using (
+        exists (
+            select 1
+            from public.workshops w
+            where w.id = waitlists.workshop_id
+              and w.host_user_id = auth.uid()
         )
     );
 
-CREATE POLICY "Admins can do anything on waitlists"
-    ON waitlists FOR ALL
-    USING (
-        EXISTS (
-            SELECT 1 FROM profiles
-            WHERE profiles.id = auth.uid() AND profiles.is_admin = true
-        )
-    );
+create policy "Admins can do anything on waitlists"
+    on public.waitlists for all
+    using (public.user_has_role('admin'))
+    with check (public.user_has_role('admin'));

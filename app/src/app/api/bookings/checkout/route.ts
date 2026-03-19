@@ -17,7 +17,7 @@ import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 import { sendPaymentNotification } from "@/lib/payment-notifications";
 import { BOOKING_CUTOFF_HOURS, isBookingClosedNow } from "@/lib/booking-time";
 
-const SERVICE_FEE = 99;
+// Removed hardcoded SERVICE_FEE
 const PAYMENT_CURRENCY = "INR";
 const PAYMENT_PROVIDER = "razorpay";
 
@@ -254,8 +254,54 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        const subtotal = Number(workshop.price || 0) * Number(hold.guests || 0);
-        const total = subtotal + SERVICE_FEE;
+        const subtotalOriginal = Number(workshop.price || 0) * Number(hold.guests || 0);
+        let discountAmount = 0;
+        let appliedCouponId: string | null = null;
+
+        if (payload.couponCode) {
+            const code = payload.couponCode.toUpperCase();
+            const { data: coupon } = await serviceClient
+                .from("coupons")
+                .select("*")
+                .eq("code", code)
+                .eq("is_active", true)
+                .single();
+
+            if (coupon) {
+                // Verify max uses and expiration to be safe (though validated on frontend)
+                const now = new Date();
+                const validTime =
+                    (!coupon.valid_from || new Date(coupon.valid_from) <= now) &&
+                    (!coupon.valid_until || new Date(coupon.valid_until) >= now);
+                const validUses =
+                    coupon.max_uses === null || (coupon.used_count || 0) < coupon.max_uses;
+
+                if (validTime && validUses) {
+                    if (coupon.discount_type === "percentage") {
+                        discountAmount = subtotalOriginal * (coupon.discount_value / 100);
+                    } else {
+                        discountAmount = coupon.discount_value;
+                    }
+                    appliedCouponId = coupon.id;
+                }
+            }
+        }
+
+        // Fetch dynamic service fee
+        let serviceFee = 99; // Fallback
+        const { data: settings } = await serviceClient
+            .from("platform_settings")
+            .select("setting_value")
+            .eq("setting_key", "service_fee")
+            .single();
+
+        if (settings?.setting_value !== undefined) {
+            const parsed = parseFloat(String(settings.setting_value));
+            if (!isNaN(parsed)) serviceFee = parsed;
+        }
+
+        const subtotal = Math.max(0, subtotalOriginal - discountAmount);
+        const total = subtotal + serviceFee;
         const totalPaise = toPaise(total);
 
         const razorpay = getRazorpayServerClient();
@@ -432,9 +478,9 @@ export async function POST(request: NextRequest) {
                 p_first_name: payload.firstName,
                 p_last_name: payload.lastName,
                 p_email: payload.email,
-                p_phone: payload.phone || null,
-                p_notes: payload.notes || null,
-                p_service_fee: SERVICE_FEE,
+                p_phone: payload.phone,
+                p_notes: payload.notes,
+                p_service_fee: serviceFee,
             }
         );
 
@@ -479,7 +525,7 @@ export async function POST(request: NextRequest) {
                     hold_id: payload.holdId,
                     guests: hold.guests,
                     subtotal,
-                    service_fee: SERVICE_FEE,
+                    service_fee: serviceFee,
                     total,
                     status: "confirmed",
                     payment_provider: PAYMENT_PROVIDER,
@@ -487,8 +533,8 @@ export async function POST(request: NextRequest) {
                     first_name: payload.firstName,
                     last_name: payload.lastName,
                     email: payload.email,
-                    phone: payload.phone || null,
-                    notes: payload.notes || null,
+                    phone: payload.phone,
+                    notes: payload.notes,
                 })
                 .select("id")
                 .single();

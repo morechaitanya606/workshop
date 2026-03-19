@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { requireSupabaseService } from "@/lib/api-helpers";
 import { handleApiError, parseQuery } from "@/lib/api-route";
 import { workshopQuerySchema } from "@/lib/validators";
 import { mapWorkshopRowToWorkshop, queryMockWorkshops } from "@/lib/workshop-utils";
+import { createSupabaseAnonServerClient, isSupabasePublicConfigured } from "@/lib/supabase-server";
 
 const WORKSHOP_LIST_CACHE_HEADERS = {
     "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
@@ -28,21 +28,21 @@ export async function GET(request: NextRequest) {
     const to = from + query.pageSize - 1;
     const allowMockFallback = process.env.NODE_ENV !== "production";
 
-    const service = requireSupabaseService();
-    if (!service.ok) {
+    if (!isSupabasePublicConfigured) {
         if (!allowMockFallback) {
-            return service.response;
+            return NextResponse.json(
+                { error: "Supabase public env vars are missing on the server." },
+                { status: 500 }
+            );
         }
         const fallback = queryMockWorkshops(query);
-        return NextResponse.json(fallback, {
-            headers: WORKSHOP_LIST_CACHE_HEADERS,
-        });
+        return NextResponse.json(fallback, { headers: WORKSHOP_LIST_CACHE_HEADERS });
     }
 
     try {
-        const serviceClient = service.client;
+        const supabase = createSupabaseAnonServerClient();
         const sortConfig = getSortConfig(query.sort);
-        let dbQuery = serviceClient.from("workshops").select("*", { count: "exact" });
+        let dbQuery = supabase.from("workshops").select("*", { count: "exact" });
 
         if (query.q) {
             const q = query.q.replace(/[%]/g, "");
@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
                 total: count || 0,
                 page: query.page,
                 pageSize: query.pageSize,
-                source: "supabase",
+                source: "supabase_anon",
             },
             {
                 headers: WORKSHOP_LIST_CACHE_HEADERS,

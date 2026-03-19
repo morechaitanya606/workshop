@@ -60,7 +60,7 @@ describe("workshopFeedbackSchema", () => {
         const parsed = workshopFeedbackSchema.safeParse({
             rating: 5,
             comment: "Amazing host and clear instructions.",
-            photos: ["/uploads/review-1.png"],
+            photos: ["/media/review-1.png"],
             videoUrl: "https://youtube.com/watch?v=abc123",
         });
         expect(parsed.success).toBe(true);

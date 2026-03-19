@@ -32,7 +32,7 @@ const navItems = [
     { href: "/admin/payouts", label: "Payouts", icon: Banknote },
     { href: "/admin/workshops", label: "Workshops", icon: Calendar },
     { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
-    { href: "/admin/feedback", label: "Feedback", icon: MessageSquare },
+    { href: "/admin/support", label: "Support", icon: MessageSquare },
     { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 

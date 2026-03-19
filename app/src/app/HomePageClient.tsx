@@ -11,6 +11,7 @@ import HeroSection from "@/components/home/HeroSection";
 import WorkshopBrowseSection from "@/components/home/WorkshopBrowseSection";
 import WorkshopGridSection from "@/components/home/WorkshopGridSection";
 import PastEventHighlight from "@/components/home/PastEventHighlight";
+import HowItWorksSection from "@/components/home/HowItWorksSection";
 import SocialProofSection from "@/components/home/SocialProofSection";
 import PartnersMarquee from "@/components/home/PartnersMarquee";
 import CommunityGallerySection from "@/components/home/CommunityGallerySection";
@@ -19,6 +20,7 @@ import { categories, mockWorkshops, PAST_EVENTS_CATEGORY_LABEL } from "@/lib/dat
 import type { Workshop } from "@/lib/data";
 import { toApiErrorMessage, updateWorkshopNotifications } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { getRecentlyViewed } from "@/lib/recently-viewed";
 
 const OTHER_CATEGORY_VALUE = "__other__";
 
@@ -39,7 +41,7 @@ export default function HomePageClient({
     const [notifyState, setNotifyState] = useState<
         Record<string, { similar: boolean; creator: boolean }>
     >({});
-    const [showFirstTimeBanner, setShowFirstTimeBanner] = useState(false);
+    const [recentlyViewedWorkshops, setRecentlyViewedWorkshops] = useState<Workshop[]>([]);
 
     const allWorkshops = useMemo(() => {
         if (source === "mock") {
@@ -141,13 +143,15 @@ export default function HomePageClient({
     };
 
     useEffect(() => {
-        if (typeof window === "undefined") return;
-        const seenFlag = window.localStorage.getItem("ow_onboarding_seen");
-        if (!seenFlag) {
-            setShowFirstTimeBanner(true);
-            window.localStorage.setItem("ow_onboarding_seen", "1");
+        const viewedIds = getRecentlyViewed();
+        if (viewedIds.length > 0) {
+            // Find workshop objects from all available data, keeping the order of viewedIds
+            const viewedData = viewedIds
+                .map((id) => allWorkshops.find((w) => w.id === id))
+                .filter((w): w is Workshop => w !== undefined);
+            setRecentlyViewedWorkshops(viewedData);
         }
-    }, []);
+    }, [allWorkshops]);
 
     useEffect(() => {
         if (!notifyMessage) return;
@@ -160,28 +164,7 @@ export default function HomePageClient({
     return (
         <main className="min-h-screen pb-20 md:pb-0">
             <Navbar />
-            {showFirstTimeBanner && (
-                <div className="section-padding pt-20 sm:pt-24 pb-0">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-clay/40 bg-white shadow-soft px-4 py-4 sm:px-6 sm:py-5">
-                        <div className="flex-1 text-sm font-inter text-dark-secondary">
-                            <p className="font-semibold text-dark mb-1">
-                                New here? How Only Workshops works:
-                            </p>
-                            <p>
-                                1) Pick a weekend workshop · 2) Reserve your seats · 3) Pay securely
-                                via Razorpay and get instant confirmation.
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => setShowFirstTimeBanner(false)}
-                            className="text-xs font-inter font-semibold text-dark-muted hover:text-terracotta transition-colors"
-                        >
-                            Got it
-                        </button>
-                    </div>
-                </div>
-            )}
+
             {source === "mock" && (
                 <div className="section-padding pt-24 sm:pt-28 pb-0">
                     <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-inter text-amber-900">
@@ -200,11 +183,7 @@ export default function HomePageClient({
             )}
 
             <HeroSection source={source} />
-            <WorkshopBrowseSection
-                selectedCategory={selectedCategory}
-                selectedCategoryLabel={selectedCategoryLabel}
-                onCategoryChange={setSelectedCategory}
-            />
+            <HowItWorksSection />
 
             <section className="section-padding mt-24 sm:mt-16">
                 <div className="bg-white rounded-3xl shadow-card border border-clay/30 p-6 md:p-8">
@@ -225,6 +204,24 @@ export default function HomePageClient({
                     />
                 </div>
             </section>
+
+            {recentlyViewedWorkshops.length > 0 && (
+                <WorkshopGridSection
+                    title="Recently Viewed"
+                    eyebrow="Pick up where you left off"
+                    sectionClassName="section-padding mt-24 sm:mt-16"
+                    gridClassName="grid grid-flow-col auto-cols-[minmax(240px,280px)] gap-4 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide snap-x snap-mandatory"
+                    cardWrapperClassName="snap-start"
+                    gridKeyPrefix="recent"
+                    selectedCategory={""}
+                    selectedCategoryLabel=""
+                    onTryAnotherCategory={() => {}}
+                    shouldReduceMotion={shouldReduceMotion}
+                    workshops={recentlyViewedWorkshops}
+                    emptyTitle=""
+                    emptyDescription=""
+                />
+            )}
 
             <WorkshopGridSection
                 title={trendingTitle}

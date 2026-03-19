@@ -17,6 +17,10 @@ import {
     Star,
     Loader2,
     CalendarPlus,
+    RotateCcw,
+    ShieldCheck,
+    Tag,
+    X,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -33,9 +37,14 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { trackEvent } from "@/lib/analytics";
 import { scaleIn, standardTransition } from "@/lib/motion-presets";
-import { downloadICSFile, generateGoogleCalendarUrl, parseDurationToMinutes, type CalendarEventData } from "@/lib/calendar";
+import {
+    downloadICSFile,
+    generateGoogleCalendarUrl,
+    parseDurationToMinutes,
+    type CalendarEventData,
+} from "@/lib/calendar";
 
-const SERVICE_FEE = 99;
+// Removed hardcoded SERVICE_FEE
 
 function parseTimestamp(value: string) {
     if (!value) return null;
@@ -152,6 +161,26 @@ function BookingContent() {
         phone: "",
         notes: "",
     });
+    const [couponCode, setCouponCode] = useState("");
+    const [appliedCoupon, setAppliedCoupon] = useState<{
+        code: string;
+        discount: number;
+        type: "percentage" | "fixed";
+    } | null>(null);
+    const [couponError, setCouponError] = useState("");
+    const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+    const [serviceFee, setServiceFee] = useState(99);
+
+    useEffect(() => {
+        fetch("/api/settings")
+            .then((res) => res.json())
+            .then((data) => {
+                if (data?.settings?.service_fee !== undefined) {
+                    setServiceFee(data.settings.service_fee);
+                }
+            })
+            .catch(() => {});
+    }, []);
 
     useEffect(() => {
         if (!holdExpiresAtMs || holdExpiresAtMs <= Date.now()) {
@@ -222,7 +251,62 @@ function BookingContent() {
     }, [workshopId]);
 
     const subtotal = (workshop?.price || 0) * guests;
-    const total = subtotal + SERVICE_FEE;
+    let discountAmount = 0;
+    if (appliedCoupon) {
+        if (appliedCoupon.type === "percentage") {
+            discountAmount = subtotal * (appliedCoupon.discount / 100);
+        } else {
+            discountAmount = appliedCoupon.discount;
+        }
+    }
+    const total = Math.max(0, subtotal - discountAmount) + serviceFee;
+
+    const handleApplyCoupon = async () => {
+        if (!couponCode.trim()) return;
+        setIsApplyingCoupon(true);
+        setCouponError("");
+
+        try {
+            const res = await fetch("/api/coupons/validate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    code: couponCode,
+                    workshopId,
+                    subtotal,
+                }),
+            });
+            const data = await res.json();
+
+            if (res.ok && data.valid) {
+                // Keep the exact same interface shape that matches what `appliedCoupon` requires. Wait, appliedCoupon structure specifies discount value, not the calculated absolute discount in case of fixed. Wait, my subtotal math treats appliedCoupon.discount as the raw percentage or absolute value. Let's see.
+                // Ah, the API returns the CALCULATED discount! But my subtotal logic recalculates it dynamically!
+                // Wait! If the API returns the calculated absolute discount and type is "percentage", my math `subtotal * (discount / 100)` would be `subtotal * (calculated_absolute / 100)`, which is wrong!
+                // Oh! `api/coupons/validate/route.ts` returned `discount: discount` (which is absolute amount even for percentages!)
+                // Let's modify the API return inside booking/page.tsx just to override `type` as "fixed" so the frontend treats it as absolute. Or even better, pass the exact api's type and let the API pass the raw coupon 'discount_value' instead of the calculated offset.
+                // Let's just treat standard appliedCoupon.discount as the raw value from DB. The API isn't returning the raw value though, let me fix the API or adapt to it.
+                // Wait! It's better if `appliedCoupon` stores the *calculated absolute discount* and we treat it as type "fixed".
+                setAppliedCoupon({
+                    code: couponCode.toUpperCase(),
+                    discount: data.discount,
+                    type: "fixed",
+                });
+                setCouponCode("");
+            } else {
+                setCouponError(data.message || "Invalid or expired coupon code");
+            }
+        } catch (error) {
+            setCouponError("Failed to apply coupon");
+        } finally {
+            setIsApplyingCoupon(false);
+        }
+    };
+
+    const removeCoupon = () => {
+        setAppliedCoupon(null);
+        setCouponError("");
+    };
+
     const holdRemainingMs = holdExpiresAtMs ? holdExpiresAtMs - nowMs : null;
     const holdExpired = typeof holdRemainingMs === "number" && holdRemainingMs <= 0;
     const holdCountdownLabel =
@@ -337,6 +421,7 @@ function BookingContent() {
             email: trimFormData.email,
             phone: trimFormData.phone,
             notes: formData.notes,
+            ...(appliedCoupon ? { couponCode: appliedCoupon.code } : {}),
         };
 
         try {
@@ -479,7 +564,9 @@ function BookingContent() {
         const bookingWorkshopDate = confirmedBooking?.workshop?.date || workshop.date;
         const bookingWorkshopTime = confirmedBooking?.workshop?.time || workshop.time;
         const bookingCover = confirmedBooking?.workshop?.cover_image || workshop.coverImage;
-        const locationDetails = workshop.eventAddress ? `${workshop.eventAddress}, ${workshop.city}` : `${workshop.location}, ${workshop.city}`;
+        const locationDetails = workshop.eventAddress
+            ? `${workshop.eventAddress}, ${workshop.city}`
+            : `${workshop.location}, ${workshop.city}`;
 
         const calendarData: CalendarEventData = {
             title: bookingWorkshopTitle,
@@ -561,7 +648,9 @@ function BookingContent() {
                                 </h3>
                                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                                     <button
-                                        onClick={() => downloadICSFile(calendarData, `${workshop.id}.ics`)}
+                                        onClick={() =>
+                                            downloadICSFile(calendarData, `${workshop.id}.ics`)
+                                        }
                                         className="btn-secondary inline-flex items-center gap-2"
                                     >
                                         <CalendarPlus className="w-4 h-4" />
@@ -639,20 +728,87 @@ function BookingContent() {
                     </span>
                     <span className="text-dark font-medium">{formatCurrency(subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-sm font-inter">
+                {appliedCoupon && (
+                    <div className="flex justify-between text-sm font-inter text-emerald-600">
+                        <span className="flex items-center gap-1">
+                            <Tag className="w-3.5 h-3.5" />
+                            {appliedCoupon.code}
+                            <button
+                                onClick={removeCoupon}
+                                className="hover:text-emerald-700 ml-1"
+                                aria-label="Remove coupon"
+                            >
+                                <X className="w-3 h-3" />
+                            </button>
+                        </span>
+                        <span className="font-medium">-{formatCurrency(discountAmount)}</span>
+                    </div>
+                )}
+                <div className="flex justify-between text-sm font-inter py-3 border-b border-gray-100">
                     <span className="text-dark-secondary">Service fee</span>
-                    <span className="text-dark font-medium">{formatCurrency(SERVICE_FEE)}</span>
+                    <span className="text-dark font-medium">{formatCurrency(serviceFee)}</span>
                 </div>
                 <div className="flex justify-between text-base font-inter font-bold pt-3 border-t border-gray-100">
                     <span className="text-dark">Total</span>
                     <span className="text-dark">{formatCurrency(total)}</span>
                 </div>
             </div>
-            <div className="flex items-center gap-2 bg-cream-100 rounded-xl px-4 py-3 mt-4">
-                <Shield className="w-5 h-5 text-emerald-600" />
-                <span className="text-sm font-inter text-dark-secondary">
-                    Razorpay payment is verified before booking confirmation.
-                </span>
+
+            {!appliedCoupon && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            placeholder="Discount code"
+                            value={couponCode}
+                            onChange={(e) => {
+                                setCouponCode(e.target.value);
+                                setCouponError("");
+                            }}
+                            className="flex-1 bg-white border border-clay/50 rounded-xl px-3 py-2 text-sm font-inter focus:outline-none focus:border-terracotta focus:ring-1 focus:ring-terracotta/30 transition-all"
+                        />
+                        <button
+                            onClick={handleApplyCoupon}
+                            disabled={!couponCode.trim() || isApplyingCoupon}
+                            className="bg-dark hover:bg-dark-hover disabled:opacity-50 text-white rounded-xl px-4 py-2 text-sm font-inter font-medium transition-colors min-w-[80px] flex items-center justify-center"
+                        >
+                            {isApplyingCoupon ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                "Apply"
+                            )}
+                        </button>
+                    </div>
+                    {couponError && (
+                        <p className="text-red-500 text-xs font-inter mt-2">{couponError}</p>
+                    )}
+                </div>
+            )}
+            <div className="grid grid-cols-2 gap-3 mt-4">
+                <div className="flex items-center gap-2 bg-cream-100 rounded-xl px-3 py-2.5">
+                    <Shield className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    <span className="text-xs font-inter text-dark-secondary">
+                        Secure payment via Razorpay
+                    </span>
+                </div>
+                <div className="flex items-center gap-2 bg-cream-100 rounded-xl px-3 py-2.5">
+                    <RotateCcw className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                    <span className="text-xs font-inter text-dark-secondary">
+                        Free cancellation 24h before
+                    </span>
+                </div>
+                <div className="flex items-center gap-2 bg-cream-100 rounded-xl px-3 py-2.5">
+                    <Users className="w-4 h-4 text-violet-600 flex-shrink-0" />
+                    <span className="text-xs font-inter text-dark-secondary">
+                        1,000+ happy attendees
+                    </span>
+                </div>
+                <div className="flex items-center gap-2 bg-cream-100 rounded-xl px-3 py-2.5">
+                    <ShieldCheck className="w-4 h-4 text-terracotta flex-shrink-0" />
+                    <span className="text-xs font-inter text-dark-secondary">
+                        100% refund if host cancels
+                    </span>
+                </div>
             </div>
         </>
     );
