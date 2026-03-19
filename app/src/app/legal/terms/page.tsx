@@ -9,8 +9,8 @@ export default function TermsPage() {
             <section>
                 <h2 className="heading-sm mb-2">1. Booking and Attendance</h2>
                 <p>
-                    Workshop spots are confirmed only after successful payment. Hosts may
-                    enforce venue rules and age restrictions.
+                    Workshop spots are confirmed only after successful payment. Hosts may enforce
+                    venue rules and age restrictions.
                 </p>
             </section>
             <section>

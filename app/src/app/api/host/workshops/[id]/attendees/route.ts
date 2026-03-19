@@ -26,11 +26,17 @@ export async function GET(request: NextRequest, { params }: Params) {
             .maybeSingle();
 
         if (fetchError || !workshop) {
-            return NextResponse.json({ error: "Workshop not found", success: false }, { status: 404 });
+            return NextResponse.json(
+                { error: "Workshop not found", success: false },
+                { status: 404 }
+            );
         }
 
         if (workshop.host_user_id !== auth.user.id) {
-            return NextResponse.json({ error: "Unauthorized access", success: false }, { status: 403 });
+            return NextResponse.json(
+                { error: "Unauthorized access", success: false },
+                { status: 403 }
+            );
         }
 
         const { data: bookings, error: bookingsError } = await serviceClient

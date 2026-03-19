@@ -572,10 +572,15 @@ export default function ProfilePage() {
             <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-28 pb-10">
                 <header className="mb-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl md:text-4xl font-playfair font-medium text-dark mb-2">
-                            My Profile
+                        <h1 className="text-3xl md:text-4xl font-playfair font-medium text-dark mb-2 flex items-center gap-3">
+                            Welcome Back! 👋
                         </h1>
-                        <p className="text-dark-muted">{user.email}</p>
+                        <div className="flex flex-col gap-1">
+                            <p className="text-dark-muted">{user.email}</p>
+                            <p className="text-sm font-medium text-terracotta bg-terracotta/10 inline-block px-3 py-1 rounded-full w-max mt-2">
+                                Member since {new Date(user.created_at || Date.now()).getFullYear()}
+                            </p>
+                        </div>
                     </div>
                     <button
                         onClick={handleSignOut}

@@ -6,15 +6,10 @@ export const metadata: Metadata = {
         "Browse and filter creative workshops happening in your city. Pottery, painting, cooking, music and more.",
     openGraph: {
         title: "Explore Workshops | Only Workshops",
-        description:
-            "Browse and filter creative workshops happening in your city.",
+        description: "Browse and filter creative workshops happening in your city.",
     },
 };
 
-export default function ExploreLayout({
-    children,
-}: {
-    children: React.ReactNode;
-}) {
+export default function ExploreLayout({ children }: { children: React.ReactNode }) {
     return children;
 }

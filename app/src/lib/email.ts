@@ -71,7 +71,11 @@ async function sendEmailAndLog({ to, subject, templateName, react, referenceId }
         console.error("Failed to send email:", error);
 
         const errorMessage =
-            error instanceof Error ? error.message : typeof error === "string" ? error : "Unknown error";
+            error instanceof Error
+                ? error.message
+                : typeof error === "string"
+                  ? error
+                  : "Unknown error";
 
         // 3. Update log entry to "failed"
         if (logEntry) {

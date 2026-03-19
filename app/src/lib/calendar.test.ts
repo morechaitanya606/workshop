@@ -20,7 +20,7 @@ describe("Calendar Utilities", () => {
             expect(ics).toContain("END:VEVENT");
             expect(ics).toContain("END:VCALENDAR");
 
-            const uidLine = ics.split("\r\n").find(line => line.startsWith("UID:"));
+            const uidLine = ics.split("\r\n").find((line) => line.startsWith("UID:"));
             expect(uidLine).toBeDefined();
             // UID:20231027T100000Z-50c8e79e-f00e-4363-9529-688325a77610@onlyworkshops.com
             // We check for the UUID part: 8-4-4-4-12 hex chars
