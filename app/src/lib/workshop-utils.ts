@@ -57,7 +57,7 @@ function cleanLinks(value: Json | null | undefined) {
     };
 }
 
-export function mapWorkshopRowToWorkshop(row: DbTable<"workshops">): Workshop {
+export function mapWorkshopRowToWorkshop(row: any): Workshop {
     const socialLinks = cleanLinks(row.social_links);
     const hostSocialLinks = cleanLinks(row.host_social_links);
 
@@ -76,8 +76,8 @@ export function mapWorkshopRowToWorkshop(row: DbTable<"workshops">): Workshop {
         seatsRemaining: Number(row.seats_remaining),
         coverImage: normalizeWorkshopImageUrl(row.cover_image),
         galleryImages: row.gallery_images
-            .map((img) => normalizeWorkshopImageUrl(img))
-            .filter((img) => img.length > 0),
+            .map((img: any) => normalizeWorkshopImageUrl(img))
+            .filter((img: any) => img.length > 0),
         videoUrl: cleanUrlValue(row.video_url),
         rating: 4.8,
         reviewCount: 0,
@@ -92,7 +92,7 @@ export function mapWorkshopRowToWorkshop(row: DbTable<"workshops">): Workshop {
         whatYouLearn: row.what_you_learn,
         materialsProvided: row.materials_provided,
         badgeLabels: Array.isArray(row.badge_labels)
-            ? row.badge_labels.filter((label) => typeof label === "string" && label.trim())
+            ? row.badge_labels.filter((label: any) => typeof label === "string" && label.trim())
             : [],
         isNew: row.is_new,
         isBestseller: row.is_bestseller,
@@ -101,8 +101,8 @@ export function mapWorkshopRowToWorkshop(row: DbTable<"workshops">): Workshop {
         longitude: row.longitude !== null ? Number(row.longitude) : undefined,
         locationImages: Array.isArray(row.location_images)
             ? row.location_images
-                  .map((img) => normalizeWorkshopImageUrl(String(img)))
-                  .filter((img) => img.length > 0)
+                  .map((img: any) => normalizeWorkshopImageUrl(String(img)))
+                  .filter((img: any) => img.length > 0)
             : [],
     };
 }
