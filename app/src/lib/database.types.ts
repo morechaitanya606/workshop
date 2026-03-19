@@ -48,6 +48,7 @@ export type Database = {
             };
             bookings: {
                 Row: {
+                    attended: boolean;
                     created_at: string;
                     email: string;
                     first_name: string;
@@ -67,6 +68,7 @@ export type Database = {
                     workshop_id: string;
                 };
                 Insert: {
+                    attended?: boolean;
                     created_at?: string;
                     email: string;
                     first_name: string;
@@ -86,6 +88,7 @@ export type Database = {
                     workshop_id: string;
                 };
                 Update: {
+                    attended?: boolean;
                     created_at?: string;
                     email?: string;
                     first_name?: string;
@@ -482,6 +485,7 @@ export type Database = {
             };
             profiles: {
                 Row: {
+                    avatar_url: string | null;
                     created_at: string;
                     date_of_birth: string | null;
                     full_name: string | null;
@@ -491,6 +495,7 @@ export type Database = {
                     updated_at: string;
                 };
                 Insert: {
+                    avatar_url?: string | null;
                     created_at?: string;
                     date_of_birth?: string | null;
                     full_name?: string | null;
@@ -500,6 +505,7 @@ export type Database = {
                     updated_at?: string;
                 };
                 Update: {
+                    avatar_url?: string | null;
                     created_at?: string;
                     date_of_birth?: string | null;
                     full_name?: string | null;
@@ -509,6 +515,41 @@ export type Database = {
                     updated_at?: string;
                 };
                 Relationships: [];
+            };
+            waitlists: {
+                Row: {
+                    created_at: string;
+                    email: string;
+                    id: string;
+                    status: Database["public"]["Enums"]["waitlist_status"];
+                    user_id: string | null;
+                    workshop_id: string | null;
+                };
+                Insert: {
+                    created_at?: string;
+                    email: string;
+                    id?: string;
+                    status?: Database["public"]["Enums"]["waitlist_status"];
+                    user_id?: string | null;
+                    workshop_id?: string | null;
+                };
+                Update: {
+                    created_at?: string;
+                    email?: string;
+                    id?: string;
+                    status?: Database["public"]["Enums"]["waitlist_status"];
+                    user_id?: string | null;
+                    workshop_id?: string | null;
+                };
+                Relationships: [
+                    {
+                        foreignKeyName: "waitlists_workshop_id_fkey";
+                        columns: ["workshop_id"];
+                        isOneToOne: false;
+                        referencedRelation: "workshops";
+                        referencedColumns: ["id"];
+                    },
+                ];
             };
             user_favorites: {
                 Row: {
@@ -623,6 +664,7 @@ export type Database = {
             };
             workshops: {
                 Row: {
+                    badge_labels: string[] | null;
                     category: string;
                     city: string;
                     cover_image: string;
@@ -632,6 +674,7 @@ export type Database = {
                     description: string;
                     duration: string;
                     gallery_images: string[];
+                    event_address: string | null;
                     host_avatar: string | null;
                     host_bio: string;
                     host_experience: string | null;
@@ -642,7 +685,10 @@ export type Database = {
                     id: string;
                     is_bestseller: boolean;
                     is_new: boolean;
+                    latitude: number | null;
                     location: string;
+                    location_images: string[] | null;
+                    longitude: number | null;
                     materials_provided: string[];
                     max_seats: number;
                     price: number;
@@ -655,6 +701,7 @@ export type Database = {
                     what_you_learn: string[];
                 };
                 Insert: {
+                    badge_labels?: string[] | null;
                     category: string;
                     city: string;
                     cover_image: string;
@@ -664,6 +711,7 @@ export type Database = {
                     description: string;
                     duration: string;
                     gallery_images?: string[];
+                    event_address?: string | null;
                     host_avatar?: string | null;
                     host_bio: string;
                     host_experience?: string | null;
@@ -674,7 +722,10 @@ export type Database = {
                     id: string;
                     is_bestseller?: boolean;
                     is_new?: boolean;
+                    latitude?: number | null;
                     location: string;
+                    location_images?: string[] | null;
+                    longitude?: number | null;
                     materials_provided?: string[];
                     max_seats: number;
                     price: number;
@@ -687,6 +738,7 @@ export type Database = {
                     what_you_learn?: string[];
                 };
                 Update: {
+                    badge_labels?: string[] | null;
                     category?: string;
                     city?: string;
                     cover_image?: string;
@@ -696,6 +748,7 @@ export type Database = {
                     description?: string;
                     duration?: string;
                     gallery_images?: string[];
+                    event_address?: string | null;
                     host_avatar?: string | null;
                     host_bio?: string;
                     host_experience?: string | null;
@@ -706,7 +759,10 @@ export type Database = {
                     id?: string;
                     is_bestseller?: boolean;
                     is_new?: boolean;
+                    latitude?: number | null;
                     location?: string;
+                    location_images?: string[] | null;
+                    longitude?: number | null;
                     materials_provided?: string[];
                     max_seats?: number;
                     price?: number;
@@ -769,6 +825,7 @@ export type Database = {
             email_delivery_status: "pending" | "sent" | "failed";
             host_application_status: "pending" | "approved" | "rejected";
             payout_status: "processing" | "completed";
+            waitlist_status: "pending" | "notified" | "joined";
         };
         CompositeTypes: {
             [_ in never]: never;
@@ -893,6 +950,13 @@ export type CompositeTypes<
       ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
       : never;
 
+export type DbTable<TableName extends keyof Database["public"]["Tables"]> =
+    Database["public"]["Tables"][TableName]["Row"];
+export type DbInsert<TableName extends keyof Database["public"]["Tables"]> =
+    Database["public"]["Tables"][TableName]["Insert"];
+export type DbUpdate<TableName extends keyof Database["public"]["Tables"]> =
+    Database["public"]["Tables"][TableName]["Update"];
+
 export const Constants = {
     public: {
         Enums: {
@@ -900,6 +964,7 @@ export const Constants = {
             email_delivery_status: ["pending", "sent", "failed"],
             host_application_status: ["pending", "approved", "rejected"],
             payout_status: ["processing", "completed"],
+            waitlist_status: ["pending", "notified", "joined"],
         },
     },
 } as const;
