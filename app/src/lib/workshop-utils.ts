@@ -76,8 +76,8 @@ export function mapWorkshopRowToWorkshop(row: DbTable<"workshops">): Workshop {
         seatsRemaining: Number(row.seats_remaining),
         coverImage: normalizeWorkshopImageUrl(row.cover_image),
         galleryImages: row.gallery_images
-            .map((img) => normalizeWorkshopImageUrl(img))
-            .filter((img) => img.length > 0),
+            .map((img: string) => normalizeWorkshopImageUrl(img))
+            .filter((img: string) => img.length > 0),
         videoUrl: cleanUrlValue(row.video_url),
         rating: 4.8,
         reviewCount: 0,
@@ -92,7 +92,7 @@ export function mapWorkshopRowToWorkshop(row: DbTable<"workshops">): Workshop {
         whatYouLearn: row.what_you_learn,
         materialsProvided: row.materials_provided,
         badgeLabels: Array.isArray(row.badge_labels)
-            ? row.badge_labels.filter((label) => typeof label === "string" && label.trim())
+            ? row.badge_labels.filter((label: unknown) => typeof label === "string" && label.trim())
             : [],
         isNew: row.is_new,
         isBestseller: row.is_bestseller,
@@ -156,7 +156,7 @@ export function buildWorkshopInsertPayload(
         latitude: input.latitude !== undefined ? Number(input.latitude) : null,
         longitude: input.longitude !== undefined ? Number(input.longitude) : null,
         location_images: input.locationImages
-            ? input.locationImages.map((item) => normalizeWorkshopImageUrlInput(item))
+            ? input.locationImages.map((item: string) => normalizeWorkshopImageUrlInput(item))
             : [],
     };
 

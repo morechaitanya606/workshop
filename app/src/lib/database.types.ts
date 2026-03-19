@@ -482,6 +482,7 @@ export type Database = {
             };
             profiles: {
                 Row: {
+                    avatar_url: string | null;
                     created_at: string;
                     date_of_birth: string | null;
                     full_name: string | null;
@@ -491,6 +492,7 @@ export type Database = {
                     updated_at: string;
                 };
                 Insert: {
+                    avatar_url?: string | null;
                     created_at?: string;
                     date_of_birth?: string | null;
                     full_name?: string | null;
@@ -500,6 +502,7 @@ export type Database = {
                     updated_at?: string;
                 };
                 Update: {
+                    avatar_url?: string | null;
                     created_at?: string;
                     date_of_birth?: string | null;
                     full_name?: string | null;
@@ -532,6 +535,48 @@ export type Database = {
                 Relationships: [
                     {
                         foreignKeyName: "user_favorites_workshop_id_fkey";
+                        columns: ["workshop_id"];
+                        isOneToOne: false;
+                        referencedRelation: "workshops";
+                        referencedColumns: ["id"];
+                    },
+                ];
+            };
+            waitlists: {
+                Row: {
+                    created_at: string;
+                    email: string;
+                    id: string;
+                    status: Database["public"]["Enums"]["waitlist_status"];
+                    user_id: string | null;
+                    workshop_id: string | null;
+                };
+                Insert: {
+                    created_at?: string;
+                    email: string;
+                    id?: string;
+                    status?: Database["public"]["Enums"]["waitlist_status"];
+                    user_id?: string | null;
+                    workshop_id?: string | null;
+                };
+                Update: {
+                    created_at?: string;
+                    email?: string;
+                    id?: string;
+                    status?: Database["public"]["Enums"]["waitlist_status"];
+                    user_id?: string | null;
+                    workshop_id?: string | null;
+                };
+                Relationships: [
+                    {
+                        foreignKeyName: "waitlists_user_id_fkey";
+                        columns: ["user_id"];
+                        isOneToOne: false;
+                        referencedRelation: "users";
+                        referencedColumns: ["id"];
+                    },
+                    {
+                        foreignKeyName: "waitlists_workshop_id_fkey";
                         columns: ["workshop_id"];
                         isOneToOne: false;
                         referencedRelation: "workshops";
@@ -769,6 +814,7 @@ export type Database = {
             email_delivery_status: "pending" | "sent" | "failed";
             host_application_status: "pending" | "approved" | "rejected";
             payout_status: "processing" | "completed";
+            waitlist_status: "pending" | "notified" | "joined";
         };
         CompositeTypes: {
             [_ in never]: never;
@@ -893,6 +939,13 @@ export type CompositeTypes<
       ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
       : never;
 
+export type DbTable<T extends keyof Database["public"]["Tables"]> =
+    Database["public"]["Tables"][T]["Row"];
+export type DbInsert<T extends keyof Database["public"]["Tables"]> =
+    Database["public"]["Tables"][T]["Insert"];
+export type DbUpdate<T extends keyof Database["public"]["Tables"]> =
+    Database["public"]["Tables"][T]["Update"];
+
 export const Constants = {
     public: {
         Enums: {
@@ -900,6 +953,7 @@ export const Constants = {
             email_delivery_status: ["pending", "sent", "failed"],
             host_application_status: ["pending", "approved", "rejected"],
             payout_status: ["processing", "completed"],
+            waitlist_status: ["pending", "notified", "joined"],
         },
     },
 } as const;
