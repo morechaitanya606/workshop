@@ -13,7 +13,7 @@ function formatICSDate(dateStr: string, timeStr: string): string {
     return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 }
 
-function generateICSContent(data: CalendarEventData): string {
+export function generateICSContent(data: CalendarEventData): string {
     const startObj = new Date(`${data.startDate}T${data.startTime}:00`);
     const endObj = new Date(startObj.getTime() + data.durationMinutes * 60000);
 
@@ -30,7 +30,7 @@ function generateICSContent(data: CalendarEventData): string {
         `DTSTART:${dtstart}`,
         `DTEND:${dtend}`,
         `DTSTAMP:${dtstamp}`,
-        `UID:${dtstamp}-${Math.random().toString(36).substr(2, 9)}@onlyworkshops.com`,
+        `UID:${dtstamp}-${crypto.randomUUID()}@onlyworkshops.com`,
         `SUMMARY:${data.title.replace(/,/g, '\\,')}`,
         `DESCRIPTION:${data.description.replace(/\n/g, '\\n').replace(/,/g, '\\,')}`,
         `LOCATION:${data.location.replace(/,/g, '\\,')}`,
