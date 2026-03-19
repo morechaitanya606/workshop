@@ -1,12 +1,21 @@
 ## Deployment checklist (Supabase + Vercel)
 
-### 0) Rotate secrets (recommended)
+### 0) Set the Vercel Root Directory
+This repository deploys from `app/`, not from the repository root.
+
+In Vercel Project Settings -> Build and Deployment:
+- Set **Root Directory** to `app`
+- Redeploy after saving the setting
+
+The cron config lives in `app/vercel.json` so Vercel validates it against the Next.js app that actually defines `/api/cron/emails`.
+
+### 1) Rotate secrets (recommended)
 You already pasted real keys in chat. Rotate at least:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RAZORPAY_KEY_SECRET`
 - `RAZORPAY_WEBHOOK_SECRET`
 
-### 1) Apply Supabase migrations to your Supabase project
+### 2) Apply Supabase migrations to your Supabase project
 This repo ships SQL migrations in `app/supabase/migrations/`.
 
 #### Option A (recommended): Supabase CLI
@@ -26,7 +35,7 @@ Notes:
 Apply migrations in timestamp order (oldest → newest) by pasting each file from:
 - `app/supabase/migrations/*.sql`
 
-### 2) Create Supabase Storage bucket `uploads`
+### 3) Create Supabase Storage bucket `uploads`
 In Supabase Dashboard:
 - **Storage → Buckets → New bucket**
   - Name: `uploads`
@@ -34,7 +43,7 @@ In Supabase Dashboard:
     - **Public bucket**: simplest. Upload API returns `url`.
     - **Private bucket**: safer for user media. Upload API returns `signedUrl` (10 min TTL).
 
-### 3) Configure Vercel environment variables
+### 4) Configure Vercel environment variables
 In Vercel Project Settings → Environment Variables, set:
 
 #### Required (app)
@@ -52,8 +61,8 @@ In Vercel Project Settings → Environment Variables, set:
 - `RESEND_API_KEY`
 - `CRON_SECRET` (random long value)
 
-### 4) Schedule cron (Vercel Cron)
-This repo includes `vercel.json` which schedules:
+### 5) Schedule cron (Vercel Cron)
+This repo includes `app/vercel.json` which schedules:
 - `GET /api/cron/emails` every hour (`0 * * * *`)
 
 To authorize the cron, the endpoint expects:
@@ -61,7 +70,7 @@ To authorize the cron, the endpoint expects:
 
 In Vercel Cron Jobs, set the request header accordingly (or ensure the Vercel cron feature injects it).
 
-### 5) Uploads behavior (public vs private)
+### 6) Uploads behavior (public vs private)
 `POST /api/upload` accepts multipart form-data:
 - `file`: File
 - `bucket` (optional): defaults to `uploads`
