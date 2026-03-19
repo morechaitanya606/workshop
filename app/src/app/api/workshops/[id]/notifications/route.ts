@@ -2,15 +2,15 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { parseBody } from "@/lib/api-route";
 import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
-import type { DbTable } from "@/lib/database.types";
+import type { Tables } from "@/lib/database.types";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { workshopNotificationSchema } from "@/lib/validators";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 
 type NotificationRow = {
-    notify_similar: DbTable<"workshop_notification_preferences">["notify_similar"] | null;
-    notify_creator: DbTable<"workshop_notification_preferences">["notify_creator"] | null;
+    notify_similar: Tables<"workshop_notification_preferences">["notify_similar"] | null;
+    notify_creator: Tables<"workshop_notification_preferences">["notify_creator"] | null;
 };
 
 const fallbackNotificationStore = new Map<string, { similar: boolean; creator: boolean }>();

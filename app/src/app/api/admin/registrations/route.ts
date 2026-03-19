@@ -1,12 +1,12 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError, parseQuery } from "@/lib/api-route";
-import type { DbTable } from "@/lib/database.types";
+import type { Tables } from "@/lib/database.types";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { adminRegistrationsQuerySchema } from "@/lib/validators";
 
-const BOOKING_STATUSES: DbTable<"bookings">["status"][] = ["confirmed", "cancelled", "refunded"];
+const BOOKING_STATUSES: Tables<"bookings">["status"][] = ["confirmed", "cancelled", "refunded"];
 
 export async function GET(request: NextRequest) {
     const auth = await requireAdminUser(request);
@@ -61,9 +61,9 @@ export async function GET(request: NextRequest) {
 
         if (
             status !== "all" &&
-            BOOKING_STATUSES.includes(status as DbTable<"bookings">["status"])
+            BOOKING_STATUSES.includes(status as Tables<"bookings">["status"])
         ) {
-            query = query.eq("status", status as DbTable<"bookings">["status"]);
+            query = query.eq("status", status as Tables<"bookings">["status"]);
         }
 
         if (q) {

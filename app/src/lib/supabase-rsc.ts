@@ -3,11 +3,11 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import type { Database, DbTable } from "@/lib/database.types";
+import type { Database, Tables } from "@/lib/database.types";
 import { getPublicSupabaseConfig } from "@/lib/env";
 
 type ProfileRoleRow = {
-    role: DbTable<"profiles">["role"] | null;
+    role: Tables<"profiles">["role"] | null;
 };
 
 export function createSupabaseRscClient() {

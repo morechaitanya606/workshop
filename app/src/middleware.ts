@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import type { Database, DbTable } from "@/lib/database.types";
+import type { Database, Tables } from "@/lib/database.types";
 import { getPublicSupabaseConfig } from "@/lib/env";
 
 const supabasePublicConfig = getPublicSupabaseConfig();
@@ -103,7 +103,7 @@ export async function middleware(request: NextRequest) {
             .eq("id", user.id)
             .maybeSingle();
 
-        const profile = profileResult.data as Pick<DbTable<"profiles">, "role"> | null;
+        const profile = profileResult.data as Pick<Tables<"profiles">, "role"> | null;
 
         if (profile?.role !== "admin") {
             return NextResponse.redirect(new URL("/", request.url));

@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError, parseBody } from "@/lib/api-route";
-import type { DbUpdate } from "@/lib/database.types";
+import type { TablesUpdate } from "@/lib/database.types";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
@@ -97,7 +97,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         }
 
         const input = parsed.data;
-        const patch: DbUpdate<"workshops"> = {};
+        const patch: TablesUpdate<"workshops"> = {};
 
         if (typeof input.title === "string") patch.title = input.title;
         if (typeof input.description === "string") patch.description = input.description;

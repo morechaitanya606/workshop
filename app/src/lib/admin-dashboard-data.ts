@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Workshop } from "@/lib/data";
-import type { DbTable } from "@/lib/database.types";
+import type { Tables } from "@/lib/database.types";
 import { createSupabaseRscClient } from "@/lib/supabase-rsc";
 import { createSupabaseServiceClient } from "@/lib/supabase-server";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
@@ -13,17 +13,17 @@ export type AdminDashboardStats = {
     avgRating: string;
 };
 
-export type AdminHostApplication = DbTable<"host_applications">;
+export type AdminHostApplication = Tables<"host_applications">;
 
 type AdminDashboardSupabaseClient = NonNullable<ReturnType<typeof createSupabaseRscClient>>;
 
 type BookingStatsRow = {
-    total: DbTable<"bookings">["total"] | null;
-    guests: DbTable<"bookings">["guests"] | null;
+    total: Tables<"bookings">["total"] | null;
+    guests: Tables<"bookings">["guests"] | null;
 };
 
 type RatingRow = {
-    rating: DbTable<"workshop_feedback">["rating"] | null;
+    rating: Tables<"workshop_feedback">["rating"] | null;
 };
 
 export async function loadAdminDashboardData(supabase: AdminDashboardSupabaseClient): Promise<{
@@ -69,7 +69,7 @@ export async function loadAdminDashboardData(supabase: AdminDashboardSupabaseCli
     }
 
     const workshops = (workshopRows || []).map((row) =>
-        mapWorkshopRowToWorkshop(row as DbTable<"workshops">)
+        mapWorkshopRowToWorkshop(row as Tables<"workshops">)
     );
     stats.activeWorkshops = count || workshops.length;
 
