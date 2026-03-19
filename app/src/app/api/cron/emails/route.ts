@@ -20,9 +20,19 @@ type TargetBookingRow = {
         | null;
 };
 
+const DEFAULT_CRON_INTERVAL_HOURS = 24;
+const REMINDER_LEAD_HOURS = 24;
+const WORKSHOP_DURATION_HOURS = 2;
+const FEEDBACK_DELAY_HOURS = 2;
+
 function getWorkshopFromJoin(row: TargetBookingRow) {
     if (!row.workshops) return null;
     return Array.isArray(row.workshops) ? row.workshops[0] || null : row.workshops;
+}
+
+function getCronIntervalHours() {
+    const parsed = Number(process.env.EMAIL_CRON_INTERVAL_HOURS);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_CRON_INTERVAL_HOURS;
 }
 
 function parseWorkshopStart(date: string, time: string | null) {
@@ -89,10 +99,15 @@ export async function GET(request: Request) {
         );
 
         const now = new Date();
-        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        const dayAfterTomorrow = new Date(now.getTime() + 48 * 60 * 60 * 1000);
-        const dateQueryStart = yesterday.toISOString().slice(0, 10);
-        const dateQueryEnd = dayAfterTomorrow.toISOString().slice(0, 10);
+        const cronIntervalHours = getCronIntervalHours();
+        const reminderWindowHours = REMINDER_LEAD_HOURS + cronIntervalHours;
+        const feedbackWindowHours = FEEDBACK_DELAY_HOURS + Math.max(24, cronIntervalHours);
+        const queryStart = new Date(
+            now.getTime() - (feedbackWindowHours + WORKSHOP_DURATION_HOURS) * 60 * 60 * 1000
+        );
+        const queryEnd = new Date(now.getTime() + reminderWindowHours * 60 * 60 * 1000);
+        const dateQueryStart = queryStart.toISOString().slice(0, 10);
+        const dateQueryEnd = queryEnd.toISOString().slice(0, 10);
 
         const { data: targetBookings, error: bookingError } = await supabase
             .from("bookings")
@@ -128,11 +143,11 @@ export async function GET(request: Request) {
 
                 const hoursUntilWorkshop =
                     (workshopStart.getTime() - now.getTime()) / (1000 * 60 * 60);
-                const hoursSinceWorkshopEnd = -hoursUntilWorkshop - 2; // Approx. 2h workshop duration.
+                const hoursSinceWorkshopEnd = -hoursUntilWorkshop - WORKSHOP_DURATION_HOURS;
 
                 if (
                     hoursUntilWorkshop > 0 &&
-                    hoursUntilWorkshop <= 25 &&
+                    hoursUntilWorkshop <= reminderWindowHours &&
                     !sentReminders.has(booking.id)
                 ) {
                     await sendWorkshopReminder(booking.id);
@@ -140,8 +155,8 @@ export async function GET(request: Request) {
                 }
 
                 if (
-                    hoursSinceWorkshopEnd > 2 &&
-                    hoursSinceWorkshopEnd <= 24 &&
+                    hoursSinceWorkshopEnd > FEEDBACK_DELAY_HOURS &&
+                    hoursSinceWorkshopEnd <= feedbackWindowHours &&
                     !sentFeedbacks.has(booking.id)
                 ) {
                     await sendFeedbackRequest(booking.id);

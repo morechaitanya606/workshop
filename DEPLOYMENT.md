@@ -60,10 +60,13 @@ In Vercel Project Settings → Environment Variables, set:
 #### Email (required if you want reminders/feedback emails)
 - `RESEND_API_KEY`
 - `CRON_SECRET` (random long value)
+- `EMAIL_CRON_INTERVAL_HOURS=24` for Hobby
 
 ### 5) Schedule cron (Vercel Cron)
 This repo includes `app/vercel.json` which schedules:
-- `GET /api/cron/emails` every hour (`0 * * * *`)
+- `GET /api/cron/emails` once per day (`0 0 * * *`)
+
+Hobby accounts are limited to daily cron jobs on Vercel. If you upgrade to Pro and switch back to an hourly cron, also set `EMAIL_CRON_INTERVAL_HOURS=1` so the reminder windows stay aligned with the actual schedule.
 
 To authorize the cron, the endpoint expects:
 - Header `Authorization: Bearer ${CRON_SECRET}`
