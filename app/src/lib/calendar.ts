@@ -9,42 +9,42 @@ export type CalendarEventData = {
 
 function formatICSDate(dateStr: string, timeStr: string): string {
     const d = new Date(`${dateStr}T${timeStr}:00`);
-    if (isNaN(d.getTime())) return '';
-    return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    if (isNaN(d.getTime())) return "";
+    return d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
 }
 
 export function generateICSContent(data: CalendarEventData): string {
     const startObj = new Date(`${data.startDate}T${data.startTime}:00`);
     const endObj = new Date(startObj.getTime() + data.durationMinutes * 60000);
 
-    const dtstart = startObj.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-    const dtend = endObj.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-    const dtstamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    const dtstart = startObj.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const dtend = endObj.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const dtstamp = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
 
     const lines = [
-        'BEGIN:VCALENDAR',
-        'VERSION:2.0',
-        'PRODID:-//OnlyWorkshops//Event Calendar//EN',
-        'CALSCALE:GREGORIAN',
-        'BEGIN:VEVENT',
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//OnlyWorkshops//Event Calendar//EN",
+        "CALSCALE:GREGORIAN",
+        "BEGIN:VEVENT",
         `DTSTART:${dtstart}`,
         `DTEND:${dtend}`,
         `DTSTAMP:${dtstamp}`,
         `UID:${dtstamp}-${crypto.randomUUID()}@onlyworkshops.com`,
-        `SUMMARY:${data.title.replace(/,/g, '\\,')}`,
-        `DESCRIPTION:${data.description.replace(/\n/g, '\\n').replace(/,/g, '\\,')}`,
-        `LOCATION:${data.location.replace(/,/g, '\\,')}`,
-        'END:VEVENT',
-        'END:VCALENDAR'
+        `SUMMARY:${data.title.replace(/,/g, "\\,")}`,
+        `DESCRIPTION:${data.description.replace(/\n/g, "\\n").replace(/,/g, "\\,")}`,
+        `LOCATION:${data.location.replace(/,/g, "\\,")}`,
+        "END:VEVENT",
+        "END:VCALENDAR",
     ];
-    return lines.join('\r\n');
+    return lines.join("\r\n");
 }
 
-export function downloadICSFile(data: CalendarEventData, filename: string = 'workshop.ics') {
+export function downloadICSFile(data: CalendarEventData, filename: string = "workshop.ics") {
     const content = generateICSContent(data);
-    const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+    const blob = new Blob([content], { type: "text/calendar;charset=utf-8" });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
     link.download = filename;
     document.body.appendChild(link);
@@ -57,15 +57,15 @@ export function generateGoogleCalendarUrl(data: CalendarEventData): string {
     const startObj = new Date(`${data.startDate}T${data.startTime}:00`);
     const endObj = new Date(startObj.getTime() + data.durationMinutes * 60000);
 
-    const dtstart = startObj.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-    const dtend = endObj.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    const dtstart = startObj.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const dtend = endObj.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
 
-    const url = new URL('https://calendar.google.com/calendar/render');
-    url.searchParams.append('action', 'TEMPLATE');
-    url.searchParams.append('dates', `${dtstart}/${dtend}`);
-    url.searchParams.append('text', data.title);
-    url.searchParams.append('details', data.description);
-    url.searchParams.append('location', data.location);
+    const url = new URL("https://calendar.google.com/calendar/render");
+    url.searchParams.append("action", "TEMPLATE");
+    url.searchParams.append("dates", `${dtstart}/${dtend}`);
+    url.searchParams.append("text", data.title);
+    url.searchParams.append("details", data.description);
+    url.searchParams.append("location", data.location);
 
     return url.toString();
 }

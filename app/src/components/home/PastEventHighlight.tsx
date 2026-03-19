@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { BellRing, ChevronRight } from "lucide-react";
+import { BellRing, ChevronRight, Images } from "lucide-react";
 import type { Workshop } from "@/lib/data";
 import { cardReveal, standardTransition, useMotionProps } from "@/lib/motion-presets";
 import { formatDate } from "@/lib/utils";
@@ -126,10 +126,10 @@ export default function PastEventHighlight({
                             <Link
                                 href={`/workshop/${pastWorkshop.id}`}
                                 onClick={(event) => event.stopPropagation()}
-                                className="inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-inter font-semibold bg-white text-dark-secondary border border-gray-200 hover:border-terracotta hover:text-terracotta transition-colors"
+                                className="inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-inter font-semibold bg-white text-dark border border-gray-200 hover:border-terracotta hover:text-terracotta transition-colors"
                             >
-                                View Event Page
-                                <ChevronRight className="w-4 h-4" />
+                                <Images className="w-4 h-4" />
+                                View Photos & Reviews
                             </Link>
                         </div>
 

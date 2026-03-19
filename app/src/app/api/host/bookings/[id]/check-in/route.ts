@@ -43,7 +43,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             .maybeSingle();
 
         if (fetchError || !booking) {
-            return NextResponse.json({ error: "Booking not found", success: false }, { status: 404 });
+            return NextResponse.json(
+                { error: "Booking not found", success: false },
+                { status: 404 }
+            );
         }
 
         const hostUserId = Array.isArray(booking.workshops)
@@ -51,7 +54,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             : (booking.workshops as any)?.host_user_id;
 
         if (hostUserId !== auth.user.id) {
-            return NextResponse.json({ error: "Unauthorized access", success: false }, { status: 403 });
+            return NextResponse.json(
+                { error: "Unauthorized access", success: false },
+                { status: 403 }
+            );
         }
 
         const { error: updateError } = await serviceClient

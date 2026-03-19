@@ -15,8 +15,7 @@ export default function CategoryFilter({ onCategoryChange, activeCategory }: Cat
     const [localActive, setLocalActive] = useState("trending");
     const [customCategory, setCustomCategory] = useState("");
     const active = activeCategory ?? localActive;
-    const isCustomActive =
-        Boolean(active) && !categories.some((cat) => cat.id === active);
+    const isCustomActive = Boolean(active) && !categories.some((cat) => cat.id === active);
     const activeId = isCustomActive ? OTHER_CATEGORY_VALUE : active;
     const filterCategories = [
         ...categories,

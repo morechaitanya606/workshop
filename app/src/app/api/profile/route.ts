@@ -31,11 +31,11 @@ export async function GET(request: NextRequest) {
 
     try {
         await ensureUserProfile(auth.user);
-    const { data, error } = await service.client
-        .from("profiles")
-        .select("full_name, avatar_url, date_of_birth, phone_number")
-        .eq("id", auth.user.id)
-        .maybeSingle();
+        const { data, error } = await service.client
+            .from("profiles")
+            .select("full_name, avatar_url, date_of_birth, phone_number")
+            .eq("id", auth.user.id)
+            .maybeSingle();
 
         if (error) {
             return jsonError("Unable to load profile.", 500, error);
