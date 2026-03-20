@@ -183,7 +183,7 @@ export default function BecomeAHostPage() {
                                         value={phone}
                                         onChange={(event) => setPhone(event.target.value)}
                                         required
-                                        placeholder="+91 9XXXX XXXXX"
+                                        placeholder="+91 98765 43210"
                                         className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
                                     />
                                 </div>
