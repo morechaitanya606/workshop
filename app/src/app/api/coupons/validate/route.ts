@@ -78,18 +78,10 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Calculate discount
-        let discount = 0;
-        if (coupon.discount_type === "percentage") {
-            discount = (subtotal || 0) * (coupon.discount_value / 100);
-        } else {
-            discount = coupon.discount_value;
-        }
-
         return NextResponse.json(
             {
                 valid: true,
-                discount: discount,
+                discount: coupon.discount_value,
                 type: coupon.discount_type,
                 message: "Coupon applied successfully!",
                 id: coupon.id,
