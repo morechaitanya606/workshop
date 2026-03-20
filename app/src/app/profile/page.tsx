@@ -1237,13 +1237,12 @@ export default function ProfilePage() {
                                                                                             key={i}
                                                                                             className="relative w-24 h-24 rounded-xl overflow-hidden shrink-0 border border-dark/10 shadow-sm"
                                                                                         >
-                                                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                                                            <img
-                                                                                                src={
-                                                                                                    url
-                                                                                                }
+                                                                                            <Image
+                                                                                                src={url}
                                                                                                 alt={`Feedback ${i}`}
-                                                                                                className="object-cover w-full h-full hover:scale-105 transition-transform"
+                                                                                                fill
+                                                                                                sizes="96px"
+                                                                                                className="object-cover hover:scale-105 transition-transform"
                                                                                             />
                                                                                         </div>
                                                                                     )
