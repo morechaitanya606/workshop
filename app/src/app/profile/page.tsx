@@ -31,6 +31,7 @@ import {
     getWorkshopById,
     getMyBookings,
     getWorkshopFeedback,
+    getBulkWorkshopFeedback,
     submitWorkshopFeedback,
     toApiErrorMessage,
     uploadMedia,
@@ -212,33 +213,33 @@ export default function ProfilePage() {
             if (pastWorkshops.length === 0) return;
 
             const newRecords: Record<string, SavedFeedback> = {};
+            const workshopIds = pastWorkshops.map(w => w.workshopId);
 
-            await Promise.all(
-                pastWorkshops.map(async ({ bookingId, workshopId }) => {
-                    try {
-                        const data = await getWorkshopFeedback(workshopId, session.access_token);
-                        if (data.feedback) {
-                            newRecords[bookingId] = {
-                                rating: data.feedback.rating || 5,
-                                comment: data.feedback.comment || "",
-                                photos: data.feedback.photos || [],
-                                videoUrl: data.feedback.video_url || "",
-                                submittedAt: data.feedback.updated_at,
-                            };
-                        }
-                    } catch (e) {
-                        Sentry.captureException(e, {
-                            tags: {
-                                layer: "profile",
-                                action: "load_feedback",
-                            },
-                            extra: {
-                                workshopId,
-                            },
-                        });
+            try {
+                console.time("BulkFeedbackFetch");
+                const response = await getBulkWorkshopFeedback(workshopIds, session.access_token);
+                console.timeEnd("BulkFeedbackFetch");
+
+                pastWorkshops.forEach(({ bookingId, workshopId }) => {
+                    const fb = response.feedback[workshopId];
+                    if (fb) {
+                        newRecords[bookingId] = {
+                            rating: fb.rating || 5,
+                            comment: fb.comment || "",
+                            photos: fb.photos || [],
+                            videoUrl: fb.video_url || "",
+                            submittedAt: fb.updated_at,
+                        };
                     }
-                })
-            );
+                });
+            } catch (e) {
+                Sentry.captureException(e, {
+                    tags: {
+                        layer: "profile",
+                        action: "load_feedback_bulk",
+                    },
+                });
+            }
 
             if (active) {
                 setRecords((prev) => ({ ...prev, ...newRecords }));
