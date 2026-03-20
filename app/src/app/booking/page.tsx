@@ -279,17 +279,10 @@ function BookingContent() {
             const data = await res.json();
 
             if (res.ok && data.valid) {
-                // Keep the exact same interface shape that matches what `appliedCoupon` requires. Wait, appliedCoupon structure specifies discount value, not the calculated absolute discount in case of fixed. Wait, my subtotal math treats appliedCoupon.discount as the raw percentage or absolute value. Let's see.
-                // Ah, the API returns the CALCULATED discount! But my subtotal logic recalculates it dynamically!
-                // Wait! If the API returns the calculated absolute discount and type is "percentage", my math `subtotal * (discount / 100)` would be `subtotal * (calculated_absolute / 100)`, which is wrong!
-                // Oh! `api/coupons/validate/route.ts` returned `discount: discount` (which is absolute amount even for percentages!)
-                // Let's modify the API return inside booking/page.tsx just to override `type` as "fixed" so the frontend treats it as absolute. Or even better, pass the exact api's type and let the API pass the raw coupon 'discount_value' instead of the calculated offset.
-                // Let's just treat standard appliedCoupon.discount as the raw value from DB. The API isn't returning the raw value though, let me fix the API or adapt to it.
-                // Wait! It's better if `appliedCoupon` stores the *calculated absolute discount* and we treat it as type "fixed".
                 setAppliedCoupon({
                     code: couponCode.toUpperCase(),
                     discount: data.discount,
-                    type: "fixed",
+                    type: data.type,
                 });
                 setCouponCode("");
             } else {
