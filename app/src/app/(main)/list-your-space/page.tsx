@@ -313,7 +313,7 @@ export default function ListYourSpacePage() {
                                                     setOwnerPhone(event.target.value)
                                                 }
                                                 required
-                                                placeholder="+91 9XXXX XXXXX"
+                                                placeholder="+91 98765 43210"
                                                 className="w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
                                             />
                                         </div>
