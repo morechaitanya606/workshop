@@ -5,7 +5,6 @@ import Image from "next/image";
 const CAFE_PARTNERS = [
     { name: "Blue Tokai", img: "/images/partners/blue-tokai-logo.png" },
     { name: "Boka Book Cafe", img: "/images/partners/boka-book-cafe.jpg" },
-    { name: "Cafe Peter Kothrud", img: "/images/partners/cafe-peter-kothrud.jpg" },
     { name: "Cafe Peter", img: "/images/partners/cafe-peter.jpg" },
     { name: "Cafe Raaha", img: "/images/partners/cafe-raaha-logo.png" },
     { name: "Doolally", img: "/images/partners/doolally.png" },
@@ -48,14 +47,14 @@ export default function PartnersMarquee({ shouldReduceMotion }: { shouldReduceMo
                             key={index}
                             className="flex flex-col items-center justify-center gap-3 bg-white px-6 py-5 rounded-2xl shadow-sm border border-clay/30 min-w-[220px] text-center motion-safe:hover:scale-[1.03] hover:shadow-hover transition-all duration-300"
                         >
-                            <div className="w-16 h-16 rounded-full overflow-hidden bg-white border border-clay/50 flex items-center justify-center p-1.5">
+                            <div className="w-20 h-20 overflow-hidden bg-white flex items-center justify-center p-1">
                                 <Image
                                     src={partner.img}
                                     alt={partner.name}
-                                    width={64}
-                                    height={64}
+                                    width={80}
+                                    height={80}
                                     className="w-full h-full object-contain"
-                                    sizes="64px"
+                                    sizes="80px"
                                     quality={80}
                                 />
                             </div>
