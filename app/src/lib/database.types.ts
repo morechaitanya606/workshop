@@ -583,6 +583,48 @@ export type Database = {
                     },
                 ];
             };
+            waitlists: {
+                Row: {
+                    created_at: string;
+                    email: string;
+                    id: string;
+                    status: Database["public"]["Enums"]["waitlist_status"];
+                    user_id: string | null;
+                    workshop_id: string | null;
+                };
+                Insert: {
+                    created_at?: string;
+                    email: string;
+                    id?: string;
+                    status?: Database["public"]["Enums"]["waitlist_status"];
+                    user_id?: string | null;
+                    workshop_id?: string | null;
+                };
+                Update: {
+                    created_at?: string;
+                    email?: string;
+                    id?: string;
+                    status?: Database["public"]["Enums"]["waitlist_status"];
+                    user_id?: string | null;
+                    workshop_id?: string | null;
+                };
+                Relationships: [
+                    {
+                        foreignKeyName: "waitlists_user_id_fkey";
+                        columns: ["user_id"];
+                        isOneToOne: false;
+                        referencedRelation: "users";
+                        referencedColumns: ["id"];
+                    },
+                    {
+                        foreignKeyName: "waitlists_workshop_id_fkey";
+                        columns: ["workshop_id"];
+                        isOneToOne: false;
+                        referencedRelation: "workshops";
+                        referencedColumns: ["id"];
+                    },
+                ];
+            };
             workshop_feedback: {
                 Row: {
                     comment: string;
@@ -989,12 +1031,12 @@ export type CompositeTypes<
       ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
       : never;
 
-export type DbTable<TableName extends keyof Database["public"]["Tables"]> =
-    Database["public"]["Tables"][TableName]["Row"];
-export type DbInsert<TableName extends keyof Database["public"]["Tables"]> =
-    Database["public"]["Tables"][TableName]["Insert"];
-export type DbUpdate<TableName extends keyof Database["public"]["Tables"]> =
-    Database["public"]["Tables"][TableName]["Update"];
+export type DbTable<T extends keyof Database["public"]["Tables"]> =
+    Database["public"]["Tables"][T]["Row"];
+export type DbInsert<T extends keyof Database["public"]["Tables"]> =
+    Database["public"]["Tables"][T]["Insert"];
+export type DbUpdate<T extends keyof Database["public"]["Tables"]> =
+    Database["public"]["Tables"][T]["Update"];
 
 export const Constants = {
     public: {

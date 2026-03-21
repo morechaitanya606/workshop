@@ -76,8 +76,8 @@ export function mapWorkshopRowToWorkshop(row: any): Workshop {
         seatsRemaining: Number(row.seats_remaining),
         coverImage: normalizeWorkshopImageUrl(row.cover_image),
         galleryImages: row.gallery_images
-            .map((img: any) => normalizeWorkshopImageUrl(img))
-            .filter((img: any) => img.length > 0),
+            .map((img: string) => normalizeWorkshopImageUrl(img))
+            .filter((img: string) => img.length > 0),
         videoUrl: cleanUrlValue(row.video_url),
         rating: 4.8,
         reviewCount: 0,
@@ -91,8 +91,8 @@ export function mapWorkshopRowToWorkshop(row: any): Workshop {
         socialLinks,
         whatYouLearn: row.what_you_learn,
         materialsProvided: row.materials_provided,
-        badgeLabels: Array.isArray((row as any).badge_labels)
-            ? (row as any).badge_labels.filter((label: any) => typeof label === "string" && label.trim())
+        badgeLabels: Array.isArray(row.badge_labels)
+            ? row.badge_labels.filter((label: unknown) => typeof label === "string" && label.trim())
             : [],
         isNew: row.is_new,
         isBestseller: row.is_bestseller,
@@ -120,7 +120,9 @@ export function buildWorkshopInsertPayload(
 
     const id = `${slug || "workshop"}-${Date.now()}`;
     const coverImage = normalizeWorkshopImageUrlInput(input.coverImage);
-    const galleryImages = input.galleryImages.map((item: any) => normalizeWorkshopImageUrlInput(item));
+    const galleryImages = input.galleryImages.map((item: any) =>
+        normalizeWorkshopImageUrlInput(item)
+    );
     const videoUrl = input.videoUrl ? normalizeWorkshopVideoUrlInput(input.videoUrl) : "";
 
     const payload: TablesInsert<"workshops"> = {
@@ -152,12 +154,12 @@ export function buildWorkshopInsertPayload(
         is_new: true,
         created_by: createdBy,
         host_user_id: createdBy,
-        ...(true ? {} : { event_address: input.eventAddress || null }),
-        ...(true ? {} : { latitude: input.latitude !== undefined ? Number(input.latitude) : null }),
-        ...(true ? {} : { longitude: input.longitude !== undefined ? Number(input.longitude) : null }),
-        ...(true ? {} : { location_images: input.locationImages
-            ? input.locationImages.map((item: any) => normalizeWorkshopImageUrlInput(item))
-            : [] }),
+        event_address: input.eventAddress || null,
+        latitude: input.latitude !== undefined ? Number(input.latitude) : null,
+        longitude: input.longitude !== undefined ? Number(input.longitude) : null,
+        location_images: input.locationImages
+            ? input.locationImages.map((item: string) => normalizeWorkshopImageUrlInput(item))
+            : [],
     };
 
     return payload;
@@ -276,8 +278,20 @@ export async function ensureWorkshopSeededFromMock(
         is_bestseller: Boolean(mockWorkshop.isBestseller),
         is_new: Boolean(mockWorkshop.isNew),
         ...(true ? {} : { event_address: mockWorkshop?.eventAddress || null }),
-        ...(true ? {} : { latitude: mockWorkshop?.latitude !== undefined ? Number(mockWorkshop?.latitude) : null }),
-        ...(true ? {} : { longitude: mockWorkshop?.longitude !== undefined ? Number(mockWorkshop?.longitude) : null }),
+        ...(true
+            ? {}
+            : {
+                  latitude:
+                      mockWorkshop?.latitude !== undefined ? Number(mockWorkshop?.latitude) : null,
+              }),
+        ...(true
+            ? {}
+            : {
+                  longitude:
+                      mockWorkshop?.longitude !== undefined
+                          ? Number(mockWorkshop?.longitude)
+                          : null,
+              }),
         ...(true ? {} : { location_images: mockWorkshop?.locationImages || [] }),
     };
 

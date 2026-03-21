@@ -53,8 +53,6 @@ async function sendEmailAndLog({ to, subject, templateName, react, referenceId }
             throw new Error(resendError.message);
         }
 
-        console.log(`Email sent successfully: ${resendData?.id}`);
-
         // 3. Update log entry to "sent"
         if (logEntry) {
             await supabase
