@@ -179,6 +179,21 @@ export type WorkshopFeedbackResponse = {
     message?: string;
 };
 
+export type BulkWorkshopFeedbackResponse = {
+    feedback: Record<
+        string,
+        {
+            rating: number | null;
+            comment: string;
+            photos: string[];
+            video_url: string | null;
+            created_at: string;
+            updated_at: string;
+        }
+    >;
+    message?: string;
+};
+
 export type WorkshopPublicFeedbackResponse = {
     feedback: Array<{
         id: string;
@@ -194,6 +209,15 @@ export type WorkshopPublicFeedbackResponse = {
 export function getWorkshopFeedback(workshopId: string, accessToken: string) {
     return apiRequest<WorkshopFeedbackResponse>(`/api/workshops/${workshopId}/feedback`, {
         accessToken,
+        cache: "no-store",
+    });
+}
+
+export function getBulkWorkshopFeedback(workshopIds: string[], accessToken: string) {
+    return apiRequest<BulkWorkshopFeedbackResponse>(`/api/workshops/feedback/bulk`, {
+        method: "POST",
+        accessToken,
+        body: { workshopIds },
         cache: "no-store",
     });
 }
