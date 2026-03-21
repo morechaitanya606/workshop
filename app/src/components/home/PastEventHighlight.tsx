@@ -35,8 +35,8 @@ export default function PastEventHighlight({
             <SectionHeader
                 title="Past Event Highlight"
                 eyebrow="Archive"
-                action="View details"
-                href={`/workshop/${pastWorkshop.id}`}
+                action="View All Past Events"
+                href="/past-events"
                 reduceMotion={shouldReduceMotion}
             />
             <motion.div

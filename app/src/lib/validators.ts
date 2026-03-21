@@ -231,3 +231,23 @@ export const adminFeedbackQuerySchema = z.object({
 });
 
 export type AdminFeedbackQueryInput = z.infer<typeof adminFeedbackQuerySchema>;
+
+export const supportChatRequestSchema = z.object({
+    message: z.string().trim().min(1).max(1000),
+    contextWorkshopId: z
+        .string()
+        .trim()
+        .max(120)
+        .nullable()
+        .optional()
+        .transform((val) => val || ""),
+    userDisplayName: z
+        .string()
+        .trim()
+        .max(120)
+        .nullable()
+        .optional()
+        .transform((val) => val || ""),
+});
+
+export type SupportChatRequestInput = z.infer<typeof supportChatRequestSchema>;

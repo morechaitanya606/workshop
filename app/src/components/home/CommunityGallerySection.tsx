@@ -30,6 +30,8 @@ export default function CommunityGallerySection({
                 <SectionHeader
                     title="From Our Community"
                     eyebrow="Community"
+                    action="View All Past Events"
+                    href="/past-events"
                     reduceMotion={shouldReduceMotion}
                 />
                 <motion.div
