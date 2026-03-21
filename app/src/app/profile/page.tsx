@@ -213,7 +213,7 @@ export default function ProfilePage() {
             if (pastWorkshops.length === 0) return;
 
             const newRecords: Record<string, SavedFeedback> = {};
-            const workshopIds = pastWorkshops.map(w => w.workshopId);
+            const workshopIds = pastWorkshops.map((w) => w.workshopId);
 
             try {
                 console.time("BulkFeedbackFetch");
@@ -1249,7 +1249,8 @@ export default function ProfilePage() {
                                                                                                 }
                                                                                                 alt={`Feedback ${i}`}
                                                                                                 fill
-                                                                                                className="object-cover w-full h-full hover:scale-105 transition-transform"
+                                                                                                sizes="96px"
+                                                                                                className="object-cover hover:scale-105 transition-transform"
                                                                                             />
                                                                                         </div>
                                                                                     )
