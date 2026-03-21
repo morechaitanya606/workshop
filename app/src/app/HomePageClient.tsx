@@ -146,8 +146,9 @@ export default function HomePageClient({
         const viewedIds = getRecentlyViewed();
         if (viewedIds.length > 0) {
             // Find workshop objects from all available data, keeping the order of viewedIds
+            const workshopMap = new Map(allWorkshops.map((w) => [w.id, w]));
             const viewedData = viewedIds
-                .map((id) => allWorkshops.find((w) => w.id === id))
+                .map((id) => workshopMap.get(id))
                 .filter((w): w is Workshop => w !== undefined);
             setRecentlyViewedWorkshops(viewedData);
         }
