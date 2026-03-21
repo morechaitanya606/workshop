@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError, parseBody } from "@/lib/api-route";
-import type { DbUpdate } from "@/lib/database.types";
+import type { TablesUpdate } from "@/lib/database.types";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
@@ -46,7 +46,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
 
     try {
-        const patch: DbUpdate<"workshop_feedback"> = {};
+        const patch: TablesUpdate<"workshop_feedback"> = {};
         if (typeof parsed.data.rating === "number") {
             patch.rating = parsed.data.rating;
         }

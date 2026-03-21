@@ -2,7 +2,7 @@ import type { User } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/core";
-import type { DbTable } from "@/lib/database.types";
+import type { Tables } from "@/lib/database.types";
 import {
     createSupabaseAnonServerClient,
     createSupabaseServiceClient,
@@ -22,7 +22,7 @@ type AuthFailure = {
 };
 
 export type AuthResult = AuthSuccess | AuthFailure;
-export type AppUserRole = DbTable<"profiles">["role"];
+export type AppUserRole = Tables<"profiles">["role"];
 let skipRemoteAuthUntil = 0;
 
 function getBearerToken(request: NextRequest) {

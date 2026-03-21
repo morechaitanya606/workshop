@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireAdminUser } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { handleApiError, parseBody } from "@/lib/api-route";
-import type { DbTable } from "@/lib/database.types";
+import type { Tables } from "@/lib/database.types";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 
 const createPayoutSchema = z.object({
@@ -13,10 +13,10 @@ const createPayoutSchema = z.object({
 });
 
 type PayoutRow = Pick<
-    DbTable<"payouts">,
+    Tables<"payouts">,
     "id" | "host_id" | "amount" | "status" | "reference_note" | "created_at"
 >;
-type HostRow = Pick<DbTable<"hosts">, "id" | "name" | "user_id">;
+type HostRow = Pick<Tables<"hosts">, "id" | "name" | "user_id">;
 
 export async function GET(request: NextRequest) {
     const auth = await requireAdminUser(request);

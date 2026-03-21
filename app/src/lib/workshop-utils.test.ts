@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { DbTable } from "@/lib/database.types";
+import type { Tables } from "@/lib/database.types";
 import { mapWorkshopRowToWorkshop, sortWorkshops } from "@/lib/workshop-utils";
 
-function buildWorkshopRow(overrides: Partial<DbTable<"workshops">> = {}): DbTable<"workshops"> {
-    const row: DbTable<"workshops"> = {
+function buildWorkshopRow(overrides: Partial<Tables<"workshops">> = {}): Tables<"workshops"> {
+    const row: Tables<"workshops"> = {
         id: "workshop-1",
         title: "Ceramics Basics",
         description: "Learn wheel throwing and glazing in one afternoon session.",
@@ -72,6 +72,6 @@ describe("sortWorkshops", () => {
         ];
 
         const sorted = sortWorkshops(items, "price_desc");
-        expect(sorted.map((item) => item.id)).toEqual(["w2", "w3", "w1"]);
+        expect(sorted.map((item: any) => item.id)).toEqual(["w2", "w3", "w1"]);
     });
 });

@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
 import { parseBody } from "@/lib/api-route";
-import type { DbTable } from "@/lib/database.types";
+import type { Tables } from "@/lib/database.types";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { workshopFeedbackSchema } from "@/lib/validators";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
@@ -15,7 +15,7 @@ import {
 } from "@/lib/feedback-fallback";
 
 type FeedbackRow = Pick<
-    DbTable<"workshop_feedback">,
+    Tables<"workshop_feedback">,
     "rating" | "comment" | "photos" | "video_url" | "created_at" | "updated_at"
 >;
 

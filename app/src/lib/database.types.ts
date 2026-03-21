@@ -488,6 +488,7 @@ export type Database = {
                     avatar_url: string | null;
                     created_at: string;
                     date_of_birth: string | null;
+                    avatar_url?: string | null;
                     full_name: string | null;
                     id: string;
                     phone_number: string | null;
@@ -498,6 +499,7 @@ export type Database = {
                     avatar_url?: string | null;
                     created_at?: string;
                     date_of_birth?: string | null;
+                    avatar_url?: string | null;
                     full_name?: string | null;
                     id: string;
                     phone_number?: string | null;
@@ -508,6 +510,7 @@ export type Database = {
                     avatar_url?: string | null;
                     created_at?: string;
                     date_of_birth?: string | null;
+                    avatar_url?: string | null;
                     full_name?: string | null;
                     id?: string;
                     phone_number?: string | null;
@@ -662,6 +665,27 @@ export type Database = {
                     },
                 ];
             };
+            waitlists: {
+                Row: {
+                    id: string;
+                    user_id: string;
+                    workshop_id: string;
+                    created_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    user_id: string;
+                    workshop_id: string;
+                    created_at?: string;
+                };
+                Update: {
+                    id?: string;
+                    user_id?: string;
+                    workshop_id?: string;
+                    created_at?: string;
+                };
+                Relationships: [];
+            };
             workshops: {
                 Row: {
                     badge_labels: string[] | null;
@@ -699,6 +723,11 @@ export type Database = {
                     updated_at: string;
                     video_url: string | null;
                     what_you_learn: string[];
+                    badge_labels?: string[] | null;
+                    event_address?: string | null;
+                    latitude?: number | null;
+                    longitude?: number | null;
+                    location_images?: string[] | null;
                 };
                 Insert: {
                     badge_labels?: string[] | null;
@@ -736,6 +765,11 @@ export type Database = {
                     updated_at?: string;
                     video_url?: string | null;
                     what_you_learn?: string[];
+                    badge_labels?: string[] | null;
+                    event_address?: string | null;
+                    latitude?: number | null;
+                    longitude?: number | null;
+                    location_images?: string[] | null;
                 };
                 Update: {
                     badge_labels?: string[] | null;
@@ -773,6 +807,11 @@ export type Database = {
                     updated_at?: string;
                     video_url?: string | null;
                     what_you_learn?: string[];
+                    badge_labels?: string[] | null;
+                    event_address?: string | null;
+                    latitude?: number | null;
+                    longitude?: number | null;
+                    location_images?: string[] | null;
                 };
                 Relationships: [
                     {
