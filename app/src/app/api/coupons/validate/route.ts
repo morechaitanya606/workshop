@@ -1,7 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseAnonServerClient } from "@/lib/supabase-server";
+import { requireAuthenticatedUser } from "@/lib/api-auth";
 
 export async function POST(request: NextRequest) {
+    const auth = await requireAuthenticatedUser(request);
+    if (!auth.ok) {
+        return auth.response;
+    }
+
     try {
         const body = await request.json();
         const { code, workshopId, subtotal } = body;
