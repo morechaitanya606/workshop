@@ -1243,12 +1243,12 @@ export default function ProfilePage() {
                                                                                             key={i}
                                                                                             className="relative w-24 h-24 rounded-xl overflow-hidden shrink-0 border border-dark/10 shadow-sm"
                                                                                         >
-                                                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                                                            <img
+                                                                                            <Image
                                                                                                 src={
                                                                                                     url
                                                                                                 }
                                                                                                 alt={`Feedback ${i}`}
+                                                                                                fill
                                                                                                 className="object-cover w-full h-full hover:scale-105 transition-transform"
                                                                                             />
                                                                                         </div>
@@ -1522,12 +1522,12 @@ export default function ProfilePage() {
                                                                                                         }
                                                                                                         className="relative aspect-square rounded-xl overflow-hidden group border border-dark/10 shadow-sm"
                                                                                                     >
-                                                                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                                                                        <img
+                                                                                                        <Image
                                                                                                             src={
                                                                                                                 photo
                                                                                                             }
                                                                                                             alt={`Uploaded feedback photo ${i + 1}`}
+                                                                                                            fill
                                                                                                             className="object-cover w-full h-full"
                                                                                                         />
                                                                                                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
