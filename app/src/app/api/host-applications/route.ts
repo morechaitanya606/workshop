@@ -15,11 +15,15 @@ const hostApplicationSchema = z.object({
     details: z.any().default({}),
 });
 
-async function ensureHostProfileAndRecord(service: ReturnType<typeof requireSupabaseService>, userId: string, application: {
-    name: string;
-    bio: string;
-    portfolio_url: string | null;
-}) {
+async function ensureHostProfileAndRecord(
+    service: ReturnType<typeof requireSupabaseService>,
+    userId: string,
+    application: {
+        name: string;
+        bio: string;
+        portfolio_url: string | null;
+    }
+) {
     if (!service.ok) {
         return;
     }
@@ -51,7 +55,9 @@ async function ensureHostProfileAndRecord(service: ReturnType<typeof requireSupa
             .update({
                 name: application.name,
                 bio: application.bio,
-                social_links: application.portfolio_url ? { website: application.portfolio_url } : {},
+                social_links: application.portfolio_url
+                    ? { website: application.portfolio_url }
+                    : {},
             })
             .eq("id", existingHost.id);
 

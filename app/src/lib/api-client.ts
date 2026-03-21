@@ -65,6 +65,48 @@ export function getWorkshopById(workshopId: string) {
     });
 }
 
+export type SupportChatResponse = {
+    reply: string;
+    contextWorkshopId: string | null;
+    showIssueForm: boolean;
+    outcome: "answered" | "clarification_needed" | "issue_form";
+    intent: string | null;
+    confidence: "high" | "low";
+};
+
+export async function askSupportChatbot(payload: {
+    message: string;
+    contextWorkshopId?: string | null;
+    userDisplayName?: string;
+}) {
+    const response = await fetch("/api/support/chat", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+    });
+
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new ApiClientError(
+            String(body?.error || "Request failed."),
+            response.status,
+            body?.details ?? body
+        );
+    }
+
+    const result = body as SupportChatResponse;
+    return {
+        reply: result.reply,
+        contextWorkshopId: result.contextWorkshopId ?? null,
+        showIssueForm: result.showIssueForm ?? false,
+        outcome: result.outcome ?? "answered",
+        intent: result.intent ?? null,
+        confidence: result.confidence ?? "high",
+    };
+}
+
 export type BookingHoldResponse = {
     hold: {
         id: string;

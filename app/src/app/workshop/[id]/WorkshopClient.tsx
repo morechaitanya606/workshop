@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import WorkshopCard from "@/components/WorkshopCard";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -17,6 +18,7 @@ import {
     Tag,
     Check,
     ChevronRight,
+    ArrowRight,
     Share2,
     Heart,
     Grid3X3,
@@ -2195,6 +2197,47 @@ export default function WorkshopClient({
                         </p>
                     )}
                 </div>
+            )}
+
+            {/* ═══ RELATED WORKSHOPS SECTION ═══ */}
+            {similarWorkshops && similarWorkshops.length > 0 && (
+                <section className="section-padding py-16 lg:py-24 bg-cream-50">
+                    <div className="max-w-[1200px] mx-auto">
+                        <div className="flex items-center justify-between mb-8 sm:mb-12">
+                            <div>
+                                <h2 className="heading-md md:heading-lg text-dark mb-3">
+                                    Similar Workshops You Might Love
+                                </h2>
+                                <p className="text-body text-dark-muted">
+                                    Continue your creative journey with these related experiences.
+                                </p>
+                            </div>
+                            <Link
+                                href="/explore"
+                                className="hidden sm:inline-flex items-center gap-2 text-sm font-inter font-semibold text-terracotta hover:text-terracotta/80 transition-colors"
+                            >
+                                Browse all <ArrowRight className="w-4 h-4" />
+                            </Link>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+                            {similarWorkshops.slice(0, 3).map((workshop, idx) => (
+                                <WorkshopCard
+                                    key={workshop.id}
+                                    workshop={workshop}
+                                    index={idx}
+                                    animateOnScroll={true}
+                                />
+                            ))}
+                        </div>
+
+                        <div className="mt-8 text-center sm:hidden">
+                            <Link href="/explore" className="btn-secondary w-full">
+                                Browse all workshops
+                            </Link>
+                        </div>
+                    </div>
+                </section>
             )}
 
             <Footer />

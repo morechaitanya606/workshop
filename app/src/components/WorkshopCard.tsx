@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState, type MouseEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
-import { Calendar, MapPin, Star, Heart, Clock } from "lucide-react";
+import { Calendar, MapPin, Star, Heart, Clock, Share2, Users } from "lucide-react";
 import { formatCurrency, formatDate, formatTime, truncateText } from "@/lib/utils";
 import { getWorkshopDateTime } from "@/lib/booking-time";
 import { addFavorite, getFavorites, removeFavorite } from "@/lib/api-client";
@@ -137,6 +137,7 @@ export default function WorkshopCard({
         };
 
         void loadFavorites();
+
         return () => {
             cancelled = true;
         };
@@ -193,6 +194,24 @@ export default function WorkshopCard({
         }
     };
 
+    const handleShare = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const url = `${window.location.origin}/workshop/${workshop.id}`;
+        if (navigator.share) {
+            navigator
+                .share({
+                    title: workshop.title,
+                    text: `Check out this workshop: ${workshop.title}`,
+                    url: url,
+                })
+                .catch(console.error);
+        } else {
+            navigator.clipboard.writeText(url);
+            alert("Link copied to clipboard!");
+        }
+    };
+
     return (
         <motion.div
             variants={shouldAnimateOnScroll ? fadeInUp : undefined}
@@ -246,23 +265,44 @@ export default function WorkshopCard({
                                 </span>
                             </div>
                         )}
-                        {/* Save Heart */}
-                        <button
-                            type="button"
-                            onClick={handleToggleFavorite}
-                            disabled={favoriteLoading}
-                            aria-label={isSaved ? "Remove from wishlist" : "Save to wishlist"}
-                            aria-pressed={isSaved}
-                            className={`absolute bottom-3 right-3 p-2 bg-white/90 backdrop-blur-sm rounded-full shadow-soft transition-all duration-300 hover:bg-white hover:scale-110 ${
-                                isSaved ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                            } ${favoriteLoading ? "cursor-not-allowed" : ""}`}
+                        {/* Quick Actions Overlay */}
+                        <div
+                            className={`absolute bottom-3 right-3 flex flex-col gap-2 transition-all duration-300 ${
+                                isHovered || isSaved
+                                    ? "opacity-100 translate-x-0"
+                                    : "opacity-0 translate-x-4 md:opacity-0 md:group-hover:opacity-100 md:group-hover:translate-x-0"
+                            }`}
                         >
-                            <Heart
-                                className={`w-4 h-4 ${
-                                    isSaved ? "text-terracotta fill-terracotta" : "text-dark-muted"
+                            {/* Share Button */}
+                            <button
+                                type="button"
+                                onClick={handleShare}
+                                aria-label="Share workshop"
+                                className="p-2 bg-white/90 backdrop-blur-sm rounded-full shadow-soft transition-all duration-300 hover:bg-white hover:scale-110 hover:text-terracotta active:scale-95"
+                            >
+                                <Share2 className="w-4 h-4 text-dark-muted hover:text-terracotta transition-colors" />
+                            </button>
+
+                            {/* Save Heart */}
+                            <button
+                                type="button"
+                                onClick={handleToggleFavorite}
+                                disabled={favoriteLoading}
+                                aria-label={isSaved ? "Remove from wishlist" : "Save to wishlist"}
+                                aria-pressed={isSaved}
+                                className={`p-2 bg-white/90 backdrop-blur-sm rounded-full shadow-soft transition-all duration-300 hover:bg-white hover:scale-110 active:scale-95 ${
+                                    favoriteLoading ? "cursor-not-allowed opacity-50" : ""
                                 }`}
-                            />
-                        </button>
+                            >
+                                <Heart
+                                    className={`w-4 h-4 transition-colors ${
+                                        isSaved
+                                            ? "text-terracotta fill-terracotta"
+                                            : "text-dark-muted hover:text-terracotta"
+                                    }`}
+                                />
+                            </button>
+                        </div>
                         {/* Gradient overlay */}
                         <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/20 via-black/5 to-transparent opacity-70 group-hover:opacity-90 transition-opacity duration-500" />
                     </div>
@@ -362,14 +402,22 @@ export default function WorkshopCard({
                                 <>
                                     {workshop.seatsRemaining > 0 &&
                                         workshop.seatsRemaining <= 5 && (
-                                            <div className="mb-2 flex items-center gap-1.5">
-                                                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
-                                                    <div
-                                                        className="h-full rounded-full bg-terracotta transition-all duration-500"
-                                                        style={{
-                                                            width: `${((workshop.maxSeats - workshop.seatsRemaining) / workshop.maxSeats) * 100}%`,
-                                                        }}
-                                                    />
+                                            <div className="mb-2">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="text-[10px] font-bold text-terracotta uppercase tracking-wider animate-pulse flex items-center gap-1">
+                                                        <Users className="w-3 h-3" />
+                                                        Only {workshop.seatsRemaining} seats left
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                                                        <div
+                                                            className="h-full rounded-full bg-terracotta transition-all duration-500"
+                                                            style={{
+                                                                width: `${((workshop.maxSeats - workshop.seatsRemaining) / workshop.maxSeats) * 100}%`,
+                                                            }}
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}

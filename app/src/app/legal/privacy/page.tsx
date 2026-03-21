@@ -9,15 +9,15 @@ export default function PrivacyPage() {
             <section>
                 <h2 className="heading-sm mb-2">Data We Collect</h2>
                 <p>
-                    We collect account details, booking information, and support requests to
-                    provide our services.
+                    We collect account details, booking information, and support requests to provide
+                    our services.
                 </p>
             </section>
             <section>
                 <h2 className="heading-sm mb-2">How We Use Data</h2>
                 <p>
-                    Your data is used to authenticate users, process bookings, and provide
-                    customer support.
+                    Your data is used to authenticate users, process bookings, and provide customer
+                    support.
                 </p>
             </section>
             <section>

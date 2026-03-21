@@ -147,6 +147,12 @@ export default function Navbar() {
                             >
                                 Explore
                             </Link>
+                            <Link
+                                href="/past-events"
+                                className="text-sm font-inter font-medium text-dark-secondary hover:text-terracotta transition-colors duration-300"
+                            >
+                                Past Events
+                            </Link>
                             {user && !roleLoading && role === "admin" && (
                                 <Link
                                     href="/admin/dashboard"
@@ -279,6 +285,7 @@ export default function Navbar() {
                             {[
                                 { href: "/", label: "Home" },
                                 { href: "/explore", label: "Explore Workshops" },
+                                { href: "/past-events", label: "Past Events" },
                                 ...(user ? [{ href: "/profile", label: "Profile" }] : []),
                                 ...(user && !roleLoading && role === "admin"
                                     ? [{ href: "/admin/dashboard", label: "Dashboard" }]

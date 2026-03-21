@@ -38,7 +38,10 @@ export async function POST(request: NextRequest, { params }: Params) {
             .maybeSingle();
 
         if (fetchError || !workshop) {
-            return NextResponse.json({ error: "Workshop not found", success: false }, { status: 404 });
+            return NextResponse.json(
+                { error: "Workshop not found", success: false },
+                { status: 404 }
+            );
         }
 
         const { data: existing } = await serviceClient
@@ -49,16 +52,14 @@ export async function POST(request: NextRequest, { params }: Params) {
             .maybeSingle();
 
         if (existing) {
-             return NextResponse.json({ success: true, message: "Already on waitlist." });
+            return NextResponse.json({ success: true, message: "Already on waitlist." });
         }
 
-        const { error: insertError } = await serviceClient
-            .from("waitlists")
-            .insert({
-                workshop_id: params.id,
-                email,
-                user_id: userId || null,
-            } as any);
+        const { error: insertError } = await serviceClient.from("waitlists").insert({
+            workshop_id: params.id,
+            email,
+            user_id: userId || null,
+        } as any);
 
         if (insertError) throw insertError;
 

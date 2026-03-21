@@ -14,10 +14,7 @@ function extractGoogleDriveFileId(value: string) {
     if (!url) return null;
 
     const hostname = url.hostname.toLowerCase();
-    if (
-        hostname !== "drive.google.com" &&
-        hostname !== "docs.google.com"
-    ) {
+    if (hostname !== "drive.google.com" && hostname !== "docs.google.com") {
         return null;
     }
 

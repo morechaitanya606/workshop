@@ -11,9 +11,9 @@ export default function AboutPage() {
             <section>
                 <h2 className="heading-sm mb-2">Our Story</h2>
                 <p>
-                    Only Workshops started to make weekends more meaningful through hands-on creative
-                    experiences. We connect people with local hosts who teach practical skills in
-                    welcoming venues.
+                    Only Workshops started to make weekends more meaningful through hands-on
+                    creative experiences. We connect people with local hosts who teach practical
+                    skills in welcoming venues.
                 </p>
             </section>
             <section>
