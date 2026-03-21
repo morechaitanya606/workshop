@@ -1,5 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import * as Sentry from "@sentry/core";
+import { NextRequest } from "next/server";
+import { getRateLimitKey } from "./rate-limit";
 import type { assertRateLimit as AssertRateLimitType } from "./rate-limit";
 
 vi.mock("@sentry/core", () => ({
@@ -52,7 +54,12 @@ describe("assertRateLimit", () => {
         fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ result: 6 }))); // INCR
         fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ result: windowMs }))); // PTTL
 
-        const result = await assertRateLimit({ key, limit: 5, windowMs, message: "Custom message" });
+        const result = await assertRateLimit({
+            key,
+            limit: 5,
+            windowMs,
+            message: "Custom message",
+        });
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -73,17 +80,20 @@ describe("assertRateLimit", () => {
         expect(result1.ok).toBe(true);
 
         // Verify Sentry captured the exception
-        expect(Sentry.captureException).toHaveBeenCalledWith(error, expect.objectContaining({
-            level: "warning",
-            tags: expect.objectContaining({
-                layer: "api",
-                subsystem: "rate_limit",
-                provider: "upstash",
-            }),
-            extra: expect.objectContaining({
-                key,
-            }),
-        }));
+        expect(Sentry.captureException).toHaveBeenCalledWith(
+            error,
+            expect.objectContaining({
+                level: "warning",
+                tags: expect.objectContaining({
+                    layer: "api",
+                    subsystem: "rate_limit",
+                    provider: "upstash",
+                }),
+                extra: expect.objectContaining({
+                    key,
+                }),
+            })
+        );
 
         // Try second request, should still be ok.
         // The in-memory store should be used.
@@ -96,8 +106,66 @@ describe("assertRateLimit", () => {
         const result3 = await assertRateLimit({ key, limit: 2, windowMs });
         expect(result3.ok).toBe(false);
         if (!result3.ok) {
-             expect(result3.response.status).toBe(429);
-             expect(result3.response.headers.get("Retry-After")).toBe("60");
+            expect(result3.response.status).toBe(429);
+            expect(result3.response.headers.get("Retry-After")).toBe("60");
         }
+    });
+});
+
+describe("getRateLimitKey", () => {
+    const scope = "test-scope";
+
+    it("uses userId when provided", () => {
+        const request = new NextRequest("https://example.com");
+        const userId = "user-123";
+        const result = getRateLimitKey(request, scope, userId);
+        expect(result).toBe(`${scope}:${userId}`);
+    });
+
+    it("extracts first IP from x-forwarded-for header", () => {
+        const request = new NextRequest("https://example.com", {
+            headers: {
+                "x-forwarded-for": "192.168.1.1, 10.0.0.1",
+            },
+        });
+        const result = getRateLimitKey(request, scope);
+        expect(result).toBe(`${scope}:192.168.1.1`);
+    });
+
+    it("extracts IP from x-real-ip header when x-forwarded-for is missing", () => {
+        const request = new NextRequest("https://example.com", {
+            headers: {
+                "x-real-ip": "172.16.0.1",
+            },
+        });
+        const result = getRateLimitKey(request, scope);
+        expect(result).toBe(`${scope}:172.16.0.1`);
+    });
+
+    it("prefers x-forwarded-for over x-real-ip", () => {
+        const request = new NextRequest("https://example.com", {
+            headers: {
+                "x-forwarded-for": "192.168.1.1",
+                "x-real-ip": "172.16.0.1",
+            },
+        });
+        const result = getRateLimitKey(request, scope);
+        expect(result).toBe(`${scope}:192.168.1.1`);
+    });
+
+    it("returns 'unknown' when no IP headers are present", () => {
+        const request = new NextRequest("https://example.com");
+        const result = getRateLimitKey(request, scope);
+        expect(result).toBe(`${scope}:unknown`);
+    });
+
+    it("handles whitespace in x-forwarded-for header", () => {
+        const request = new NextRequest("https://example.com", {
+            headers: {
+                "x-forwarded-for": "  192.168.1.1  , 10.0.0.1 ",
+            },
+        });
+        const result = getRateLimitKey(request, scope);
+        expect(result).toBe(`${scope}:192.168.1.1`);
     });
 });

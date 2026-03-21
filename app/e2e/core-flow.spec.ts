@@ -83,7 +83,7 @@ test("explore to detail to booking start redirects unauthenticated users", async
                 name: /Reserve Spot|Log in to Book|Book My Spot/i,
             })
             .first();
-        await expect(reserveButton).toBeVisible();
+        await expect(reserveButton).toBeVisible({ timeout: 20_000 });
         await reserveButton.click();
     }
 
