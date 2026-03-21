@@ -40,7 +40,7 @@ test("explore to detail to booking start redirects unauthenticated users", async
         await expect(page).toHaveURL(/\/workshop\/.+/);
         await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
-        const pastEventBadge = page.getByText(/Past Event/i).first();
+        const pastEventBadge = page.getByText("Past Event", { exact: true }).first();
         const waitlistButton = page.getByRole("button", { name: /Join Waitlist/i }).first();
         const bookingClosedButton = page.getByRole("button", { name: /Booking Closed/i }).first();
         const isPastEvent = await pastEventBadge.isVisible().catch(() => false);

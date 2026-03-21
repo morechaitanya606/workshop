@@ -488,7 +488,6 @@ export type Database = {
                     avatar_url: string | null;
                     created_at: string;
                     date_of_birth: string | null;
-                    avatar_url?: string | null;
                     full_name: string | null;
                     id: string;
                     phone_number: string | null;
@@ -499,7 +498,6 @@ export type Database = {
                     avatar_url?: string | null;
                     created_at?: string;
                     date_of_birth?: string | null;
-                    avatar_url?: string | null;
                     full_name?: string | null;
                     id: string;
                     phone_number?: string | null;
@@ -510,7 +508,6 @@ export type Database = {
                     avatar_url?: string | null;
                     created_at?: string;
                     date_of_birth?: string | null;
-                    avatar_url?: string | null;
                     full_name?: string | null;
                     id?: string;
                     phone_number?: string | null;
@@ -519,41 +516,7 @@ export type Database = {
                 };
                 Relationships: [];
             };
-            waitlists: {
-                Row: {
-                    created_at: string;
-                    email: string;
-                    id: string;
-                    status: Database["public"]["Enums"]["waitlist_status"];
-                    user_id: string | null;
-                    workshop_id: string | null;
-                };
-                Insert: {
-                    created_at?: string;
-                    email: string;
-                    id?: string;
-                    status?: Database["public"]["Enums"]["waitlist_status"];
-                    user_id?: string | null;
-                    workshop_id?: string | null;
-                };
-                Update: {
-                    created_at?: string;
-                    email?: string;
-                    id?: string;
-                    status?: Database["public"]["Enums"]["waitlist_status"];
-                    user_id?: string | null;
-                    workshop_id?: string | null;
-                };
-                Relationships: [
-                    {
-                        foreignKeyName: "waitlists_workshop_id_fkey";
-                        columns: ["workshop_id"];
-                        isOneToOne: false;
-                        referencedRelation: "workshops";
-                        referencedColumns: ["id"];
-                    },
-                ];
-            };
+
             user_favorites: {
                 Row: {
                     created_at: string;
@@ -707,27 +670,7 @@ export type Database = {
                     },
                 ];
             };
-            waitlists: {
-                Row: {
-                    id: string;
-                    user_id: string;
-                    workshop_id: string;
-                    created_at: string;
-                };
-                Insert: {
-                    id?: string;
-                    user_id: string;
-                    workshop_id: string;
-                    created_at?: string;
-                };
-                Update: {
-                    id?: string;
-                    user_id?: string;
-                    workshop_id?: string;
-                    created_at?: string;
-                };
-                Relationships: [];
-            };
+
             workshops: {
                 Row: {
                     badge_labels: string[] | null;
@@ -765,11 +708,6 @@ export type Database = {
                     updated_at: string;
                     video_url: string | null;
                     what_you_learn: string[];
-                    badge_labels?: string[] | null;
-                    event_address?: string | null;
-                    latitude?: number | null;
-                    longitude?: number | null;
-                    location_images?: string[] | null;
                 };
                 Insert: {
                     badge_labels?: string[] | null;
@@ -807,11 +745,6 @@ export type Database = {
                     updated_at?: string;
                     video_url?: string | null;
                     what_you_learn?: string[];
-                    badge_labels?: string[] | null;
-                    event_address?: string | null;
-                    latitude?: number | null;
-                    longitude?: number | null;
-                    location_images?: string[] | null;
                 };
                 Update: {
                     badge_labels?: string[] | null;
@@ -849,11 +782,6 @@ export type Database = {
                     updated_at?: string;
                     video_url?: string | null;
                     what_you_learn?: string[];
-                    badge_labels?: string[] | null;
-                    event_address?: string | null;
-                    latitude?: number | null;
-                    longitude?: number | null;
-                    location_images?: string[] | null;
                 };
                 Relationships: [
                     {
