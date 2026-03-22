@@ -171,6 +171,7 @@ function BookingContent() {
     const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
     const [showCouponInput, setShowCouponInput] = useState(false);
     const [serviceFee, setServiceFee] = useState(99);
+    const [earlyBirdSettings, setEarlyBirdSettings] = useState<any>(null);
 
     useEffect(() => {
         fetch("/api/settings")
@@ -178,6 +179,9 @@ function BookingContent() {
             .then((data) => {
                 if (data?.settings?.service_fee !== undefined) {
                     setServiceFee(data.settings.service_fee);
+                }
+                if (data?.settings?.early_bird_offer) {
+                    setEarlyBirdSettings(data.settings.early_bird_offer);
                 }
             })
             .catch(() => {});
@@ -251,7 +255,29 @@ function BookingContent() {
         };
     }, [workshopId]);
 
-    const subtotal = (workshop?.price || 0) * guests;
+    const isEbActive = earlyBirdSettings?.enabled && (earlyBirdSettings.discount_value || 0) > 0;
+    const workshopDate = workshop?.date ? new Date(workshop.date) : null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const daysUntilWorkshop = workshopDate
+        ? Math.ceil((workshopDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+        : 0;
+    const isEbEligible = isEbActive && daysUntilWorkshop >= (earlyBirdSettings.days_before || 0);
+
+    let earlyBirdDiscountTotal = 0;
+    if (isEbEligible && workshop) {
+        if (earlyBirdSettings.discount_type === "percentage") {
+            earlyBirdDiscountTotal = Math.floor(
+                ((workshop.price || 0) * guests * (earlyBirdSettings.discount_value || 0)) / 100
+            );
+        } else {
+            earlyBirdDiscountTotal = (earlyBirdSettings.discount_value || 0) * guests;
+        }
+    }
+
+    const subtotalOriginal = (workshop?.price || 0) * guests;
+    const subtotal = Math.max(0, subtotalOriginal - earlyBirdDiscountTotal);
+
     let discountAmount = 0;
     if (appliedCoupon) {
         if (appliedCoupon.type === "percentage") {
@@ -718,10 +744,27 @@ function BookingContent() {
             <div className="space-y-2 pt-4 border-t border-gray-100">
                 <div className="flex justify-between text-sm font-inter">
                     <span className="text-dark-secondary">
-                        {formatCurrency(workshop.price)} x {guests} guests
+                        {formatCurrency(workshop.price || 0)} x {guests} guests
                     </span>
-                    <span className="text-dark font-medium">{formatCurrency(subtotal)}</span>
+                    <span
+                        className={
+                            isEbEligible ? "text-dark-muted line-through" : "text-dark font-medium"
+                        }
+                    >
+                        {formatCurrency(subtotalOriginal)}
+                    </span>
                 </div>
+                {isEbEligible && (
+                    <div className="flex justify-between text-sm font-inter text-emerald-600">
+                        <span className="flex items-center gap-1">
+                            <Tag className="w-3.5 h-3.5 text-emerald-500" />
+                            Early Bird Offer
+                        </span>
+                        <span className="font-medium">
+                            -{formatCurrency(earlyBirdDiscountTotal)}
+                        </span>
+                    </div>
+                )}
                 {appliedCoupon && (
                     <div className="flex justify-between text-sm font-inter text-emerald-600">
                         <span className="flex items-center gap-1">

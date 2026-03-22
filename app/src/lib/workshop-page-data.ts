@@ -186,3 +186,34 @@ export async function loadExploreWorkshops(searchParams: {
         source: "error",
     };
 }
+
+export type PlatformSettingsType = {
+    service_fee?: number;
+    early_bird_offer?: {
+        enabled: boolean;
+        discount_type: "percentage" | "fixed";
+        discount_value: number;
+        days_before: number;
+    };
+};
+
+export async function getPlatformSettings(): Promise<PlatformSettingsType> {
+    if (isSupabaseServiceConfigured) {
+        try {
+            const serviceClient = createSupabaseServiceClient();
+            const { data, error } = await serviceClient.from("platform_settings").select("*");
+
+            if (!error && data) {
+                const settings = data.reduce((acc, row) => {
+                    acc[row.setting_key] = row.setting_value;
+                    return acc;
+                }, {} as any);
+                return settings;
+            }
+        } catch {
+            // fallback
+        }
+    }
+
+    return {};
+}

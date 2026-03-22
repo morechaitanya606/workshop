@@ -17,6 +17,12 @@ import { useAuth } from "@/lib/auth-context";
 
 type PlatformSettings = {
     service_fee?: number;
+    early_bird_offer?: {
+        enabled: boolean;
+        discount_type: "percentage" | "fixed";
+        discount_value: number;
+        days_before: number;
+    };
 };
 
 type Coupon = {
@@ -39,6 +45,13 @@ export default function AdminSettingsPage() {
     const [feeInput, setFeeInput] = useState("");
     const [savingSettings, setSavingSettings] = useState(false);
     const [settingsMsg, setSettingsMsg] = useState("");
+
+    const [ebEnabled, setEbEnabled] = useState(false);
+    const [ebType, setEbType] = useState<"percentage" | "fixed">("percentage");
+    const [ebValue, setEbValue] = useState("");
+    const [ebDays, setEbDays] = useState("14");
+    const [savingEb, setSavingEb] = useState(false);
+    const [ebMsg, setEbMsg] = useState("");
 
     const [creatingCoupon, setCreatingCoupon] = useState(false);
     const [couponMsg, setCouponMsg] = useState("");
@@ -65,6 +78,14 @@ export default function AdminSettingsPage() {
                     const data = await settingsRes.json();
                     setSettings(data.settings);
                     setFeeInput((data.settings.service_fee || "").toString());
+
+                    if (data.settings.early_bird_offer) {
+                        const eb = data.settings.early_bird_offer;
+                        setEbEnabled(eb.enabled ?? false);
+                        setEbType(eb.discount_type || "percentage");
+                        setEbValue((eb.discount_value || "").toString());
+                        setEbDays((eb.days_before || "14").toString());
+                    }
                 }
 
                 if (couponsRes.ok) {
@@ -116,6 +137,56 @@ export default function AdminSettingsPage() {
             setSettingsMsg("Network error trying to save.");
         } finally {
             setSavingSettings(false);
+        }
+    };
+
+    const handleSaveEarlyBird = async () => {
+        setSavingEb(true);
+        setEbMsg("");
+
+        const value = parseFloat(ebValue);
+        const days = parseInt(ebDays, 10);
+
+        if (
+            (ebEnabled && (isNaN(value) || value <= 0)) ||
+            (ebEnabled && (isNaN(days) || days <= 0))
+        ) {
+            setEbMsg("Please enter valid positive numbers for discount and days.");
+            setSavingEb(false);
+            return;
+        }
+
+        const newEbConfig = {
+            enabled: ebEnabled,
+            discount_type: ebType,
+            discount_value: ebEnabled ? value : 0,
+            days_before: ebEnabled ? days : 14,
+        };
+
+        try {
+            const res = await fetch("/api/settings", {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(session?.access_token && {
+                        Authorization: `Bearer ${session.access_token}`,
+                    }),
+                },
+                body: JSON.stringify({ settings: { early_bird_offer: newEbConfig } }),
+            });
+
+            if (res.ok) {
+                setSettings({ ...settings, early_bird_offer: newEbConfig });
+                setEbMsg("Early Bird settings saved successfully!");
+                setTimeout(() => setEbMsg(""), 3000);
+            } else {
+                const data = await res.json();
+                setEbMsg(data.error || "Failed to save settings.");
+            }
+        } catch (error) {
+            setEbMsg("Network error trying to save.");
+        } finally {
+            setSavingEb(false);
         }
     };
 
@@ -247,6 +318,89 @@ export default function AdminSettingsPage() {
                                     className={`text-sm font-medium ${settingsMsg.includes("success") ? "text-emerald-600" : "text-red-500"}`}
                                 >
                                     {settingsMsg}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-soft">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-playfair font-bold text-dark">
+                                Global Early Bird Offer
+                            </h2>
+                            <button
+                                type="button"
+                                onClick={() => setEbEnabled(!ebEnabled)}
+                                className={`transition-colors ${ebEnabled ? "text-terracotta" : "text-gray-400"}`}
+                            >
+                                {ebEnabled ? (
+                                    <ToggleRight className="w-8 h-8" />
+                                ) : (
+                                    <ToggleLeft className="w-8 h-8" />
+                                )}
+                            </button>
+                        </div>
+
+                        <div
+                            className={`space-y-4 transition-opacity ${ebEnabled ? "opacity-100" : "opacity-50 pointer-events-none"}`}
+                        >
+                            <div>
+                                <label className="block text-xs font-inter font-semibold uppercase tracking-wider text-dark-muted mb-2">
+                                    Discount Type & Value
+                                </label>
+                                <div className="flex gap-2">
+                                    <select
+                                        value={ebType}
+                                        onChange={(e) =>
+                                            setEbType(e.target.value as "percentage" | "fixed")
+                                        }
+                                        className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta/50 focus:bg-white"
+                                    >
+                                        <option value="percentage">% Off</option>
+                                        <option value="fixed">Flat ₹ Off</option>
+                                    </select>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        value={ebValue}
+                                        onChange={(e) => setEbValue(e.target.value)}
+                                        placeholder="Value"
+                                        className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta/50 focus:bg-white focus:ring-2 focus:ring-terracotta/10 transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-inter font-semibold uppercase tracking-wider text-dark-muted mb-2">
+                                    Days Before Event
+                                </label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={ebDays}
+                                    onChange={(e) => setEbDays(e.target.value)}
+                                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta/50 focus:bg-white focus:ring-2 focus:ring-terracotta/10 transition-all"
+                                />
+                                <p className="text-xs text-dark-muted mt-2">
+                                    Offer applies if booked this many days in advance.
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={handleSaveEarlyBird}
+                                disabled={savingEb}
+                                className="btn-secondary w-full"
+                            >
+                                {savingEb ? "Saving..." : "Save Early Bird"}
+                            </button>
+
+                            {ebMsg && (
+                                <p
+                                    className={`text-sm font-medium ${ebMsg.includes("success") ? "text-emerald-600" : "text-red-500"}`}
+                                >
+                                    {ebMsg}
                                 </p>
                             )}
                         </div>

@@ -254,7 +254,43 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        const subtotalOriginal = Number(workshop.price || 0) * Number(hold.guests || 0);
+        // Fetch Early Bird Offer settings
+        let earlyBirdDiscountPerGuest = 0;
+        const { data: ebSettingsRow } = await serviceClient
+            .from("platform_settings")
+            .select("setting_value")
+            .eq("setting_key", "early_bird_offer")
+            .maybeSingle();
+
+        if (ebSettingsRow?.setting_value) {
+            const ebOffer = ebSettingsRow.setting_value as any;
+            if (ebOffer.enabled && ebOffer.discount_value > 0) {
+                const workshopDate = workshop.date ? new Date(workshop.date) : null;
+                if (workshopDate) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const daysUntilWorkshop = Math.ceil(
+                        (workshopDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+                    );
+                    if (daysUntilWorkshop >= (ebOffer.days_before || 0)) {
+                        if (ebOffer.discount_type === "percentage") {
+                            earlyBirdDiscountPerGuest = Math.floor(
+                                (Number(workshop.price) * ebOffer.discount_value) / 100
+                            );
+                        } else {
+                            earlyBirdDiscountPerGuest = ebOffer.discount_value;
+                        }
+                    }
+                }
+            }
+        }
+
+        const pricePerGuestBeforeCoupon = Math.max(
+            0,
+            Number(workshop.price || 0) - earlyBirdDiscountPerGuest
+        );
+        const subtotalOriginal = pricePerGuestBeforeCoupon * Number(hold.guests || 0);
+
         let discountAmount = 0;
         let appliedCouponId: string | null = null;
 

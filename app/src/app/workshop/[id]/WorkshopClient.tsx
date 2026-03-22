@@ -104,13 +104,19 @@ function extractAvailableSeatsFromBookingError(error: unknown) {
     return null;
 }
 
+import type { PlatformSettingsType } from "@/lib/workshop-page-data";
+
+export interface WorkshopClientProps {
+    workshop: Workshop;
+    similarWorkshops?: Workshop[];
+    platformSettings?: PlatformSettingsType;
+}
+
 export default function WorkshopClient({
     workshop,
     similarWorkshops = [],
-}: {
-    workshop: Workshop;
-    similarWorkshops?: Workshop[];
-}) {
+    platformSettings,
+}: WorkshopClientProps) {
     const router = useRouter();
     const prefersReducedMotion = useReducedMotion();
     const { user, session } = useAuth();
@@ -170,18 +176,44 @@ export default function WorkshopClient({
     const [waitlistError, setWaitlistError] = useState<string | null>(null);
     const [waitlistSuccess, setWaitlistSuccess] = useState(false);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const todayIso = todayDate.toISOString().slice(0, 10);
     const workshopDateTime = getWorkshopDateTime(workshop.date, workshop.time);
 
     const isPastWorkshop = (() => {
         if (!workshopDateTime) {
-            return workshop.date < today;
+            return workshop.date < todayIso;
         }
         return workshopDateTime.getTime() < Date.now();
     })();
     const isBookingClosed = isPastWorkshop || isBookingClosedNow(workshop.date, workshop.time);
-    const availableSeatCount = Math.max(0, liveAvailableSeatCount ?? workshop.seatsRemaining);
-    const isSoldOut = !isPastWorkshop && availableSeatCount <= 0;
+    const availableSeatCount = liveAvailableSeatCount ?? workshop.seatsRemaining;
+    const isSoldOut = availableSeatCount <= 0;
+
+    // Early Bird Offer Calculation
+    const ebOffer = platformSettings?.early_bird_offer;
+    const isEbActive = ebOffer?.enabled && ebOffer.discount_value > 0;
+    const workshopDate = new Date(workshop.date);
+    const daysUntilWorkshop = Math.ceil(
+        (workshopDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    const isEbEligible = isEbActive && daysUntilWorkshop >= (ebOffer.days_before || 0);
+
+    let earlyBirdDiscountPerGuest = 0;
+    if (isEbEligible) {
+        if (ebOffer.discount_type === "percentage") {
+            earlyBirdDiscountPerGuest = Math.floor((workshop.price * ebOffer.discount_value) / 100);
+        } else {
+            earlyBirdDiscountPerGuest = ebOffer.discount_value;
+        }
+    }
+
+    const currentPricePerGuest = workshop.price - earlyBirdDiscountPerGuest;
+    const subtotal = currentPricePerGuest * guests;
+    const serviceFee = platformSettings?.service_fee ?? 99;
+    const total = subtotal + serviceFee;
+
     const seatAvailabilityLabel = isPastWorkshop
         ? "Event completed"
         : isBookingClosed
@@ -207,7 +239,7 @@ export default function WorkshopClient({
             (item) =>
                 item.id !== workshop.id &&
                 item.seatsRemaining > 0 &&
-                item.date >= today &&
+                item.date >= todayIso &&
                 (item.category === workshop.category || item.city === workshop.city)
         )
         .slice(0, 3);
@@ -381,9 +413,6 @@ export default function WorkshopClient({
         };
     }, [showVideo, showWaitlistModal]);
 
-    const serviceFee = 99;
-    const subtotal = workshop.price * guests;
-    const total = subtotal + serviceFee;
     const locationQuery = `${workshop.location}, ${workshop.city}`.trim();
     const encodedLocationQuery = encodeURIComponent(locationQuery);
     const mapEmbedUrl =
@@ -1653,13 +1682,25 @@ export default function WorkshopClient({
                                             <p className="text-xs font-inter font-semibold text-terracotta uppercase tracking-wider mb-1">
                                                 Price
                                             </p>
-                                            <div className="flex items-baseline gap-1">
-                                                <span className="font-playfair text-3xl font-bold text-dark">
-                                                    {formatCurrency(workshop.price)}
-                                                </span>
-                                                <span className="text-sm font-inter text-dark-muted">
-                                                    / person
-                                                </span>
+                                            <div className="flex flex-col">
+                                                {isEbEligible && (
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="text-sm font-inter text-dark-muted line-through">
+                                                            {formatCurrency(workshop.price)}
+                                                        </span>
+                                                        <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tight">
+                                                            Early Bird Offer
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <div className="flex items-baseline gap-1">
+                                                    <span className="font-playfair text-3xl font-bold text-dark">
+                                                        {formatCurrency(currentPricePerGuest)}
+                                                    </span>
+                                                    <span className="text-sm font-inter text-dark-muted">
+                                                        / person
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                         {isSoldOut ? (
@@ -1744,7 +1785,7 @@ export default function WorkshopClient({
                                         <div className="mb-6 space-y-3 border-t border-dashed border-clay/50 pt-4">
                                             <div className="flex justify-between text-sm font-inter">
                                                 <span className="text-dark-secondary">
-                                                    {formatCurrency(workshop.price)} &times;{" "}
+                                                    {formatCurrency(currentPricePerGuest)} &times;{" "}
                                                     {guests} guests
                                                 </span>
                                                 <span className="font-medium text-dark">
@@ -2138,8 +2179,13 @@ export default function WorkshopClient({
                 <div className="fixed bottom-16 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-gray-100 px-4 py-3 lg:hidden safe-area-bottom">
                     <div className="flex items-center justify-between">
                         <div>
+                            {isEbEligible && (
+                                <span className="text-xs font-inter text-dark-muted line-through mr-2">
+                                    {formatCurrency(workshop.price)}
+                                </span>
+                            )}
                             <span className="font-playfair text-2xl font-bold text-dark">
-                                {formatCurrency(workshop.price)}
+                                {formatCurrency(currentPricePerGuest)}
                             </span>
                             <span className="text-sm font-inter text-dark-muted"> / person</span>
                             <p

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { ensureWorkshopSeededFromMock, mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
+import { getPlatformSettings } from "@/lib/workshop-page-data";
 import { mockWorkshops, type Workshop } from "@/lib/data";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -125,5 +126,12 @@ export default async function WorkshopDetailPage({ params }: { params: { id: str
     }
 
     const similarWorkshops = await getSimilarWorkshops(workshop);
-    return <WorkshopClient workshop={workshop} similarWorkshops={similarWorkshops} />;
+    const platformSettings = await getPlatformSettings();
+    return (
+        <WorkshopClient
+            workshop={workshop}
+            similarWorkshops={similarWorkshops}
+            platformSettings={platformSettings}
+        />
+    );
 }
