@@ -3,6 +3,7 @@
 import type { ComponentProps, ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Search, SlidersHorizontal, Sparkles, X } from "lucide-react";
+import CategoryFilter from "@/components/CategoryFilter";
 
 type SortOption = "date_asc" | "date_desc" | "price_asc" | "price_desc" | "rating_desc";
 
@@ -28,6 +29,8 @@ export default function ExploreToolbarSection({
     activeChips,
     filterControls,
     filterActions,
+    categorySelection,
+    onCategoryChange,
 }: {
     headingMotionProps: MotionDivProps;
     filterBarMotionProps: MotionDivProps;
@@ -48,6 +51,8 @@ export default function ExploreToolbarSection({
     activeChips: Array<{ label: string; onRemove: () => void }>;
     filterControls: ReactNode;
     filterActions: ReactNode;
+    categorySelection: string;
+    onCategoryChange: (category: string) => void;
 }) {
     return (
         <div className="section-padding">
@@ -85,7 +90,14 @@ export default function ExploreToolbarSection({
                 </div>
             </motion.div>
 
-            <motion.div {...filterBarMotionProps} className="mt-8 flex flex-col lg:flex-row gap-3">
+            <motion.div {...filterBarMotionProps} className="mt-8 relative z-20">
+                <CategoryFilter
+                    activeCategory={categorySelection}
+                    onCategoryChange={onCategoryChange}
+                />
+            </motion.div>
+
+            <motion.div {...filterBarMotionProps} className="mt-6 flex flex-col lg:flex-row gap-3">
                 <div className="flex-1 flex items-center gap-3 bg-white rounded-xl px-4 py-3 shadow-soft border border-gray-100">
                     <Search className="w-5 h-5 text-dark-muted flex-shrink-0" />
                     <input

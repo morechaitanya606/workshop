@@ -169,6 +169,7 @@ function BookingContent() {
     } | null>(null);
     const [couponError, setCouponError] = useState("");
     const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+    const [showCouponInput, setShowCouponInput] = useState(false);
     const [serviceFee, setServiceFee] = useState(99);
 
     useEffect(() => {
@@ -749,31 +750,42 @@ function BookingContent() {
 
             {!appliedCoupon && (
                 <div className="mt-4 pt-4 border-t border-gray-100">
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            placeholder="Discount code"
-                            value={couponCode}
-                            onChange={(e) => {
-                                setCouponCode(e.target.value);
-                                setCouponError("");
-                            }}
-                            className="flex-1 bg-white border border-clay/50 rounded-xl px-3 py-2 text-sm font-inter focus:outline-none focus:border-terracotta focus:ring-1 focus:ring-terracotta/30 transition-all"
-                        />
+                    {!showCouponInput ? (
                         <button
-                            onClick={handleApplyCoupon}
-                            disabled={!couponCode.trim() || isApplyingCoupon}
-                            className="bg-dark hover:bg-dark-hover disabled:opacity-50 text-white rounded-xl px-4 py-2 text-sm font-inter font-medium transition-colors min-w-[80px] flex items-center justify-center"
+                            onClick={() => setShowCouponInput(true)}
+                            className="text-sm font-inter text-terracotta hover:text-terracotta/80 font-medium inline-flex items-center gap-1.5 transition-colors"
                         >
-                            {isApplyingCoupon ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                                "Apply"
-                            )}
+                            <Tag className="w-4 h-4" /> Have a coupon code?
                         </button>
-                    </div>
-                    {couponError && (
-                        <p className="text-red-500 text-xs font-inter mt-2">{couponError}</p>
+                    ) : (
+                        <div className="space-y-2">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Discount code"
+                                    value={couponCode}
+                                    onChange={(e) => {
+                                        setCouponCode(e.target.value);
+                                        setCouponError("");
+                                    }}
+                                    className="flex-1 bg-white border border-clay/50 rounded-xl px-3 py-2 text-sm font-inter focus:outline-none focus:border-terracotta focus:ring-1 focus:ring-terracotta/30 transition-all"
+                                />
+                                <button
+                                    onClick={handleApplyCoupon}
+                                    disabled={!couponCode.trim() || isApplyingCoupon}
+                                    className="bg-dark hover:bg-dark-hover disabled:opacity-50 text-white rounded-xl px-4 py-2 text-sm font-inter font-medium transition-colors min-w-[80px] flex items-center justify-center"
+                                >
+                                    {isApplyingCoupon ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        "Apply"
+                                    )}
+                                </button>
+                            </div>
+                            {couponError && (
+                                <p className="text-red-500 text-xs font-inter">{couponError}</p>
+                            )}
+                        </div>
                     )}
                 </div>
             )}

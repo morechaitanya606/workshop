@@ -13,6 +13,7 @@ import {
     Hash,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 
 type PlatformSettings = {
     service_fee?: number;
@@ -30,6 +31,7 @@ type Coupon = {
 };
 
 export default function AdminSettingsPage() {
+    const { session } = useAuth();
     const [settings, setSettings] = useState<PlatformSettings>({});
     const [coupons, setCoupons] = useState<Coupon[]>([]);
     const [loading, setLoading] = useState(true);
@@ -49,9 +51,14 @@ export default function AdminSettingsPage() {
     useEffect(() => {
         const fetchData = async () => {
             try {
+                const headers: Record<string, string> = {};
+                if (session?.access_token) {
+                    headers["Authorization"] = `Bearer ${session.access_token}`;
+                }
+
                 const [settingsRes, couponsRes] = await Promise.all([
-                    fetch("/api/settings"),
-                    fetch("/api/coupons"),
+                    fetch("/api/settings", { headers }),
+                    fetch("/api/coupons", { headers }),
                 ]);
 
                 if (settingsRes.ok) {
@@ -88,7 +95,12 @@ export default function AdminSettingsPage() {
         try {
             const res = await fetch("/api/settings", {
                 method: "PATCH",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(session?.access_token && {
+                        Authorization: `Bearer ${session.access_token}`,
+                    }),
+                },
                 body: JSON.stringify({ settings: { service_fee: fee } }),
             });
 
@@ -121,7 +133,12 @@ export default function AdminSettingsPage() {
         try {
             const res = await fetch("/api/coupons", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(session?.access_token && {
+                        Authorization: `Bearer ${session.access_token}`,
+                    }),
+                },
                 body: JSON.stringify({
                     code: newCoupon.code,
                     discount_type: newCoupon.discount_type,
@@ -149,7 +166,12 @@ export default function AdminSettingsPage() {
         try {
             const res = await fetch(`/api/coupons/${id}`, {
                 method: "PATCH",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(session?.access_token && {
+                        Authorization: `Bearer ${session.access_token}`,
+                    }),
+                },
                 body: JSON.stringify({ is_active: !currentStatus }),
             });
 

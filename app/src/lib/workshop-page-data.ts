@@ -37,6 +37,7 @@ export async function loadHomeWorkshops(): Promise<HomeWorkshopsResult> {
             const { data, error } = await serviceClient
                 .from("workshops")
                 .select("*")
+                .gte("date", new Date().toISOString().slice(0, 10))
                 .order("date", { ascending: true })
                 .limit(12);
 
@@ -139,7 +140,7 @@ export async function loadExploreWorkshops(searchParams: {
                 const today = new Date().toISOString().slice(0, 10);
                 dbQuery = dbQuery.lt("date", today);
             }
-            if (!isPastEventsCategory && !hasDateFilter) {
+            if (!isPastEventsCategory) {
                 const today = new Date().toISOString().slice(0, 10);
                 dbQuery = dbQuery.gte("date", today);
             }

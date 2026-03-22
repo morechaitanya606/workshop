@@ -521,6 +521,8 @@ export default function ExploreClient({
                     activeChips={activeChips}
                     filterControls={filterControls}
                     filterActions={filterActions}
+                    categorySelection={categorySelection}
+                    onCategoryChange={handleCategoryChange}
                 />
 
                 <ExploreResultsSection
