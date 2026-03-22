@@ -132,6 +132,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
                 normalizeWorkshopImageUrlInput(item)
             );
         }
+        if (typeof input.earlyBirdEnabled === "boolean") {
+            patch.early_bird_enabled = input.earlyBirdEnabled;
+        }
+        if (typeof input.earlyBirdDiscountType === "string") {
+            patch.early_bird_discount_type = input.earlyBirdDiscountType;
+        }
+        if (typeof input.earlyBirdDiscountValue === "number") {
+            patch.early_bird_discount_value = input.earlyBirdDiscountValue;
+        }
+        if (typeof input.earlyBirdDaysAfterListing === "number") {
+            patch.early_bird_days_after_listing = input.earlyBirdDaysAfterListing;
+        }
 
         if (typeof input.maxSeats === "number") {
             const currentMaxSeats = Number(existing.max_seats || 0);

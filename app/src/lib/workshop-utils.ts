@@ -104,6 +104,11 @@ export function mapWorkshopRowToWorkshop(row: any): Workshop {
                   .map((img: any) => normalizeWorkshopImageUrl(String(img)))
                   .filter((img: any) => img.length > 0)
             : [],
+        earlyBirdEnabled: Boolean(row.early_bird_enabled),
+        earlyBirdDiscountType: row.early_bird_discount_type || "percentage",
+        earlyBirdDiscountValue: Number(row.early_bird_discount_value || 0),
+        earlyBirdDaysAfterListing: Number(row.early_bird_days_after_listing || 0),
+        createdAt: row.created_at || undefined,
     };
 }
 
@@ -160,6 +165,10 @@ export function buildWorkshopInsertPayload(
         location_images: input.locationImages
             ? input.locationImages.map((item: string) => normalizeWorkshopImageUrlInput(item))
             : [],
+        early_bird_enabled: input.earlyBirdEnabled ?? false,
+        early_bird_discount_type: input.earlyBirdDiscountType ?? "percentage",
+        early_bird_discount_value: input.earlyBirdDiscountValue ?? 0,
+        early_bird_days_after_listing: input.earlyBirdDaysAfterListing ?? 0,
     };
 
     return payload;

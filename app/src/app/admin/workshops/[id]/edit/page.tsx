@@ -41,6 +41,10 @@ type WorkshopEditForm = {
     latitude: string;
     longitude: string;
     locationImages: string;
+    earlyBirdEnabled: string;
+    earlyBirdDiscountType: string;
+    earlyBirdDiscountValue: string;
+    earlyBirdDaysAfterListing: string;
 };
 
 export default function AdminEditWorkshopPage() {
@@ -85,6 +89,10 @@ export default function AdminEditWorkshopPage() {
         latitude: "",
         longitude: "",
         locationImages: "",
+        earlyBirdEnabled: "false",
+        earlyBirdDiscountType: "percentage",
+        earlyBirdDiscountValue: "",
+        earlyBirdDaysAfterListing: "",
     });
     const [categorySelection, setCategorySelection] = useState("");
     const [customCategory, setCustomCategory] = useState("");
@@ -241,6 +249,10 @@ export default function AdminEditWorkshopPage() {
                         locationImages: Array.isArray(workshop.locationImages)
                             ? workshop.locationImages.join("\n")
                             : "",
+                        earlyBirdEnabled: workshop.earlyBirdEnabled ? "true" : "false",
+                        earlyBirdDiscountType: workshop.earlyBirdDiscountType || "percentage",
+                        earlyBirdDiscountValue: String(workshop.earlyBirdDiscountValue || ""),
+                        earlyBirdDaysAfterListing: String(workshop.earlyBirdDaysAfterListing || ""),
                     });
                     setCategorySelection(
                         nextCategory ? (isKnownCategory ? nextCategory : "__other__") : ""
@@ -287,6 +299,14 @@ export default function AdminEditWorkshopPage() {
             latitude: form.latitude ? Number(form.latitude) : undefined,
             longitude: form.longitude ? Number(form.longitude) : undefined,
             locationImages: toList(form.locationImages),
+            earlyBirdEnabled: form.earlyBirdEnabled === "true",
+            earlyBirdDiscountType: form.earlyBirdDiscountType,
+            earlyBirdDiscountValue: form.earlyBirdDiscountValue
+                ? Number(form.earlyBirdDiscountValue)
+                : 0,
+            earlyBirdDaysAfterListing: form.earlyBirdDaysAfterListing
+                ? Number(form.earlyBirdDaysAfterListing)
+                : 0,
         };
 
         const validation = workshopUpdateSchema.safeParse(payload);
@@ -704,6 +724,87 @@ export default function AdminEditWorkshopPage() {
                                     MP4, WebM or MOV (up to 50MB).
                                 </p>
                             </div>
+
+                            <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
+                                <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                                    Early Bird Offer
+                                </h2>
+                                <p className="mt-1 text-xs font-inter text-dark-muted">
+                                    Offer a discount for users who book within X days of workshop
+                                    listing.
+                                </p>
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.earlyBirdEnabled === "true"}
+                                        onChange={(e) =>
+                                            update(
+                                                "earlyBirdEnabled",
+                                                e.target.checked ? "true" : "false"
+                                            )
+                                        }
+                                        className="w-4 h-4 rounded border-gray-300 text-terracotta focus:ring-terracotta"
+                                    />
+                                    <span className="text-sm font-inter font-semibold text-dark">
+                                        Enable Early Bird Offer
+                                    </span>
+                                </label>
+                            </div>
+
+                            {form.earlyBirdEnabled === "true" && (
+                                <>
+                                    <div>
+                                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                            Discount Type
+                                        </label>
+                                        <select
+                                            value={form.earlyBirdDiscountType}
+                                            onChange={(e) =>
+                                                update("earlyBirdDiscountType", e.target.value)
+                                            }
+                                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                        >
+                                            <option value="percentage">Percentage (%)</option>
+                                            <option value="fixed">Fixed Amount (₹)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                            Discount Value
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={form.earlyBirdDiscountValue}
+                                            onChange={(e) =>
+                                                update("earlyBirdDiscountValue", e.target.value)
+                                            }
+                                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                            placeholder={
+                                                form.earlyBirdDiscountType === "percentage"
+                                                    ? "e.g. 10"
+                                                    : "e.g. 200"
+                                            }
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                            Valid For (Days After Listing)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={form.earlyBirdDaysAfterListing}
+                                            onChange={(e) =>
+                                                update("earlyBirdDaysAfterListing", e.target.value)
+                                            }
+                                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                            placeholder="e.g. 1"
+                                        />
+                                    </div>
+                                </>
+                            )}
 
                             <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
                                 <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">

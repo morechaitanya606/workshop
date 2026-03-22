@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { Phone, Instagram } from "lucide-react";
 
 export default function Footer() {
     return (
@@ -26,6 +27,31 @@ export default function Footer() {
                             Curating the best weekend experiences in the city so you can stop
                             scrolling and start doing.
                         </p>
+                        <div className="mt-4 space-y-2">
+                            <a
+                                href="tel:+917028478109"
+                                className="flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta transition-colors duration-300"
+                            >
+                                <Phone className="w-4 h-4" />
+                                +91 70284 78109
+                            </a>
+                            <a
+                                href="tel:+919623818909"
+                                className="flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta transition-colors duration-300"
+                            >
+                                <Phone className="w-4 h-4" />
+                                +91 96238 18909
+                            </a>
+                            <a
+                                href="https://www.instagram.com/only_workshops"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta transition-colors duration-300"
+                            >
+                                <Instagram className="w-4 h-4" />
+                                @only_workshops
+                            </a>
+                        </div>
                     </div>
 
                     {/* Company */}
@@ -85,8 +111,8 @@ export default function Footer() {
                         &copy; {new Date().getFullYear()} Only Workshops Inc. All rights reserved.
                     </p>
                     <p className="text-xs font-inter font-medium text-dark-muted tracking-wide sm:w-1/3 text-center">
-                        Only Workshops <span className="text-terracotta px-1">|</span> Workshops
-                        &amp; Experiential Learning
+                        Only Workshops <span className="text-terracotta px-1">|</span> Experiential
+                        Learning
                     </p>
                     <div className="flex items-center justify-center sm:justify-end gap-6 sm:w-1/3">
                         {[

@@ -171,7 +171,6 @@ function BookingContent() {
     const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
     const [showCouponInput, setShowCouponInput] = useState(false);
     const [serviceFee, setServiceFee] = useState(99);
-    const [earlyBirdSettings, setEarlyBirdSettings] = useState<any>(null);
 
     useEffect(() => {
         fetch("/api/settings")
@@ -179,9 +178,6 @@ function BookingContent() {
             .then((data) => {
                 if (data?.settings?.service_fee !== undefined) {
                     setServiceFee(data.settings.service_fee);
-                }
-                if (data?.settings?.early_bird_offer) {
-                    setEarlyBirdSettings(data.settings.early_bird_offer);
                 }
             })
             .catch(() => {});
@@ -255,23 +251,24 @@ function BookingContent() {
         };
     }, [workshopId]);
 
-    const isEbActive = earlyBirdSettings?.enabled && (earlyBirdSettings.discount_value || 0) > 0;
-    const workshopDate = workshop?.date ? new Date(workshop.date) : null;
+    const isEbActive = workshop?.earlyBirdEnabled && (workshop.earlyBirdDiscountValue || 0) > 0;
+    const workshopCreatedAt = workshop?.createdAt ? new Date(workshop.createdAt) : null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const daysUntilWorkshop = workshopDate
-        ? Math.ceil((workshopDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-        : 0;
-    const isEbEligible = isEbActive && daysUntilWorkshop >= (earlyBirdSettings.days_before || 0);
+    const daysSinceCreated = workshopCreatedAt
+        ? Math.ceil((today.getTime() - workshopCreatedAt.getTime()) / (1000 * 60 * 60 * 24))
+        : 999;
+    const isEbEligible =
+        isEbActive && daysSinceCreated <= (workshop?.earlyBirdDaysAfterListing || 0);
 
     let earlyBirdDiscountTotal = 0;
     if (isEbEligible && workshop) {
-        if (earlyBirdSettings.discount_type === "percentage") {
+        if (workshop.earlyBirdDiscountType === "percentage") {
             earlyBirdDiscountTotal = Math.floor(
-                ((workshop.price || 0) * guests * (earlyBirdSettings.discount_value || 0)) / 100
+                ((workshop.price || 0) * guests * (workshop.earlyBirdDiscountValue || 0)) / 100
             );
         } else {
-            earlyBirdDiscountTotal = (earlyBirdSettings.discount_value || 0) * guests;
+            earlyBirdDiscountTotal = (workshop.earlyBirdDiscountValue || 0) * guests;
         }
     }
 
@@ -296,7 +293,12 @@ function BookingContent() {
         try {
             const res = await fetch("/api/coupons/validate", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(session?.access_token
+                        ? { Authorization: `Bearer ${session.access_token}` }
+                        : {}),
+                },
                 body: JSON.stringify({
                     code: couponCode,
                     workshopId,
@@ -603,6 +605,13 @@ function BookingContent() {
                 <main className="min-h-screen bg-cream">
                     <Navbar />
                     <div className="pt-28 pb-16 section-padding">
+                        <button
+                            onClick={() => router.back()}
+                            className="inline-flex items-center gap-2 text-sm font-medium text-dark-muted hover:text-dark transition-colors mb-6"
+                        >
+                            <ArrowLeft className="w-4 h-4" />
+                            Back
+                        </button>
                         <motion.div
                             variants={prefersReducedMotion ? undefined : scaleIn}
                             initial={prefersReducedMotion ? undefined : "hidden"}

@@ -682,6 +682,10 @@ export type Database = {
                     date: string;
                     description: string;
                     duration: string;
+                    early_bird_days_after_listing: number | null;
+                    early_bird_discount_type: string | null;
+                    early_bird_discount_value: number | null;
+                    early_bird_enabled: boolean | null;
                     gallery_images: string[];
                     event_address: string | null;
                     host_avatar: string | null;
@@ -719,6 +723,10 @@ export type Database = {
                     date: string;
                     description: string;
                     duration: string;
+                    early_bird_days_after_listing?: number | null;
+                    early_bird_discount_type?: string | null;
+                    early_bird_discount_value?: number | null;
+                    early_bird_enabled?: boolean | null;
                     gallery_images?: string[];
                     event_address?: string | null;
                     host_avatar?: string | null;
@@ -756,6 +764,10 @@ export type Database = {
                     date?: string;
                     description?: string;
                     duration?: string;
+                    early_bird_days_after_listing?: number | null;
+                    early_bird_discount_type?: string | null;
+                    early_bird_discount_value?: number | null;
+                    early_bird_enabled?: boolean | null;
                     gallery_images?: string[];
                     event_address?: string | null;
                     host_avatar?: string | null;

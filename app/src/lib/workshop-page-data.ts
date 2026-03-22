@@ -34,16 +34,31 @@ export async function loadHomeWorkshops(): Promise<HomeWorkshopsResult> {
     if (isSupabaseServiceConfigured) {
         try {
             const serviceClient = createSupabaseServiceClient({ requestTimeoutMs: 1500 });
-            const { data, error } = await serviceClient
-                .from("workshops")
-                .select("*")
-                .gte("date", new Date().toISOString().slice(0, 10))
-                .order("date", { ascending: true })
-                .limit(12);
+            const today = new Date().toISOString().slice(0, 10);
 
-            if (!error && data) {
+            const [upcomingRes, pastRes] = await Promise.all([
+                serviceClient
+                    .from("workshops")
+                    .select("*")
+                    .gte("date", today)
+                    .order("date", { ascending: true })
+                    .limit(12),
+                serviceClient
+                    .from("workshops")
+                    .select("*")
+                    .lt("date", today)
+                    .order("date", { ascending: false })
+                    .limit(8),
+            ]);
+
+            const error = upcomingRes.error || pastRes.error;
+            const upcomingData = upcomingRes.data || [];
+            const pastData = pastRes.data || [];
+
+            if (!error) {
+                const allData = [...upcomingData, ...pastData];
                 return {
-                    data: data.map((row) => mapWorkshopRowToWorkshop(row)),
+                    data: allData.map((row) => mapWorkshopRowToWorkshop(row)),
                     source: "supabase",
                 };
             }

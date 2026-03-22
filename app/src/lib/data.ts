@@ -87,6 +87,11 @@ export interface Workshop {
     latitude?: number;
     longitude?: number;
     locationImages?: string[];
+    earlyBirdEnabled?: boolean;
+    earlyBirdDiscountType?: string;
+    earlyBirdDiscountValue?: number;
+    earlyBirdDaysAfterListing?: number;
+    createdAt?: string;
 }
 
 export const PAST_EVENTS_CATEGORY_ID = "past-events";

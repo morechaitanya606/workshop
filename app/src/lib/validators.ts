@@ -65,6 +65,10 @@ export const workshopCreateSchema = z.object({
     latitude: z.coerce.number().min(-90).max(90).optional(),
     longitude: z.coerce.number().min(-180).max(180).optional(),
     locationImages: z.array(mediaUrl).max(10).optional().default([]),
+    earlyBirdEnabled: z.boolean().optional().default(false),
+    earlyBirdDiscountType: z.enum(["percentage", "fixed"]).optional().default("percentage"),
+    earlyBirdDiscountValue: z.coerce.number().int().min(0).max(100000).optional().default(0),
+    earlyBirdDaysAfterListing: z.coerce.number().int().min(0).max(365).optional().default(0),
 });
 
 export type WorkshopCreateInput = z.infer<typeof workshopCreateSchema>;
@@ -89,6 +93,10 @@ export const workshopUpdateSchema = z
         latitude: z.coerce.number().min(-90).max(90).optional(),
         longitude: z.coerce.number().min(-180).max(180).optional(),
         locationImages: z.array(mediaUrl).max(10).optional(),
+        earlyBirdEnabled: z.boolean().optional(),
+        earlyBirdDiscountType: z.enum(["percentage", "fixed"]).optional(),
+        earlyBirdDiscountValue: z.coerce.number().int().min(0).max(100000).optional(),
+        earlyBirdDaysAfterListing: z.coerce.number().int().min(0).max(365).optional(),
     })
     .refine((value) => Object.keys(value).length > 0, {
         message: "Provide at least one field to update.",
