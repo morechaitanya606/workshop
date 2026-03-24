@@ -6,6 +6,7 @@ import {
     getAdminWorkshop,
     toApiErrorMessage,
     updateAdminWorkshop,
+    uploadMedia,
 } from "@/lib/api-client";
 import type { WorkshopCreateInput, WorkshopUpdateInput } from "@/lib/validators";
 
@@ -194,5 +195,32 @@ describe("admin API client methods", () => {
         );
 
         await expect(getAdminStats(accessToken)).rejects.toBeInstanceOf(ApiClientError);
+    });
+});
+
+describe("uploadMedia", () => {
+    const accessToken = "upload-token";
+
+    it("uses a signed URL when the API does not return a public URL", async () => {
+        fetchMock.mockResolvedValueOnce(
+            jsonResponse({
+                signedUrl: "https://example.com/signed-avatar",
+            })
+        );
+
+        const file = new File(["avatar"], "avatar.png", { type: "image/png" });
+        const result = await uploadMedia(accessToken, file);
+
+        expect(result.url).toBe("https://example.com/signed-avatar");
+        expect(fetchMock).toHaveBeenCalledWith(
+            "/api/upload",
+            expect.objectContaining({
+                method: "POST",
+                headers: expect.objectContaining({
+                    Authorization: `Bearer ${accessToken}`,
+                }),
+                body: expect.any(FormData),
+            })
+        );
     });
 });

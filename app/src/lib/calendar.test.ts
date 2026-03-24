@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDurationToMinutes, generateICSContent } from "./calendar";
+import { generateGoogleCalendarUrl, generateICSContent, parseDurationToMinutes } from "./calendar";
 
 describe("Calendar Utilities", () => {
     describe("generateICSContent", () => {
@@ -26,6 +26,52 @@ describe("Calendar Utilities", () => {
             // We check for the UUID part: 8-4-4-4-12 hex chars
             const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
             expect(uidLine).toMatch(uuidPattern);
+        });
+
+        it("formats calendar timestamps without relying on fragile string replacement", () => {
+            const ics = generateICSContent({
+                title: "Evening Session",
+                description: "Hands-on workshop",
+                location: "Studio 9",
+                startDate: "2026-03-28",
+                startTime: "6:30 PM",
+                durationMinutes: 90,
+            });
+
+            const dtstartLine = ics.split("\r\n").find((line) => line.startsWith("DTSTART:"));
+            const dtendLine = ics.split("\r\n").find((line) => line.startsWith("DTEND:"));
+
+            expect(dtstartLine).toMatch(/^DTSTART:\d{8}T\d{6}Z$/);
+            expect(dtendLine).toMatch(/^DTEND:\d{8}T\d{6}Z$/);
+        });
+    });
+
+    describe("generateGoogleCalendarUrl", () => {
+        it("handles ambiguous local date strings by falling back to local wall-clock parsing", () => {
+            const url = generateGoogleCalendarUrl({
+                title: "Morning Pottery",
+                description: "Clay basics",
+                location: "Pottery Lab",
+                startDate: "2026-04-05",
+                startTime: "09:15",
+                durationMinutes: 120,
+            });
+
+            expect(url).toContain("action=TEMPLATE");
+            expect(url).toMatch(/dates=\d{8}T\d{6}Z%2F\d{8}T\d{6}Z/);
+        });
+
+        it("accepts times that already include explicit timezone offsets", () => {
+            const url = generateGoogleCalendarUrl({
+                title: "Late Evening Session",
+                description: "Long-form workshop",
+                location: "Studio Loft",
+                startDate: "2026-04-05",
+                startTime: "21:00:00+05:30",
+                durationMinutes: 60,
+            });
+
+            expect(url).toMatch(/dates=\d{8}T\d{6}Z%2F\d{8}T\d{6}Z/);
         });
     });
 

@@ -388,6 +388,8 @@ export type MyBookingsResponse = {
         total: number;
         status?: string;
         created_at: string;
+        first_name?: string;
+        last_name?: string;
         workshop?: {
             id: string;
             title: string;
@@ -395,6 +397,7 @@ export type MyBookingsResponse = {
             time: string;
             location: string;
             city: string;
+            cover_image?: string;
         };
     }>;
     source: "supabase" | "mock";
@@ -428,7 +431,15 @@ export async function uploadMedia(accessToken: string, file: File) {
         );
     }
 
-    return payload as { url: string };
+    const resolvedUrl = payload?.url || payload?.signedUrl || null;
+    if (!resolvedUrl) {
+        throw new ApiClientError("Upload succeeded, but no file URL was returned.", 500, payload);
+    }
+
+    return {
+        ...payload,
+        url: resolvedUrl,
+    } as { url: string; signedUrl?: string | null };
 }
 
 export type AdminRegistrationsResponse = {

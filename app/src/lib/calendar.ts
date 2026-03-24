@@ -7,13 +7,105 @@ export type CalendarEventData = {
     durationMinutes: number; // in minutes
 };
 
+function normalizeTime(time: string): string {
+    if (!time) return "12:00";
+    // Already HH:mm, HH:mm:ss, or HH:mm with explicit timezone offset
+    if (/^\d{1,2}:\d{2}(:\d{2})?(?:Z|[+-]\d{2}:?\d{2})?$/i.test(time.trim())) {
+        return time.trim();
+    }
+    // 12-hour format like "2:00 PM"
+    const match = time.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+    if (match) {
+        let hours = parseInt(match[1], 10);
+        const minutes = match[2];
+        const period = match[3].toLowerCase();
+        if (period === "pm" && hours < 12) hours += 12;
+        if (period === "am" && hours === 12) hours = 0;
+        return `${String(hours).padStart(2, "0")}:${minutes}`;
+    }
+    return "12:00";
+}
+
+function formatUtcDateTimeStamp(value: Date): string {
+    const safeValue = Number.isNaN(value.getTime()) ? new Date() : value;
+    const year = String(safeValue.getUTCFullYear());
+    const month = String(safeValue.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(safeValue.getUTCDate()).padStart(2, "0");
+    const hours = String(safeValue.getUTCHours()).padStart(2, "0");
+    const minutes = String(safeValue.getUTCMinutes()).padStart(2, "0");
+    const seconds = String(safeValue.getUTCSeconds()).padStart(2, "0");
+
+    return `${year}${month}${day}T${hours}${minutes}${seconds}Z`;
+}
+
+function hasExplicitTimezone(value: string): boolean {
+    return /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value.trim());
+}
+
+function parseDateParts(dateStr: string) {
+    const match = dateStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+
+    return {
+        year: Number.parseInt(match[1], 10),
+        month: Number.parseInt(match[2], 10),
+        day: Number.parseInt(match[3], 10),
+    };
+}
+
+function parseTimeParts(timeStr: string) {
+    const normalizedTime = normalizeTime(timeStr);
+    const match = normalizedTime.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?(?:Z|[+-]\d{2}:?\d{2})?$/i);
+    if (!match) return null;
+
+    return {
+        hours: Number.parseInt(match[1], 10),
+        minutes: Number.parseInt(match[2], 10),
+        seconds: Number.parseInt(match[3] || "0", 10),
+    };
+}
+
+function safeParseDate(dateStr: string, timeStr: string): Date {
+    const trimmedDate = dateStr.trim();
+    const normalizedTime = normalizeTime(timeStr);
+
+    if (trimmedDate.includes("T") || trimmedDate.includes(" ")) {
+        const fullyQualified = new Date(trimmedDate);
+        if (!Number.isNaN(fullyQualified.getTime())) return fullyQualified;
+    }
+
+    if (trimmedDate && hasExplicitTimezone(normalizedTime)) {
+        const withTimezone = new Date(`${trimmedDate}T${normalizedTime}`);
+        if (!Number.isNaN(withTimezone.getTime())) return withTimezone;
+    }
+
+    const dateParts = parseDateParts(trimmedDate);
+    const timeParts = parseTimeParts(normalizedTime);
+    if (dateParts && timeParts) {
+        const localDate = new Date(
+            dateParts.year,
+            dateParts.month - 1,
+            dateParts.day,
+            timeParts.hours,
+            timeParts.minutes,
+            timeParts.seconds
+        );
+        if (!Number.isNaN(localDate.getTime())) return localDate;
+    }
+
+    const dateOnly = new Date(trimmedDate);
+    if (!Number.isNaN(dateOnly.getTime())) return dateOnly;
+
+    return new Date();
+}
+
 export function generateICSContent(data: CalendarEventData): string {
-    const startObj = new Date(`${data.startDate}T${data.startTime}:00`);
+    const startObj = safeParseDate(data.startDate, data.startTime);
     const endObj = new Date(startObj.getTime() + data.durationMinutes * 60000);
 
-    const dtstart = startObj.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-    const dtend = endObj.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-    const dtstamp = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const dtstart = formatUtcDateTimeStamp(startObj);
+    const dtend = formatUtcDateTimeStamp(endObj);
+    const dtstamp = formatUtcDateTimeStamp(new Date());
 
     const lines = [
         "BEGIN:VCALENDAR",
@@ -48,11 +140,11 @@ export function downloadICSFile(data: CalendarEventData, filename: string = "wor
 }
 
 export function generateGoogleCalendarUrl(data: CalendarEventData): string {
-    const startObj = new Date(`${data.startDate}T${data.startTime}:00`);
+    const startObj = safeParseDate(data.startDate, data.startTime);
     const endObj = new Date(startObj.getTime() + data.durationMinutes * 60000);
 
-    const dtstart = startObj.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-    const dtend = endObj.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const dtstart = formatUtcDateTimeStamp(startObj);
+    const dtend = formatUtcDateTimeStamp(endObj);
 
     const url = new URL("https://calendar.google.com/calendar/render");
     url.searchParams.append("action", "TEMPLATE");

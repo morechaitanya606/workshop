@@ -1,3 +1,4 @@
+import type { User } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireAuthenticatedUser, jsonError, ensureUserProfile } from "@/lib/api-auth";
@@ -5,27 +6,75 @@ import { parseBody } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { profileUpdateSchema } from "@/lib/validators";
 
+type ProfilePayload = {
+    fullName: string | null;
+    avatarUrl: string | null;
+    dateOfBirth: string | null;
+    phoneNumber: string | null;
+};
+
+type ProfileRow = {
+    full_name?: string | null;
+    avatar_url?: string | null;
+    date_of_birth?: string | null;
+    phone_number?: string | null;
+};
+
+function getMetadataValue(metadata: Record<string, unknown>, key: string) {
+    return typeof metadata[key] === "string" ? metadata[key] : null;
+}
+
+function getErrorMessage(error: unknown) {
+    if (typeof error === "string") return error;
+    if (error && typeof error === "object" && "message" in error) {
+        return String((error as { message?: unknown }).message || "");
+    }
+    return "";
+}
+
+function isRecoverableProfileSchemaError(error: unknown) {
+    const message = getErrorMessage(error).toLowerCase();
+    const mentionsProfiles = message.includes("profiles");
+    const mentionsSchemaDrift =
+        message.includes("date_of_birth") ||
+        message.includes("phone_number") ||
+        message.includes("avatar_url") ||
+        message.includes("full_name") ||
+        message.includes("schema cache") ||
+        (message.includes("column") && message.includes("does not exist")) ||
+        (message.includes("relation") && message.includes("does not exist"));
+
+    return mentionsProfiles && mentionsSchemaDrift;
+}
+
+function buildProfilePayload(
+    user: User,
+    overrides: Partial<ProfilePayload> = {},
+    metadataOverride?: Record<string, unknown>
+): ProfilePayload {
+    const metadata = metadataOverride ?? ((user.user_metadata || {}) as Record<string, unknown>);
+    const fallbackPhone = user.phone || null;
+
+    return {
+        fullName: overrides.fullName ?? getMetadataValue(metadata, "full_name"),
+        avatarUrl: overrides.avatarUrl ?? getMetadataValue(metadata, "avatar_url"),
+        dateOfBirth: overrides.dateOfBirth ?? getMetadataValue(metadata, "date_of_birth"),
+        phoneNumber:
+            overrides.phoneNumber ?? getMetadataValue(metadata, "phone_number") ?? fallbackPhone,
+    };
+}
+
 export async function GET(request: NextRequest) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
     }
-    const userMetadata = (auth.user.user_metadata || {}) as Record<string, unknown>;
-    const metadataDob =
-        typeof userMetadata.date_of_birth === "string" ? userMetadata.date_of_birth : null;
-    const metadataPhone =
-        typeof userMetadata.phone_number === "string" ? userMetadata.phone_number : null;
-    const fallbackPhone = auth.user.phone || null;
+    const fallbackProfile = buildProfilePayload(auth.user);
 
     const service = requireSupabaseService();
     if (!service.ok) {
         return NextResponse.json({
-            profile: {
-                fullName: auth.user.user_metadata?.full_name || null,
-                avatarUrl: auth.user.user_metadata?.avatar_url || null,
-                dateOfBirth: metadataDob,
-                phoneNumber: metadataPhone || fallbackPhone,
-            },
+            profile: fallbackProfile,
         });
     }
 
@@ -38,16 +87,19 @@ export async function GET(request: NextRequest) {
             .maybeSingle();
 
         if (error) {
+            if (isRecoverableProfileSchemaError(error)) {
+                return NextResponse.json({ profile: fallbackProfile });
+            }
             return jsonError("Unable to load profile.", 500, error);
         }
 
         return NextResponse.json({
-            profile: {
-                fullName: data?.full_name || auth.user.user_metadata?.full_name || null,
-                avatarUrl: data?.avatar_url || auth.user.user_metadata?.avatar_url || null,
-                dateOfBirth: data?.date_of_birth || metadataDob || null,
-                phoneNumber: data?.phone_number || metadataPhone || fallbackPhone || null,
-            },
+            profile: buildProfilePayload(auth.user, {
+                fullName: data?.full_name,
+                avatarUrl: data?.avatar_url,
+                dateOfBirth: data?.date_of_birth,
+                phoneNumber: data?.phone_number,
+            }),
         });
     } catch (error) {
         return jsonError("Unable to load profile.", 500, String(error));
@@ -104,17 +156,19 @@ export async function PATCH(request: NextRequest) {
     }
 
     try {
-        const profileData =
-            Object.keys(updates).length > 0
-                ? await service.client
-                      .from("profiles")
-                      .upsert({ id: auth.user.id, ...updates }, { onConflict: "id" })
-                      .select("full_name, avatar_url, date_of_birth, phone_number")
-                      .maybeSingle()
-                : { data: null, error: null };
+        let profileData: ProfileRow | null = null;
+        if (Object.keys(updates).length > 0) {
+            const profileResult = await service.client
+                .from("profiles")
+                .upsert({ id: auth.user.id, ...updates }, { onConflict: "id" })
+                .select("full_name, avatar_url, date_of_birth, phone_number")
+                .maybeSingle();
 
-        if (profileData.error) {
-            return jsonError("Unable to update profile.", 500, profileData.error);
+            if (profileResult.error && !isRecoverableProfileSchemaError(profileResult.error)) {
+                return jsonError("Unable to update profile.", 500, profileResult.error);
+            }
+
+            profileData = profileResult.data;
         }
 
         const mergedMetadata = {
@@ -138,31 +192,20 @@ export async function PATCH(request: NextRequest) {
         }
 
         return NextResponse.json({
-            profile: {
-                fullName:
-                    profileData.data?.full_name ||
-                    updates.full_name ||
-                    auth.user.user_metadata?.full_name ||
-                    null,
-                avatarUrl:
-                    profileData.data?.avatar_url ||
-                    updates.avatar_url ||
-                    auth.user.user_metadata?.avatar_url ||
-                    null,
-                dateOfBirth:
-                    profileData.data?.date_of_birth ||
-                    (typeof mergedMetadata.date_of_birth === "string"
-                        ? mergedMetadata.date_of_birth
-                        : null) ||
-                    null,
-                phoneNumber:
-                    profileData.data?.phone_number ||
-                    (typeof mergedMetadata.phone_number === "string"
-                        ? mergedMetadata.phone_number
-                        : null) ||
-                    auth.user.phone ||
-                    null,
-            },
+            profile: buildProfilePayload(
+                auth.user,
+                {
+                    fullName: profileData?.full_name ?? updates.full_name,
+                    avatarUrl: profileData?.avatar_url ?? updates.avatar_url,
+                    dateOfBirth:
+                        profileData?.date_of_birth ??
+                        getMetadataValue(mergedMetadata, "date_of_birth"),
+                    phoneNumber:
+                        profileData?.phone_number ??
+                        getMetadataValue(mergedMetadata, "phone_number"),
+                },
+                mergedMetadata
+            ),
         });
     } catch (error) {
         return jsonError("Unable to update profile.", 500, String(error));

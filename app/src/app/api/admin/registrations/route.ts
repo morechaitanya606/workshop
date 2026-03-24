@@ -59,10 +59,7 @@ export async function GET(request: NextRequest) {
             { count: "exact" }
         );
 
-        if (
-            status !== "all" &&
-            BOOKING_STATUSES.includes(status as Tables<"bookings">["status"])
-        ) {
+        if (status !== "all" && BOOKING_STATUSES.includes(status as Tables<"bookings">["status"])) {
             query = query.eq("status", status as Tables<"bookings">["status"]);
         }
 

@@ -2,14 +2,14 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
-import { requireHostUser } from "@/lib/api-auth";
+import { requireHostOrAdmin } from "@/lib/api-auth";
 
 type Params = {
     params: { id: string };
 };
 
 export async function GET(request: NextRequest, { params }: Params) {
-    const auth = await requireHostUser(request);
+    const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {
         return auth.response;
     }
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest, { params }: Params) {
             );
         }
 
-        if (workshop.host_user_id !== auth.user.id) {
+        if (auth.role !== "admin" && workshop.host_user_id !== auth.user.id) {
             return NextResponse.json(
                 { error: "Unauthorized access", success: false },
                 { status: 403 }

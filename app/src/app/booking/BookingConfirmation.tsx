@@ -1,12 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowLeft, CalendarPlus, Check } from "lucide-react";
 import { scaleIn, standardTransition } from "@/lib/motion-presets";
-import { formatCurrency, formatDate } from "@/lib/utils";
 import { downloadICSFile, generateGoogleCalendarUrl, type CalendarEventData } from "@/lib/calendar";
+import WorkshopTicket from "./WorkshopTicket";
 
 export default function BookingConfirmation({
     bookingCover,
@@ -19,6 +18,9 @@ export default function BookingConfirmation({
     workshopId,
     prefersReducedMotion,
     onBack,
+    attendeeName,
+    location,
+    bookingId,
 }: {
     bookingCover: string;
     bookingWorkshopTitle: string;
@@ -30,6 +32,9 @@ export default function BookingConfirmation({
     workshopId: string;
     prefersReducedMotion: boolean;
     onBack: () => void;
+    attendeeName: string;
+    location: string;
+    bookingId: string;
 }) {
     return (
         <>
@@ -45,7 +50,7 @@ export default function BookingConfirmation({
                 initial={prefersReducedMotion ? undefined : "hidden"}
                 animate={prefersReducedMotion ? undefined : "visible"}
                 transition={prefersReducedMotion ? { duration: 0 } : standardTransition}
-                className="max-w-lg mx-auto text-center"
+                className="max-w-2xl mx-auto text-center"
             >
                 <motion.div
                     variants={prefersReducedMotion ? undefined : scaleIn}
@@ -65,33 +70,22 @@ export default function BookingConfirmation({
                     Your booking for <strong>{bookingWorkshopTitle}</strong> is confirmed.
                 </p>
 
-                <div className="bg-white rounded-2xl p-6 shadow-soft mb-8 text-left">
-                    <div className="flex gap-4">
-                        <div className="relative w-20 h-20 rounded-xl overflow-hidden flex-shrink-0">
-                            <Image
-                                src={bookingCover}
-                                alt={bookingWorkshopTitle}
-                                fill
-                                className="object-cover"
-                            />
-                        </div>
-                        <div>
-                            <h3 className="font-playfair font-semibold text-dark">
-                                {bookingWorkshopTitle}
-                            </h3>
-                            <p className="text-sm font-inter text-dark-muted mt-1">
-                                {formatDate(bookingWorkshopDate)} <span aria-hidden>&middot;</span>{" "}
-                                {bookingWorkshopTime}
-                            </p>
-                            <p className="text-sm font-inter text-dark-muted">
-                                {guests} guests <span aria-hidden>&middot;</span>{" "}
-                                {formatCurrency(bookingTotal)}
-                            </p>
-                        </div>
-                    </div>
-                </div>
+                {/* Workshop Ticket */}
+                <WorkshopTicket
+                    bookingId={bookingId}
+                    workshopId={workshopId}
+                    attendeeName={attendeeName}
+                    location={location}
+                    workshopTitle={bookingWorkshopTitle}
+                    workshopDate={bookingWorkshopDate}
+                    workshopTime={bookingWorkshopTime}
+                    workshopCoverImage={bookingCover}
+                    guests={guests}
+                    totalPaid={bookingTotal}
+                    prefersReducedMotion={prefersReducedMotion}
+                />
 
-                <div className="flex gap-3 justify-center mb-6">
+                <div className="flex gap-3 justify-center mt-8 mb-6">
                     <Link href="/profile" className="btn-primary">
                         View My Tickets
                     </Link>

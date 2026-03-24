@@ -40,12 +40,15 @@ import {
     type HostLedgerResponse,
 } from "@/lib/api-client";
 import type { Workshop } from "@/lib/data";
+import WorkshopTicket from "@/app/booking/WorkshopTicket";
 
 type BookingItem = {
     id: string;
     guests: number;
     total: number;
     created_at: string;
+    first_name?: string;
+    last_name?: string;
     workshop?: {
         id: string;
         title: string;
@@ -53,6 +56,7 @@ type BookingItem = {
         time: string;
         location: string;
         city: string;
+        cover_image?: string;
     };
 };
 
@@ -82,7 +86,7 @@ const MIN_REVIEW_LENGTH = 10;
 export default function ProfilePage() {
     const router = useRouter();
     const { user, session, loading, signOut, role } = useAuth();
-    const prefersReducedMotion = useReducedMotion();
+    const prefersReducedMotion = Boolean(useReducedMotion());
 
     const [tab, setTab] = useState<
         "tickets" | "history" | "past" | "wishlist" | "settings" | "earnings"
@@ -215,9 +219,7 @@ export default function ProfilePage() {
             const workshopIds = pastWorkshops.map((w) => w.workshopId);
 
             try {
-                console.time("BulkFeedbackFetch");
                 const response = await getBulkWorkshopFeedback(workshopIds, session.access_token);
-                console.timeEnd("BulkFeedbackFetch");
 
                 pastWorkshops.forEach(({ bookingId, workshopId }) => {
                     const fb = response.feedback[workshopId];
@@ -1132,8 +1134,39 @@ export default function ProfilePage() {
                                             const saved = records[b.id];
                                             const isOpen = openFeedbackId === b.id;
                                             const d = getDraft(b.id);
+                                            const ticketAttendeeName =
+                                                [b.first_name, b.last_name]
+                                                    .filter((value): value is string =>
+                                                        Boolean(value)
+                                                    )
+                                                    .join(" ") ||
+                                                profileName ||
+                                                "Guest";
+                                            const ticketLocation = b.workshop?.city
+                                                ? `${b.workshop.location || "Location"}, ${b.workshop.city}`
+                                                : b.workshop?.location || "Location";
 
-                                            return (
+                                            return tab === "tickets" ? (
+                                                <div key={b.id} className="mb-6 last:mb-0">
+                                                    <WorkshopTicket
+                                                        bookingId={b.id}
+                                                        attendeeName={ticketAttendeeName}
+                                                        location={ticketLocation}
+                                                        workshopId={b.workshop?.id || ""}
+                                                        workshopTitle={
+                                                            b.workshop?.title || "Workshop"
+                                                        }
+                                                        workshopDate={b.workshop?.date || ""}
+                                                        workshopTime={b.workshop?.time || ""}
+                                                        workshopCoverImage={
+                                                            b.workshop?.cover_image || null
+                                                        }
+                                                        guests={b.guests}
+                                                        totalPaid={b.total}
+                                                        prefersReducedMotion={prefersReducedMotion}
+                                                    />
+                                                </div>
+                                            ) : (
                                                 <div
                                                     key={b.id}
                                                     className="bg-white rounded-2xl p-6 md:p-8 shadow-soft border border-dark/5"

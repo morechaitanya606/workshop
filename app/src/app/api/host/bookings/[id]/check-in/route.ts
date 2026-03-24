@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
-import { requireHostUser } from "@/lib/api-auth";
+import { requireHostOrAdmin } from "@/lib/api-auth";
 import { z } from "zod";
 
 const checkInSchema = z.object({
@@ -14,7 +14,7 @@ type Params = {
 };
 
 export async function PATCH(request: NextRequest, { params }: Params) {
-    const auth = await requireHostUser(request);
+    const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {
         return auth.response;
     }
@@ -53,7 +53,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             ? booking.workshops[0]?.host_user_id
             : (booking.workshops as any)?.host_user_id;
 
-        if (hostUserId !== auth.user.id) {
+        if (auth.role !== "admin" && hostUserId !== auth.user.id) {
             return NextResponse.json(
                 { error: "Unauthorized access", success: false },
                 { status: 403 }

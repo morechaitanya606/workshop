@@ -157,6 +157,11 @@ function BookingContent() {
             durationMinutes: parseDurationToMinutes(workshop.duration),
         };
 
+        const attendeeName = `${formData.firstName} ${formData.lastName}`.trim() || "Guest";
+        const bookingLocation = workshop.eventAddress
+            ? `${workshop.eventAddress}, ${workshop.city}`
+            : `${workshop.location}, ${workshop.city}`;
+
         return (
             <>
                 {razorpayScript}
@@ -174,6 +179,9 @@ function BookingContent() {
                             workshopId={workshop.id}
                             prefersReducedMotion={prefersReducedMotion}
                             onBack={() => router.back()}
+                            attendeeName={attendeeName}
+                            location={bookingLocation}
+                            bookingId={confirmedBooking?.id || workshop.id}
                         />
                     </div>
                     <Footer />

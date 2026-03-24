@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "fs/promises";
+import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
 import crypto from "crypto";
@@ -12,6 +14,33 @@ function buildObjectPath(userId: string, ext: string) {
     const uniqueId = crypto.randomBytes(16).toString("hex");
     const safeExt = ext.replace(/[^a-zA-Z0-9]/g, "").slice(0, 10) || "bin";
     return `${userId}/${uniqueId}.${safeExt}`;
+}
+
+function buildLocalUploadPath(bucket: string, objectPath: string) {
+    const safeBucket = bucket.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) || DEFAULT_BUCKET;
+    const relativePath = path
+        .join("uploads", safeBucket, ...objectPath.split("/"))
+        .replace(/\\/g, "/");
+
+    return {
+        relativePath,
+        absolutePath: path.join(process.cwd(), "public", ...relativePath.split("/")),
+    };
+}
+
+async function persistLocalUpload(bucket: string, objectPath: string, buffer: Buffer) {
+    const { absolutePath, relativePath } = buildLocalUploadPath(bucket, objectPath);
+    await mkdir(path.dirname(absolutePath), { recursive: true });
+    await writeFile(absolutePath, buffer);
+
+    return {
+        bucket,
+        path: relativePath,
+        url: `/${relativePath}`,
+        signedUrl: null,
+        expiresInSeconds: null,
+        access: "public" as const,
+    };
 }
 
 export async function POST(request: NextRequest) {
@@ -65,17 +94,19 @@ export async function POST(request: NextRequest) {
 
         const ext = (file.name.split(".").pop() || "").toLowerCase();
         const objectPath = buildObjectPath(auth.user.id, ext || (isVideo ? "mp4" : "jpg"));
+        const config = getPublicSupabaseConfig();
+        const canUseLocalFallback = process.env.NODE_ENV !== "production";
 
         const service = requireSupabaseService();
         if (!service.ok) {
-            // In production we should not fall back to local FS (serverless is ephemeral).
-            if (process.env.NODE_ENV === "production") {
+            if (!canUseLocalFallback) {
                 return service.response;
             }
-            return jsonError(
-                "Supabase service configuration is missing. Add SUPABASE_SERVICE_ROLE_KEY to enable uploads.",
-                500
-            );
+            const localUpload = await persistLocalUpload(bucket, objectPath, buffer);
+            return NextResponse.json({
+                ...localUpload,
+                supabaseUrl: config?.url || null,
+            });
         }
 
         const contentType = file.type || (isVideo ? "video/mp4" : "image/jpeg");
@@ -87,6 +118,13 @@ export async function POST(request: NextRequest) {
             });
 
         if (uploadError) {
+            if (canUseLocalFallback) {
+                const localUpload = await persistLocalUpload(bucket, objectPath, buffer);
+                return NextResponse.json({
+                    ...localUpload,
+                    supabaseUrl: config?.url || null,
+                });
+            }
             return jsonError(
                 "Upload failed. Ensure the Supabase Storage bucket exists and server env vars are set.",
                 500,
@@ -116,7 +154,6 @@ export async function POST(request: NextRequest) {
             signedUrl = data?.signedUrl || null;
         }
 
-        const config = getPublicSupabaseConfig();
         return NextResponse.json({
             bucket,
             path: objectPath,

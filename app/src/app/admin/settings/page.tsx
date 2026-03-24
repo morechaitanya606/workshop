@@ -2,18 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-    Loader2,
-    Plus,
-    Tag,
-    ToggleLeft,
-    ToggleRight,
-    Trash2,
-    Search,
-    Percent,
-    Hash,
-    ArrowLeft,
-} from "lucide-react";
+import { Loader2, Plus, Tag, ToggleLeft, ToggleRight, ArrowLeft } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
