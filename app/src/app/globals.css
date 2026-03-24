@@ -3,6 +3,14 @@
 @tailwind utilities;
 
 @layer base {
+    :root {
+        --motion-ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
+        --motion-duration-fast: 180ms;
+        --motion-duration-base: 320ms;
+        --motion-duration-slow: 520ms;
+        --surface-shadow-hover: 0 24px 45px -28px rgba(24, 21, 15, 0.34);
+    }
+
     * {
         margin: 0;
         padding: 0;
@@ -13,11 +21,15 @@
         scroll-behavior: smooth;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+        scrollbar-gutter: stable both-edges;
     }
 
     body {
         @apply bg-cream font-inter text-dark-text;
         overflow-x: hidden;
+        background-image:
+            radial-gradient(circle at top, rgba(255, 255, 255, 0.7), transparent 42%),
+            linear-gradient(180deg, rgba(248, 244, 235, 0.98) 0%, rgba(248, 244, 235, 1) 100%);
     }
 
     h1,
@@ -31,6 +43,14 @@
 
     ::selection {
         @apply bg-terracotta/20 text-dark;
+    }
+
+    a,
+    button,
+    input,
+    select,
+    textarea {
+        -webkit-tap-highlight-color: transparent;
     }
 
     :where(
@@ -49,13 +69,62 @@
 }
 
 @layer components {
+    .page-transition-shell {
+        min-height: 100%;
+        will-change: opacity, transform;
+    }
+
+    .interactive-surface {
+        transition:
+            transform var(--motion-duration-base) var(--motion-ease-premium),
+            box-shadow var(--motion-duration-base) var(--motion-ease-premium),
+            background-color var(--motion-duration-fast) ease,
+            border-color var(--motion-duration-fast) ease,
+            color var(--motion-duration-fast) ease,
+            opacity var(--motion-duration-fast) ease;
+        will-change: transform;
+    }
+
+    .interactive-link {
+        position: relative;
+        transition: color var(--motion-duration-fast) ease;
+    }
+
+    .interactive-link::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -0.18rem;
+        height: 2px;
+        border-radius: 999px;
+        background: currentColor;
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform var(--motion-duration-base) var(--motion-ease-premium);
+        opacity: 0.7;
+    }
+
+    .interactive-field {
+        transition:
+            border-color var(--motion-duration-fast) ease,
+            background-color var(--motion-duration-fast) ease,
+            box-shadow var(--motion-duration-fast) ease,
+            transform var(--motion-duration-fast) ease;
+    }
+
+    .nav-shell {
+        border: 1px solid rgba(255, 255, 255, 0.32);
+        box-shadow: 0 16px 40px -30px rgba(24, 21, 15, 0.32);
+    }
+
     .btn-primary {
         @apply inline-flex items-center justify-center gap-2
            bg-terracotta text-white font-inter font-semibold
            px-8 py-3.5 rounded-full
-           transition-all duration-300 ease-out
-           hover:bg-terracotta-600 hover:shadow-glow hover:scale-[1.02]
-           active:scale-[0.98]
+           interactive-surface
+           hover:bg-terracotta-600 hover:shadow-lg hover:shadow-terracotta/30 hover:-translate-y-0.5 hover:scale-[1.02]
+           active:scale-[0.98] active:translate-y-0
            focus:outline-none focus:ring-2 focus:ring-terracotta/50 focus:ring-offset-2 focus:ring-offset-cream
            relative overflow-hidden;
     }
@@ -65,9 +134,9 @@
            bg-transparent text-dark border-2 border-dark
            font-inter font-semibold
            px-8 py-3.5 rounded-full
-           transition-all duration-300 ease-out
-           hover:bg-dark hover:text-cream hover:scale-[1.02]
-           active:scale-[0.98]
+           interactive-surface
+           hover:bg-dark hover:text-cream hover:shadow-md hover:-translate-y-0.5 hover:scale-[1.02]
+           active:scale-[0.98] active:translate-y-0
            focus:outline-none focus:ring-2 focus:ring-dark/30 focus:ring-offset-2 focus:ring-offset-cream;
     }
 
@@ -76,15 +145,15 @@
            bg-transparent text-terracotta
            font-inter font-semibold
            px-6 py-3 rounded-full
-           transition-all duration-300
+           interactive-surface
            hover:bg-terracotta/10;
     }
 
     .card-workshop {
         @apply bg-white rounded-3xl overflow-hidden
            border border-clay/40 shadow-soft
-           transition-all duration-500 ease-out
-           motion-safe:hover:shadow-hover motion-safe:hover:-translate-y-1.5 motion-safe:hover:scale-[1.01];
+           interactive-surface
+           motion-safe:hover:shadow-xl motion-safe:hover:-translate-y-2 motion-safe:hover:scale-[1.01];
     }
 
     .card-workshop-past {
@@ -179,11 +248,11 @@
         background: linear-gradient(
             90deg,
             theme("colors.cream.100") 25%,
-            theme("colors.cream.200") 50%,
+            rgba(255, 255, 255, 0.95) 50%,
             theme("colors.cream.100") 75%
         );
         background-size: 200% 100%;
-        animation: shimmer 2s linear infinite;
+        animation: shimmer 1.8s linear infinite;
     }
 
     @keyframes shimmer {
@@ -221,6 +290,10 @@
 
     .partners-marquee-track:hover {
         animation-play-state: paused;
+    }
+
+    .floating-nav-item {
+        @apply interactive-surface rounded-2xl;
     }
 
     @keyframes partners-marquee {
@@ -376,6 +449,20 @@
     }
 
     @media (prefers-reduced-motion: no-preference) {
+        .interactive-surface:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--surface-shadow-hover);
+        }
+
+        .interactive-link:hover::after,
+        .interactive-link:focus-visible::after {
+            transform: scaleX(1);
+        }
+
+        .interactive-field:hover {
+            transform: translateY(-1px);
+        }
+
         .pulse-hover:hover {
             transform: translateY(-1px);
         }

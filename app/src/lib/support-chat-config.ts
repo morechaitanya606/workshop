@@ -19,11 +19,19 @@ export const SUPPORT_CHAT_ANALYTICS_EVENTS = {
 export const SUPPORT_CHAT_POLICY = {
     booking: {
         callToAction: "Reserve Spot",
-        holdWindowMinutes: 10,
+        holdWindowMinutes: 15,
         confirmationText: "Once payment succeeds, your booking is confirmed instantly.",
     },
     cancellation: {
-        fullRefundWindowHours: 24,
+        generalSummary:
+            "Bookings are generally non-refundable, except where the cancellation policy below allows otherwise.",
+        listingLeadTimeDays: 7,
+        earlyBirdWindowDaysAfterListing: 2,
+        earlyBirdRefundPercent: 80,
+        noRefundCutoffHoursBeforeWorkshop: 48,
+        manualReviewSummary:
+            "After the Early Bird window ends, you may still request a refund, but approval is case by case and not guaranteed.",
+        hostCancellationSummary: "If a host cancels, you receive a full refund.",
         refundProcessingWindow: "5 to 7 business days",
     },
     payment: {

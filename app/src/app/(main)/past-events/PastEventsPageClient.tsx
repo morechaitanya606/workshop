@@ -3,8 +3,18 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useReducedMotion, motion } from "framer-motion";
-import { ArrowLeft, Calendar, MapPin, Star, ChevronLeft, ChevronRight, Camera } from "lucide-react";
+import {
+    ArrowLeft,
+    Calendar,
+    MapPin,
+    Star,
+    ChevronLeft,
+    ChevronRight,
+    Camera,
+    Info,
+} from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
@@ -33,6 +43,7 @@ export default function PastEventsPageClient({
     allWorkshops: Workshop[];
     source: "supabase" | "mock" | "error";
 }) {
+    const router = useRouter();
     const shouldReduceMotion = Boolean(useReducedMotion());
     const [lightbox, setLightbox] = useState<LightboxState | null>(null);
     const sectionMotionProps = useMotionProps(shouldReduceMotion, fadeInUp, standardTransition);
@@ -77,6 +88,32 @@ export default function PastEventsPageClient({
     return (
         <main className="min-h-screen pb-20 md:pb-0 bg-cream">
             <Navbar />
+
+            {source === "mock" && (
+                <div className="section-padding pt-24 sm:pt-28 pb-0">
+                    <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-inter text-amber-900">
+                        <Info className="h-4 w-4" />
+                        Showing sample workshops while live past-event data is unavailable.
+                    </div>
+                </div>
+            )}
+            {source === "error" && (
+                <div className="section-padding pt-24 sm:pt-28 pb-0">
+                    <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-inter text-red-700 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-2">
+                            <Info className="h-4 w-4 shrink-0" />
+                            <span>Unable to load live past events right now.</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => router.refresh()}
+                            className="inline-flex items-center justify-center rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                        >
+                            Try again
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Hero header */}
             <section className="pt-28 pb-12 section-padding">

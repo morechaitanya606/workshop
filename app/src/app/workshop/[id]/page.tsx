@@ -1,12 +1,9 @@
-import Link from "next/link";
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { ensureWorkshopSeededFromMock, mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import { getPlatformSettings } from "@/lib/workshop-page-data";
 import { mockWorkshops, type Workshop } from "@/lib/data";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import MobileNav from "@/components/MobileNav";
 import WorkshopClient from "./WorkshopClient";
 
 export const revalidate = 60;
@@ -107,22 +104,7 @@ export default async function WorkshopDetailPage({ params }: { params: { id: str
     const workshop = await getWorkshop(params.id);
 
     if (!workshop) {
-        return (
-            <main className="min-h-screen bg-cream">
-                <Navbar />
-                <div className="pt-32 pb-20 section-padding text-center">
-                    <h1 className="heading-lg font-inter mb-3">Workshop not found</h1>
-                    <p className="text-body text-dark-muted mb-8">
-                        This workshop may have been removed or the link is incorrect.
-                    </p>
-                    <Link href="/explore" className="btn-primary">
-                        Back to Explore
-                    </Link>
-                </div>
-                <Footer />
-                <MobileNav />
-            </main>
-        );
+        notFound();
     }
 
     const similarWorkshops = await getSimilarWorkshops(workshop);

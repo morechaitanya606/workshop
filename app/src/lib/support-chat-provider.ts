@@ -83,7 +83,7 @@ export function buildSupportChatProviderContext(input: {
             },
             {
                 topic: "cancellation",
-                text: `Full refund is available up to ${SUPPORT_CHAT_POLICY.cancellation.fullRefundWindowHours} hours before the workshop. Refunds usually take ${SUPPORT_CHAT_POLICY.cancellation.refundProcessingWindow}.`,
+                text: `${SUPPORT_CHAT_POLICY.cancellation.generalSummary} Workshops usually go live ${SUPPORT_CHAT_POLICY.cancellation.listingLeadTimeDays} days before the session, and the Early Bird booking window lasts for the first ${SUPPORT_CHAT_POLICY.cancellation.earlyBirdWindowDaysAfterListing} days after listing. If an Early Bird booking is cancelled at least ${SUPPORT_CHAT_POLICY.cancellation.noRefundCutoffHoursBeforeWorkshop} hours before the workshop, up to ${SUPPORT_CHAT_POLICY.cancellation.earlyBirdRefundPercent}% of the booking amount may be refunded. ${SUPPORT_CHAT_POLICY.cancellation.manualReviewSummary} Within ${SUPPORT_CHAT_POLICY.cancellation.noRefundCutoffHoursBeforeWorkshop} hours of the workshop, bookings are not cancellable or refundable. ${SUPPORT_CHAT_POLICY.cancellation.hostCancellationSummary} Approved refunds usually take ${SUPPORT_CHAT_POLICY.cancellation.refundProcessingWindow}.`,
             },
             {
                 topic: "payment",

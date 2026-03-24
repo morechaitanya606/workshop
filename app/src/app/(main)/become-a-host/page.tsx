@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Send } from "lucide-react";
 import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
+import ScrollReveal from "@/components/ui/ScrollReveal";
 import { submitHostApplication, toApiErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 
@@ -88,15 +89,20 @@ export default function BecomeAHostPage() {
 
             <section className="pt-28 pb-16 section-padding">
                 <div className="max-w-2xl mx-auto">
-                    <Link
-                        href="/"
-                        className="inline-flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta transition-colors mb-6"
-                    >
-                        <ArrowLeft className="w-4 h-4" />
-                        Back to Home
-                    </Link>
+                    <ScrollReveal preset="slide-right">
+                        <Link
+                            href="/"
+                            className="interactive-link mb-6 inline-flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta"
+                        >
+                            <ArrowLeft className="w-4 h-4" />
+                            Back to Home
+                        </Link>
+                    </ScrollReveal>
 
-                    <div className="bg-white rounded-2xl border border-gray-200 shadow-soft p-6 sm:p-8">
+                    <ScrollReveal
+                        preset="zoom"
+                        className="bg-white rounded-2xl border border-gray-200 shadow-soft p-6 sm:p-8"
+                    >
                         <h1 className="heading-sm mb-2">Become a Host</h1>
                         <p className="text-body text-dark-muted mb-8">
                             Apply to host workshops and start earning from your sessions. Share
@@ -156,7 +162,7 @@ export default function BecomeAHostPage() {
                                         minLength={2}
                                         maxLength={120}
                                         placeholder="Your full name"
-                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                        className="interactive-field w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
                                     />
                                 </div>
 
@@ -170,7 +176,7 @@ export default function BecomeAHostPage() {
                                         onChange={(event) => setEmail(event.target.value)}
                                         required
                                         placeholder="you@example.com"
-                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                        className="interactive-field w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
                                     />
                                 </div>
 
@@ -184,7 +190,7 @@ export default function BecomeAHostPage() {
                                         onChange={(event) => setPhone(event.target.value)}
                                         required
                                         placeholder="+91 98765 43210"
-                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                        className="interactive-field w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
                                     />
                                 </div>
 
@@ -197,7 +203,7 @@ export default function BecomeAHostPage() {
                                         onChange={(event) => setExpertise(event.target.value)}
                                         required
                                         placeholder="e.g., Pottery, Digital Marketing, Yoga"
-                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                        className="interactive-field w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
                                     />
                                 </div>
 
@@ -210,7 +216,7 @@ export default function BecomeAHostPage() {
                                         onChange={(event) => setLocation(event.target.value)}
                                         required
                                         placeholder="e.g., Andheri West, Mumbai"
-                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                        className="interactive-field w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
                                     />
                                 </div>
 
@@ -226,7 +232,7 @@ export default function BecomeAHostPage() {
                                         maxLength={4000}
                                         rows={6}
                                         placeholder="Describe your background, workshop topics, and teaching style."
-                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta resize-y"
+                                        className="interactive-field w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta resize-y"
                                     />
                                 </div>
 
@@ -239,7 +245,7 @@ export default function BecomeAHostPage() {
                                         value={portfolioUrl}
                                         onChange={(event) => setPortfolioUrl(event.target.value)}
                                         placeholder="https://your-portfolio.com"
-                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                        className="interactive-field w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
                                     />
                                 </div>
 
@@ -253,7 +259,7 @@ export default function BecomeAHostPage() {
                                             value={instagram}
                                             onChange={(event) => setInstagram(event.target.value)}
                                             placeholder="https://instagram.com/yourhandle"
-                                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                            className="interactive-field w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
                                         />
                                     </div>
                                     <div>
@@ -265,7 +271,7 @@ export default function BecomeAHostPage() {
                                             value={youtube}
                                             onChange={(event) => setYoutube(event.target.value)}
                                             placeholder="https://youtube.com/@yourchannel"
-                                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                            className="interactive-field w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
                                         />
                                     </div>
                                 </div>
@@ -279,7 +285,7 @@ export default function BecomeAHostPage() {
                                         value={website}
                                         onChange={(event) => setWebsite(event.target.value)}
                                         placeholder="https://yourstudio.com"
-                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
+                                        className="interactive-field w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark outline-none focus:border-terracotta"
                                     />
                                 </div>
 
@@ -302,7 +308,7 @@ export default function BecomeAHostPage() {
                                 </button>
                             </form>
                         )}
-                    </div>
+                    </ScrollReveal>
                 </div>
             </section>
 

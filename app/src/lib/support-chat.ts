@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/core";
 import type { Workshop } from "@/lib/data";
 import { mockWorkshops } from "@/lib/data";
 import {
@@ -7,6 +8,7 @@ import {
     SUPPORT_CHAT_MESSAGES,
     SUPPORT_CHAT_POLICY,
 } from "@/lib/support-chat-config";
+import { warnDevFallback } from "@/lib/dev-warnings";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 
@@ -536,7 +538,7 @@ function buildBookingReply(workshop?: Workshop) {
 }
 
 function buildCancellationReply() {
-    return `You can cancel up to ${SUPPORT_CHAT_POLICY.cancellation.fullRefundWindowHours} hours before the workshop for a full refund. Go to your bookings, open the ticket, and cancel from there. Refunds usually take ${SUPPORT_CHAT_POLICY.cancellation.refundProcessingWindow}.`;
+    return `${SUPPORT_CHAT_POLICY.cancellation.generalSummary} Workshops usually go live ${SUPPORT_CHAT_POLICY.cancellation.listingLeadTimeDays} days before the session, and the Early Bird booking window lasts for the first ${SUPPORT_CHAT_POLICY.cancellation.earlyBirdWindowDaysAfterListing} days after listing. If an Early Bird booking is cancelled at least ${SUPPORT_CHAT_POLICY.cancellation.noRefundCutoffHoursBeforeWorkshop} hours before the workshop, up to ${SUPPORT_CHAT_POLICY.cancellation.earlyBirdRefundPercent}% of the booking amount may be refunded. ${SUPPORT_CHAT_POLICY.cancellation.manualReviewSummary} Within ${SUPPORT_CHAT_POLICY.cancellation.noRefundCutoffHoursBeforeWorkshop} hours of the workshop, bookings are not cancellable or refundable. ${SUPPORT_CHAT_POLICY.cancellation.hostCancellationSummary} Approved refunds usually take ${SUPPORT_CHAT_POLICY.cancellation.refundProcessingWindow}.`;
 }
 
 function buildPaymentReply() {
@@ -890,7 +892,7 @@ export async function loadSupportChatWorkshops(now = Date.now()) {
 
     if (isSupabaseServiceConfigured) {
         try {
-            const serviceClient = createSupabaseServiceClient({ requestTimeoutMs: 1500 });
+            const serviceClient = createSupabaseServiceClient({ requestTimeoutMs: 5000 });
             const { data, error } = await serviceClient
                 .from("workshops")
                 .select("*")
@@ -905,14 +907,32 @@ export async function loadSupportChatWorkshops(now = Date.now()) {
                 };
                 return mapped;
             }
-        } catch {
-            // Fall through to stale cache or mock data.
+            if (error) {
+                Sentry.captureException(error, {
+                    tags: {
+                        layer: "support_chat",
+                        route: "load_support_chat_workshops",
+                    },
+                });
+            }
+        } catch (error) {
+            Sentry.captureException(error, {
+                tags: {
+                    layer: "support_chat",
+                    route: "load_support_chat_workshops",
+                },
+            });
         }
     }
 
     if (workshopCache) {
         return workshopCache.data;
     }
+
+    warnDevFallback(
+        "support_chat",
+        "Using mock workshop data because support chat could not load live workshops."
+    );
 
     workshopCache = {
         data: mockWorkshops,

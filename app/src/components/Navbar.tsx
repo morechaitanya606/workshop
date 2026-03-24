@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Menu, X, LogOut } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
 const SUGGESTIONS = [
@@ -26,7 +26,29 @@ export default function Navbar() {
     const [query, setQuery] = useState("");
     const [showSuggestions, setShowSuggestions] = useState(false);
     const searchContainerRef = useRef<HTMLDivElement | null>(null);
+    const pathname = usePathname();
     const { user, role, roleLoading, loading, signOut } = useAuth();
+
+    const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => {
+        const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
+        return (
+            <Link
+                href={href}
+                className={`relative text-sm font-inter font-medium transition-colors duration-300 py-1 ${
+                    isActive ? "text-terracotta" : "text-dark-secondary hover:text-terracotta"
+                }`}
+            >
+                {children}
+                {isActive && (
+                    <motion.div
+                        layoutId="navbar-indicator"
+                        className="absolute -bottom-1 left-0 right-0 h-0.5 bg-terracotta rounded-full"
+                        transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    />
+                )}
+            </Link>
+        );
+    };
 
     const filteredSuggestions = query
         ? SUGGESTIONS.filter((s) => s.toLowerCase().includes(query.toLowerCase()))
@@ -71,7 +93,6 @@ export default function Navbar() {
             >
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between">
-                        {/* Logo */}
                         <Link href="/" className="flex items-center gap-2.5 group">
                             <div className="relative w-9 h-9 rounded-lg overflow-hidden transition-transform duration-300 group-hover:scale-110">
                                 <Image
@@ -87,7 +108,6 @@ export default function Navbar() {
                             </span>
                         </Link>
 
-                        {/* Desktop Search */}
                         <div
                             ref={searchContainerRef}
                             className={`hidden md:flex items-center gap-2 rounded-full px-5 py-2.5 shadow-soft border border-gray-100 max-w-md flex-1 mx-8 transition-all duration-300 relative ${
@@ -111,7 +131,6 @@ export default function Navbar() {
                                 }}
                                 className="flex-1 w-full bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted"
                             />
-                            {/* Suggestive Dropdown */}
                             {showSuggestions && filteredSuggestions.length > 0 && (
                                 <div className="absolute top-[100%] mt-2 left-0 w-full bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50 max-h-56 overflow-y-auto">
                                     <div className="px-4 py-1.5 text-xs font-semibold text-dark-muted uppercase tracking-wider mb-1">
@@ -139,44 +158,18 @@ export default function Navbar() {
                             )}
                         </div>
 
-                        {/* Desktop Nav */}
                         <nav className="hidden md:flex items-center gap-6">
-                            <Link
-                                href="/explore"
-                                className="text-sm font-inter font-medium text-dark-secondary hover:text-terracotta transition-colors duration-300"
-                            >
-                                Explore
-                            </Link>
-                            <Link
-                                href="/past-events"
-                                className="text-sm font-inter font-medium text-dark-secondary hover:text-terracotta transition-colors duration-300"
-                            >
-                                Past Events
-                            </Link>
+                            <NavLink href="/explore">Explore</NavLink>
+                            <NavLink href="/past-events">Past Events</NavLink>
                             {user && !roleLoading && role === "admin" && (
-                                <Link
-                                    href="/admin/dashboard"
-                                    className="text-sm font-inter font-medium text-dark-secondary hover:text-terracotta transition-colors duration-300"
-                                >
-                                    Dashboard
-                                </Link>
+                                <NavLink href="/admin/dashboard">Dashboard</NavLink>
                             )}
                             {user && !roleLoading && role === "host" && (
-                                <Link
-                                    href="/host/dashboard"
-                                    className="text-sm font-inter font-medium text-dark-secondary hover:text-terracotta transition-colors duration-300"
-                                >
-                                    Host Panel
-                                </Link>
+                                <NavLink href="/host/dashboard">Host Panel</NavLink>
                             )}
                             {!loading && !user && (
                                 <>
-                                    <Link
-                                        href="/auth/login"
-                                        className="text-sm font-inter font-medium text-dark-secondary hover:text-terracotta transition-colors duration-300"
-                                    >
-                                        Log In
-                                    </Link>
+                                    <NavLink href="/auth/login">Log In</NavLink>
                                     <Link
                                         href="/auth/signup"
                                         className="btn-primary !py-2.5 !px-6 text-sm"
@@ -219,7 +212,6 @@ export default function Navbar() {
                             )}
                         </nav>
 
-                        {/* Mobile Menu Button */}
                         <button
                             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                             aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
@@ -239,7 +231,6 @@ export default function Navbar() {
                 </div>
             </motion.header>
 
-            {/* Mobile Menu */}
             <AnimatePresence>
                 {isMobileMenuOpen && (
                     <motion.div

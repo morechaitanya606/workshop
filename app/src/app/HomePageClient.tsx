@@ -16,6 +16,7 @@ import SocialProofSection from "@/components/home/SocialProofSection";
 import PartnersMarquee from "@/components/home/PartnersMarquee";
 import CommunityGallerySection from "@/components/home/CommunityGallerySection";
 import HostCtaSection from "@/components/home/HostCtaSection";
+import ScrollReveal from "@/components/ui/ScrollReveal";
 import { categories, mockWorkshops, PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
 import { toApiErrorMessage, updateWorkshopNotifications } from "@/lib/api-client";
@@ -177,14 +178,25 @@ export default function HomePageClient({
             {source === "error" && (
                 <div className="section-padding pt-24 sm:pt-28 pb-0">
                     <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-inter text-red-700">
-                        <Info className="h-4 w-4" />
-                        Unable to load live workshops right now. Please refresh or try again soon.
+                        <Info className="h-4 w-4 shrink-0" />
+                        <span>
+                            Unable to load live workshops right now. Please refresh or try again
+                            soon.
+                        </span>
+                        <button
+                            onClick={() => router.refresh()}
+                            className="ml-auto underline font-medium hover:text-red-900 transition-colors"
+                        >
+                            Refresh
+                        </button>
                     </div>
                 </div>
             )}
 
             <HeroSection source={source} />
-            <HowItWorksSection />
+            <ScrollReveal>
+                <HowItWorksSection />
+            </ScrollReveal>
 
             <section className="section-padding mt-24 sm:mt-16">
                 <div className="bg-white rounded-3xl shadow-card border border-clay/30 p-6 md:p-8">
@@ -254,17 +266,23 @@ export default function HomePageClient({
                 />
             )}
 
-            <SocialProofSection shouldReduceMotion={shouldReduceMotion} />
-            <PartnersMarquee shouldReduceMotion={shouldReduceMotion} />
+            <ScrollReveal>
+                <SocialProofSection shouldReduceMotion={shouldReduceMotion} />
+            </ScrollReveal>
+            <ScrollReveal>
+                <PartnersMarquee shouldReduceMotion={shouldReduceMotion} />
+            </ScrollReveal>
             <section className="section-padding mt-24 sm:mt-20">
-                <div className="bg-white rounded-3xl shadow-card border border-clay/30 p-6 md:p-8">
+                <ScrollReveal className="bg-white rounded-3xl shadow-card border border-clay/30 p-6 md:p-8">
                     <CommunityGallerySection
                         shouldReduceMotion={shouldReduceMotion}
                         sectionClassName="mt-0"
                     />
-                </div>
+                </ScrollReveal>
             </section>
-            <HostCtaSection shouldReduceMotion={shouldReduceMotion} />
+            <ScrollReveal>
+                <HostCtaSection shouldReduceMotion={shouldReduceMotion} />
+            </ScrollReveal>
 
             <Footer />
             <MobileNav />

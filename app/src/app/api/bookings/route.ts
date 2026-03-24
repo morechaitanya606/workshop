@@ -1,9 +1,11 @@
 import type { NextRequest } from "next/server";
+import * as Sentry from "@sentry/core";
 import { NextResponse } from "next/server";
 import { requireAuthenticatedUser } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { handleApiError } from "@/lib/api-route";
 import { mockWorkshops } from "@/lib/data";
+import { warnDevFallback } from "@/lib/dev-warnings";
 
 export async function GET(request: NextRequest) {
     const auth = await requireAuthenticatedUser(request);
@@ -49,7 +51,23 @@ export async function GET(request: NextRequest) {
                     source: "supabase",
                 });
             }
+
+            Sentry.captureException(error, {
+                tags: {
+                    layer: "api",
+                    route: "/api/bookings",
+                },
+            });
+            if (!allowMockFallback) {
+                return handleApiError("Failed to load bookings.", error);
+            }
         } catch (error) {
+            Sentry.captureException(error, {
+                tags: {
+                    layer: "api",
+                    route: "/api/bookings",
+                },
+            });
             if (!allowMockFallback) {
                 return handleApiError("Failed to load bookings.", error);
             }
@@ -62,6 +80,11 @@ export async function GET(request: NextRequest) {
     if (!allowMockFallback) {
         return NextResponse.json({ data: [], source: "supabase" });
     }
+
+    warnDevFallback(
+        "api/bookings",
+        "Returning mock bookings because live bookings could not be loaded."
+    );
 
     // Fallback for local development before DB setup.
     const fallback = mockWorkshops.slice(0, 2).map((workshop, index) => ({

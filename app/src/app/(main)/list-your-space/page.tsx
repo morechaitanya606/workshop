@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
+import ScrollReveal from "@/components/ui/ScrollReveal";
+import { RevealGroup, RevealItem } from "@/components/ui";
 import {
     MapPin,
     Users,
@@ -112,48 +114,50 @@ export default function ListYourSpacePage() {
 
             {/* Hero Section */}
             <section className="pt-32 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto flex flex-col items-center text-center">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-clay/10 text-terracotta font-inter text-sm font-semibold mb-6">
-                    <MapPin className="w-4 h-4" />
-                    For Studios, Spaces & Cafes
-                </div>
-                <h1 className="font-playfair text-4xl sm:text-6xl md:text-7xl font-bold text-dark tracking-tight mb-8">
-                    Turn your Space into a <br className="hidden md:block" />
-                    <span className="text-terracotta relative inline-block">
-                        Creative Hub
-                        <svg
-                            className="absolute w-full h-3 -bottom-1 left-0 text-terracotta/30"
-                            viewBox="0 0 100 10"
-                            preserveAspectRatio="none"
+                <ScrollReveal className="flex flex-col items-center text-center" preset="fade-up">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-clay/10 text-terracotta font-inter text-sm font-semibold mb-6">
+                        <MapPin className="w-4 h-4" />
+                        For Studios, Spaces & Cafes
+                    </div>
+                    <h1 className="font-playfair text-4xl sm:text-6xl md:text-7xl font-bold text-dark tracking-tight mb-8">
+                        Turn your Space into a <br className="hidden md:block" />
+                        <span className="text-terracotta relative inline-block">
+                            Creative Hub
+                            <svg
+                                className="absolute w-full h-3 -bottom-1 left-0 text-terracotta/30"
+                                viewBox="0 0 100 10"
+                                preserveAspectRatio="none"
+                            >
+                                <path
+                                    d="M0 5 Q 50 10 100 5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="3"
+                                />
+                            </svg>
+                        </span>
+                    </h1>
+                    <p className="max-w-2xl mx-auto text-lg sm:text-xl font-inter text-dark-muted mb-10 text-balance leading-relaxed">
+                        Partner with Only Workshops to bring vibrant, hands-on experiences to your
+                        venue. Monetize your down-time and introduce your brand to a passionate
+                        local community.
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                        <a
+                            href="#apply"
+                            className="btn-primary !px-8 !py-4 text-lg inline-flex items-center justify-center gap-2 group"
                         >
-                            <path
-                                d="M0 5 Q 50 10 100 5"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3"
-                            />
-                        </svg>
-                    </span>
-                </h1>
-                <p className="max-w-2xl mx-auto text-lg sm:text-xl font-inter text-dark-muted mb-10 text-balance leading-relaxed">
-                    Partner with Only Workshops to bring vibrant, hands-on experiences to your
-                    venue. Monetize your down-time and introduce your brand to a passionate local
-                    community.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                    <a
-                        href="#apply"
-                        className="btn-primary !px-8 !py-4 text-lg inline-flex items-center justify-center gap-2 group"
-                    >
-                        List Your Space
-                        <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                    </a>
-                </div>
+                            List Your Space
+                            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                        </a>
+                    </div>
+                </ScrollReveal>
             </section>
 
             {/* Benefits Grid */}
             <section className="bg-white py-24 border-y border-clay/20">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="text-center max-w-2xl mx-auto mb-16">
+                    <ScrollReveal className="text-center max-w-2xl mx-auto mb-16" preset="fade-up">
                         <h2 className="font-playfair text-3xl sm:text-4xl font-bold text-dark mb-4">
                             Why Partner With Us?
                         </h2>
@@ -161,15 +165,16 @@ export default function ListYourSpacePage() {
                             Join a trusted network of venues transforming their businesses with
                             unique experiential events.
                         </p>
-                    </div>
+                    </ScrollReveal>
 
-                    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+                    <RevealGroup className="grid md:grid-cols-2 lg:grid-cols-4 gap-8" stagger={0.1}>
                         {benefits.map((benefit, idx) => {
                             const Icon = benefit.icon;
                             return (
-                                <div
+                                <RevealItem
                                     key={idx}
-                                    className="bg-cream-50 rounded-3xl p-8 border border-clay/30 hover:shadow-soft transition-all duration-300"
+                                    className="interactive-surface bg-cream-50 rounded-3xl p-8 border border-clay/30 hover:shadow-soft"
+                                    preset={idx % 2 === 0 ? "fade-up" : "zoom"}
                                 >
                                     <div className="w-12 h-12 rounded-xl bg-white shadow-sm flex items-center justify-center mb-6 text-terracotta border border-clay/30">
                                         <Icon className="w-6 h-6" />
@@ -180,16 +185,19 @@ export default function ListYourSpacePage() {
                                     <p className="font-inter text-dark-muted text-sm leading-relaxed">
                                         {benefit.description}
                                     </p>
-                                </div>
+                                </RevealItem>
                             );
                         })}
-                    </div>
+                    </RevealGroup>
                 </div>
             </section>
 
             {/* Application Form */}
             <section id="apply" className="py-24 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="bg-white rounded-3xl border border-clay/20 shadow-soft p-8 sm:p-12">
+                <ScrollReveal
+                    className="bg-white rounded-3xl border border-clay/20 shadow-soft p-8 sm:p-12"
+                    preset="zoom"
+                >
                     <div className="text-center mb-10">
                         <h2 className="font-playfair text-3xl sm:text-4xl font-bold text-dark mb-4">
                             Apply to become a Partner
@@ -263,7 +271,7 @@ export default function ListYourSpacePage() {
                                                 minLength={2}
                                                 maxLength={120}
                                                 placeholder="The Creative Studio"
-                                                className="w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
+                                                className="interactive-field w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
                                             />
                                         </div>
 
@@ -278,7 +286,7 @@ export default function ListYourSpacePage() {
                                                 onChange={(event) => setEmail(event.target.value)}
                                                 required
                                                 placeholder="hello@yourvenue.com"
-                                                className="w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
+                                                className="interactive-field w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
                                             />
                                         </div>
                                     </div>
@@ -298,7 +306,7 @@ export default function ListYourSpacePage() {
                                                 minLength={2}
                                                 maxLength={120}
                                                 placeholder="Your full name"
-                                                className="w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
+                                                className="interactive-field w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
                                             />
                                         </div>
                                         <div>
@@ -314,7 +322,7 @@ export default function ListYourSpacePage() {
                                                 }
                                                 required
                                                 placeholder="+91 98765 43210"
-                                                className="w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
+                                                className="interactive-field w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
                                             />
                                         </div>
                                     </div>
@@ -332,7 +340,7 @@ export default function ListYourSpacePage() {
                                                 }
                                                 required
                                                 placeholder="e.g. Bandra West, Mumbai"
-                                                className="w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
+                                                className="interactive-field w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
                                             />
                                         </div>
 
@@ -350,7 +358,7 @@ export default function ListYourSpacePage() {
                                                 required
                                                 min="1"
                                                 placeholder="e.g. 25"
-                                                className="w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
+                                                className="interactive-field w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
                                             />
                                         </div>
                                     </div>
@@ -363,7 +371,7 @@ export default function ListYourSpacePage() {
                                             value={spaceType}
                                             onChange={(event) => setSpaceType(event.target.value)}
                                             required
-                                            className="w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
+                                            className="interactive-field w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
                                         >
                                             <option value="">Select type</option>
                                             <option value="Cafe">Cafe</option>
@@ -392,7 +400,7 @@ export default function ListYourSpacePage() {
                                             maxLength={4000}
                                             rows={5}
                                             placeholder="Tell us about the vibe of your space, available amenities (Wi-Fi, AC, projectors), and parking availability."
-                                            className="w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta resize-y transition-colors"
+                                            className="interactive-field w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta resize-y transition-colors"
                                         />
                                     </div>
 
@@ -407,7 +415,7 @@ export default function ListYourSpacePage() {
                                                 setPortfolioUrl(event.target.value)
                                             }
                                             placeholder="https://instagram.com/yourvenue"
-                                            className="w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
+                                            className="interactive-field w-full bg-cream-50 border border-clay/30 rounded-xl px-4 py-3.5 text-sm font-inter text-dark outline-none focus:border-terracotta transition-colors"
                                         />
                                     </div>
 
@@ -434,7 +442,7 @@ export default function ListYourSpacePage() {
                             )}
                         </>
                     )}
-                </div>
+                </ScrollReveal>
             </section>
 
             <Footer />

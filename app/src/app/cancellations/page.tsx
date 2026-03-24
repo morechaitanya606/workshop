@@ -19,12 +19,28 @@ export default function CancellationsPage() {
                 </div>
                 <ul className="space-y-2 ml-8 list-disc marker:text-terracotta/40">
                     <li>
-                        Once a booking is confirmed, it is <strong>final and non-refundable</strong>
-                        .
+                        Once a booking is confirmed, it is generally <strong>non-refundable</strong>
+                        , except where a specific refund path is stated below (such as the Early
+                        Bird refund policy).
                     </li>
                     <li>
-                        We do not offer cancellations, refunds, or rescheduling for any reason,
-                        including personal emergencies or changes in plans.
+                        Workshops are typically listed <strong>7 days before the event</strong>, and
+                        the <strong>Early Bird window</strong> covers the first{" "}
+                        <strong>2 days after listing goes live</strong>.
+                    </li>
+                    <li>
+                        If you booked during that Early Bird window and submit a cancellation
+                        request <strong>only in 24 hours you can cancel </strong>, up to{" "}
+                        <strong>80% of the booking amount</strong> may be refunded.
+                    </li>
+                    <li>
+                        After the Early Bird window ends, you may still request a refund if the
+                        workshop is more than 48 hours away, but approval is{" "}
+                        <strong>case by case and not guaranteed</strong>.
+                    </li>
+                    <li>
+                        Within <strong>48 hours of the workshop start time</strong>, bookings are{" "}
+                        <strong>not cancellable and not refundable</strong>.
                     </li>
                 </ul>
             </section>
@@ -53,18 +69,14 @@ export default function CancellationsPage() {
                 </div>
                 <ul className="space-y-2 ml-8 list-disc marker:text-terracotta/40">
                     <li>
-                        Refunds are only applicable if your booking was made with an{" "}
-                        <strong>Early Bird Offer</strong> and only if the cancellation request is
-                        made <strong>at least 48 hours before the event</strong>.
-                    </li>
-                    <li>
-                        If 48 hours have passed or the booking was not an early bird offer,{" "}
-                        <strong>no refund will be processed</strong>.
-                    </li>
-                    <li>
                         Approved refunds are processed back to the original payment method (Bank
-                        Account / UPI / Card) within <strong>5–7 business days</strong> from the
+                        Account / UPI / Card) within <strong>5-7 business days</strong> from the
                         date of approval.
+                    </li>
+                    <li>
+                        If your request needs manual review, our team will assess it based on the
+                        booking window, cancellation timing, and workshop status before confirming
+                        whether any refund can be issued.
                     </li>
                 </ul>
             </section>

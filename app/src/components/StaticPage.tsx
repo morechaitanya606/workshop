@@ -1,10 +1,12 @@
 "use client";
 
+import { Children } from "react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { RevealGroup, RevealItem } from "@/components/ui";
 import { fadeUp, standardTransition, revealViewport } from "@/lib/motion-presets";
 
 interface StaticPageProps {
@@ -16,6 +18,7 @@ interface StaticPageProps {
 
 export default function StaticPage({ title, description, icon, children }: StaticPageProps) {
     const prefersReducedMotion = useReducedMotion();
+    const childSections = Children.toArray(children);
 
     return (
         <main className="min-h-screen bg-cream">
@@ -38,15 +41,23 @@ export default function StaticPage({ title, description, icon, children }: Stati
                         <p className="text-body text-dark-muted mb-8">{description}</p>
                     </motion.div>
 
-                    {children ? (
-                        <div className="space-y-6">
-                            {/* Each child section gets a left border + subtle bg for better scanability */}
-                            <div className="space-y-5 text-body text-dark-secondary [&>section]:border-l-4 [&>section]:border-terracotta/20 [&>section]:bg-white/50 [&>section]:rounded-xl [&>section]:p-6 [&>section]:pl-5">
-                                {children}
-                            </div>
-                        </div>
+                    {childSections.length > 0 ? (
+                        <RevealGroup
+                            className="space-y-5 text-body text-dark-secondary"
+                            stagger={0.1}
+                        >
+                            {childSections.map((child, index) => (
+                                <RevealItem
+                                    key={index}
+                                    className="rounded-2xl border-l-4 border-terracotta/20 bg-white/70 p-6 pl-5 shadow-soft"
+                                    preset={index % 2 === 0 ? "fade-up" : "slide-right"}
+                                >
+                                    {child}
+                                </RevealItem>
+                            ))}
+                        </RevealGroup>
                     ) : (
-                        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-6">
+                        <div className="interactive-surface bg-white rounded-2xl border border-gray-100 shadow-soft p-6">
                             <p className="text-body text-dark-muted">
                                 This page is being prepared for launch.
                             </p>

@@ -123,3 +123,37 @@ export function getRazorpayConfig() {
 export function getRazorpayWebhookSecret() {
     return required("RAZORPAY_WEBHOOK_SECRET");
 }
+
+function assertProductionEnv() {
+    if (process.env.NODE_ENV !== "production") {
+        return;
+    }
+
+    const missing: string[] = [];
+    const publicSupabaseKey =
+        publicEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? publicEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!publicEnv.NEXT_PUBLIC_SUPABASE_URL) {
+        missing.push("NEXT_PUBLIC_SUPABASE_URL");
+    }
+    if (!publicSupabaseKey) {
+        missing.push("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY)");
+    }
+    if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+        missing.push("SUPABASE_SERVICE_ROLE_KEY");
+    }
+    if (!env.RAZORPAY_KEY_ID) {
+        missing.push("RAZORPAY_KEY_ID");
+    }
+    if (!env.RAZORPAY_KEY_SECRET) {
+        missing.push("RAZORPAY_KEY_SECRET");
+    }
+
+    if (missing.length > 0) {
+        throw new Error(
+            `Missing required production environment variable(s): ${missing.join(", ")}`
+        );
+    }
+}
+
+assertProductionEnv();

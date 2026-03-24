@@ -19,11 +19,11 @@ const DEFAULT_FAQS = [
     },
     {
         question: "What if I need to cancel or reschedule?",
-        answer: "You can cancel up to 24 hours before the workshop for a full refund. For rescheduling, please reach out to us and we'll do our best to accommodate your request.",
+        answer: "Bookings are generally non-refundable. If you booked during the first 2 days after a workshop was listed, you may be eligible for up to an 80% refund as long as you cancel more than 48 hours before the session. After that, refund requests are reviewed case by case and are not guaranteed, and there are no cancellations or refunds within 48 hours of the workshop. Host cancellations are always fully refunded.",
     },
     {
         question: "Can I bring a friend who hasn't booked?",
-        answer: "Each attendee needs their own booking to participate. You can easily book multiple spots when reserving — just increase the guest count!",
+        answer: "Each attendee needs their own booking to participate. You can easily book multiple spots when reserving. Just increase the guest count.",
     },
 ];
 

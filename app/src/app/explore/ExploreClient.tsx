@@ -532,6 +532,7 @@ export default function ExploreClient({
                     mockBannerMotionProps={mockBannerMotionProps}
                     workshops={workshops}
                     clearFilters={clearFilters}
+                    onRetry={() => router.refresh()}
                     gridKey={gridKey}
                     gridMotionProps={gridMotionProps}
                     prefersReducedMotion={prefersReducedMotion}

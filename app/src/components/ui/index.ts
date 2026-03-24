@@ -4,6 +4,8 @@ export * from "./card";
 export * from "./chip";
 export * from "./dialog";
 export * from "./pill";
+export * from "./RevealGroup";
 export * from "./section-header";
 export * from "./sheet";
+export * from "./skeleton";
 export * from "./stat";

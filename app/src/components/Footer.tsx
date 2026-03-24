@@ -1,16 +1,17 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Phone, Instagram } from "lucide-react";
+import { RevealGroup, RevealItem } from "@/components/ui";
 
 export default function Footer() {
     return (
         <footer className="bg-cream-100 border-t border-clay/30 mt-20">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-10">
+            <RevealGroup className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-10">
+                <RevealItem className="col-span-2 sm:col-span-2 lg:col-span-1">
                     {/* Brand */}
-                    <div className="col-span-2 sm:col-span-2 lg:col-span-1">
+                    <div>
                         <Link href="/" className="flex items-center gap-2.5 mb-4">
-                            <div className="relative w-8 h-8 rounded-lg overflow-hidden">
+                            <div className="interactive-surface relative w-8 h-8 rounded-lg overflow-hidden">
                                 <Image
                                     src="/images/logo-black.jpeg"
                                     alt="Only Workshops"
@@ -30,14 +31,14 @@ export default function Footer() {
                         <div className="mt-4 space-y-2">
                             <a
                                 href="tel:+917028478109"
-                                className="flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta transition-colors duration-300"
+                                className="interactive-link flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta"
                             >
                                 <Phone className="w-4 h-4" />
                                 +91 70284 78109
                             </a>
                             <a
                                 href="tel:+919623818909"
-                                className="flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta transition-colors duration-300"
+                                className="interactive-link flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta"
                             >
                                 <Phone className="w-4 h-4" />
                                 +91 96238 18909
@@ -46,14 +47,16 @@ export default function Footer() {
                                 href="https://www.instagram.com/only_workshops"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta transition-colors duration-300"
+                                className="interactive-link flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta"
                             >
                                 <Instagram className="w-4 h-4" />
                                 @only_workshops
                             </a>
                         </div>
                     </div>
+                </RevealItem>
 
+                <RevealItem>
                     {/* Company */}
                     <div>
                         <h4 className="font-inter text-xs font-bold tracking-widest uppercase text-dark mb-5">
@@ -69,7 +72,7 @@ export default function Footer() {
                                 <li key={item.label}>
                                     <Link
                                         href={item.href}
-                                        className="text-sm font-inter text-dark-muted hover:text-terracotta transition-colors duration-300"
+                                        className="interactive-link text-sm font-inter text-dark-muted hover:text-terracotta"
                                     >
                                         {item.label}
                                     </Link>
@@ -77,7 +80,9 @@ export default function Footer() {
                             ))}
                         </ul>
                     </div>
+                </RevealItem>
 
+                <RevealItem>
                     {/* Support */}
                     <div>
                         <h4 className="font-inter text-xs font-bold tracking-widest uppercase text-dark mb-5">
@@ -93,7 +98,7 @@ export default function Footer() {
                                 <li key={item.label}>
                                     <Link
                                         href={item.href}
-                                        className="text-sm font-inter text-dark-muted hover:text-terracotta transition-colors duration-300"
+                                        className="interactive-link text-sm font-inter text-dark-muted hover:text-terracotta"
                                     >
                                         {item.label}
                                     </Link>
@@ -101,35 +106,45 @@ export default function Footer() {
                             ))}
                         </ul>
                     </div>
-                </div>
-            </div>
+                </RevealItem>
+            </RevealGroup>
 
             {/* Bottom bar */}
             <div className="border-t border-clay/30">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0">
-                    <p className="text-xs font-inter text-dark-muted sm:w-1/3 text-center sm:text-left text-balance">
-                        &copy; {new Date().getFullYear()} Only Workshops Inc. All rights reserved.
-                    </p>
-                    <p className="text-xs font-inter font-medium text-dark-muted tracking-wide sm:w-1/3 text-center">
-                        Only Workshops <span className="text-terracotta px-1">|</span> Experiential
-                        Learning
-                    </p>
-                    <div className="flex items-center justify-center sm:justify-end gap-6 sm:w-1/3">
-                        {[
-                            { label: "Privacy", href: "/legal/privacy" },
-                            { label: "Terms", href: "/legal/terms" },
-                            { label: "Sitemap", href: "/sitemap" },
-                        ].map((item) => (
-                            <Link
-                                key={item.label}
-                                href={item.href}
-                                className="text-xs font-inter text-dark-muted hover:text-terracotta transition-colors"
-                            >
-                                {item.label}
-                            </Link>
-                        ))}
-                    </div>
-                </div>
+                <RevealGroup
+                    className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0"
+                    stagger={0.05}
+                >
+                    <RevealItem className="sm:w-1/3">
+                        <p className="text-xs font-inter text-dark-muted text-center sm:text-left text-balance">
+                            &copy; {new Date().getFullYear()} Only Workshops Inc. All rights
+                            reserved.
+                        </p>
+                    </RevealItem>
+                    <RevealItem className="sm:w-1/3">
+                        <p className="text-xs font-inter font-medium text-dark-muted tracking-wide text-center">
+                            Only Workshops <span className="text-terracotta px-1">|</span>{" "}
+                            Experiential Learning
+                        </p>
+                    </RevealItem>
+                    <RevealItem className="sm:w-1/3">
+                        <div className="flex items-center justify-center sm:justify-end gap-6">
+                            {[
+                                { label: "Privacy", href: "/legal/privacy" },
+                                { label: "Terms", href: "/legal/terms" },
+                                { label: "Sitemap", href: "/sitemap" },
+                            ].map((item) => (
+                                <Link
+                                    key={item.label}
+                                    href={item.href}
+                                    className="interactive-link text-xs font-inter text-dark-muted hover:text-terracotta"
+                                >
+                                    {item.label}
+                                </Link>
+                            ))}
+                        </div>
+                    </RevealItem>
+                </RevealGroup>
             </div>
         </footer>
     );

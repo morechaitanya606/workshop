@@ -36,14 +36,10 @@ function buildWorkshop(overrides: Partial<Workshop> = {}): Workshop {
 
 describe("resolveSupportChatReply", () => {
     it("returns a personalized workshop list for general discovery questions", () => {
-        const result = resolveSupportChatReply(
-            "What workshops are available this week?",
-            mockWorkshops,
-            {
-                userDisplayName: "Chait",
-                today: FIXED_TODAY,
-            }
-        );
+        const result = resolveSupportChatReply("What workshops are available?", mockWorkshops, {
+            userDisplayName: "Chait",
+            today: FIXED_TODAY,
+        });
 
         expect(result.reply).toContain("Chait");
         expect(result.reply).toContain("1.");
