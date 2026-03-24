@@ -9,7 +9,6 @@ interface BookingConfirmationEmailProps {
     time: string;
     location: string;
     guests: number;
-    bookingId: string;
 }
 
 export function BookingConfirmationEmail({
@@ -19,7 +18,6 @@ export function BookingConfirmationEmail({
     time,
     location,
     guests,
-    bookingId,
 }: BookingConfirmationEmailProps) {
     const previewText = `Your booking for ${workshopTitle} is confirmed!`;
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";

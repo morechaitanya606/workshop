@@ -1,5 +1,4 @@
 import { Resend } from "resend";
-import { render } from "@react-email/render";
 import { BookingConfirmationEmail } from "@/emails/BookingConfirmation";
 import { WorkshopReminderEmail } from "@/emails/WorkshopReminder";
 import { FeedbackRequestEmail } from "@/emails/FeedbackRequest";
@@ -133,7 +132,6 @@ export async function sendBookingConfirmation(bookingId: string) {
             time: workshop.time,
             location: workshop.location,
             guests: booking.guests,
-            bookingId: booking.id,
         }) as React.ReactElement,
     });
 }

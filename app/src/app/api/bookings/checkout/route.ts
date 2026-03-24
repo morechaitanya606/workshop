@@ -292,7 +292,6 @@ export async function POST(request: NextRequest) {
         const subtotalOriginal = pricePerGuestBeforeCoupon * Number(hold.guests || 0);
 
         let discountAmount = 0;
-        let appliedCouponId: string | null = null;
 
         if (payload.couponCode) {
             const code = payload.couponCode.toUpperCase();
@@ -318,7 +317,6 @@ export async function POST(request: NextRequest) {
                     } else {
                         discountAmount = coupon.discount_value;
                     }
-                    appliedCouponId = coupon.id;
                 }
             }
         }

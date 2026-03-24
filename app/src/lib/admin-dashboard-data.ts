@@ -26,7 +26,7 @@ type RatingRow = {
     rating: Tables<"workshop_feedback">["rating"] | null;
 };
 
-export async function loadAdminDashboardData(supabase: AdminDashboardSupabaseClient): Promise<{
+export async function loadAdminDashboardData(_supabase: AdminDashboardSupabaseClient): Promise<{
     stats: AdminDashboardStats;
     workshops: Workshop[];
     applications: AdminHostApplication[];

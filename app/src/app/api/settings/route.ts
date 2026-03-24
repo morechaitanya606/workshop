@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase-server";
 import { requireAdminUser, jsonError } from "@/lib/api-auth";
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
     try {
         const supabase = createSupabaseServiceClient();
         const { data, error } = await supabase.from("platform_settings").select("*");

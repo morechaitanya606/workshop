@@ -10,7 +10,6 @@ import {
     CreditCard,
     CalendarX,
     AlertTriangle,
-    ChevronRight,
     CheckCircle,
     Loader2,
 } from "lucide-react";

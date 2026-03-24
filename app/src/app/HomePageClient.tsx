@@ -8,7 +8,6 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
 import HeroSection from "@/components/home/HeroSection";
-import WorkshopBrowseSection from "@/components/home/WorkshopBrowseSection";
 import WorkshopGridSection from "@/components/home/WorkshopGridSection";
 import PastEventHighlight from "@/components/home/PastEventHighlight";
 import HowItWorksSection from "@/components/home/HowItWorksSection";

@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { BellRing, ChevronRight, Images } from "lucide-react";
+import { BellRing, Images } from "lucide-react";
 import type { Workshop } from "@/lib/data";
 import { cardReveal, standardTransition, useMotionProps } from "@/lib/motion-presets";
 import { formatDate } from "@/lib/utils";

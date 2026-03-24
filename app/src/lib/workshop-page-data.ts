@@ -132,7 +132,6 @@ export async function loadExploreWorkshops(searchParams: {
             }
             const isPastEventsCategory =
                 query.category.toLowerCase() === PAST_EVENTS_CATEGORY_LABEL.toLowerCase();
-            const hasDateFilter = Boolean(query.dateFrom || query.dateTo);
             if (query.category && !isPastEventsCategory) {
                 dbQuery = dbQuery.eq("category", query.category);
             }
