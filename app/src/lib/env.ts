@@ -124,11 +124,7 @@ export function getRazorpayWebhookSecret() {
     return required("RAZORPAY_WEBHOOK_SECRET");
 }
 
-function assertProductionEnv() {
-    if (process.env.NODE_ENV !== "production") {
-        return;
-    }
-
+export function getMissingProductionEnvVars() {
     const missing: string[] = [];
     const publicSupabaseKey =
         publicEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? publicEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -149,11 +145,18 @@ function assertProductionEnv() {
         missing.push("RAZORPAY_KEY_SECRET");
     }
 
+    return missing;
+}
+
+export function assertProductionEnv() {
+    if (process.env.NODE_ENV !== "production") {
+        return;
+    }
+
+    const missing = getMissingProductionEnvVars();
     if (missing.length > 0) {
         throw new Error(
             `Missing required production environment variable(s): ${missing.join(", ")}`
         );
     }
 }
-
-assertProductionEnv();
