@@ -28,6 +28,7 @@ export default function Navbar() {
     const searchContainerRef = useRef<HTMLDivElement | null>(null);
     const pathname = usePathname();
     const { user, role, roleLoading, loading, signOut } = useAuth();
+    const isHomePage = pathname === "/";
 
     const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => {
         const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
@@ -85,10 +86,12 @@ export default function Navbar() {
                 initial={{ y: -100 }}
                 animate={{ y: 0 }}
                 transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
+                className={`fixed top-0 left-0 right-0 z-[80] border-b border-black/5 transition-all duration-500 ${
                     isScrolled
-                        ? "bg-cream/95 backdrop-blur-xl shadow-soft py-3"
-                        : "bg-transparent py-5"
+                        ? "bg-cream/96 backdrop-blur-xl shadow-soft py-3"
+                        : isHomePage
+                          ? "bg-cream/88 backdrop-blur-lg shadow-[0_10px_30px_-22px_rgba(0,0,0,0.5)] py-4"
+                          : "bg-cream/92 backdrop-blur-lg shadow-soft py-4"
                 }`}
             >
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -218,13 +221,9 @@ export default function Navbar() {
                             className="md:hidden p-2 rounded-xl hover:bg-clay/30 transition-colors"
                         >
                             {isMobileMenuOpen ? (
-                                <X
-                                    className={`w-6 h-6 ${isScrolled ? "text-dark" : "text-white"}`}
-                                />
+                                <X className="w-6 h-6 text-dark" />
                             ) : (
-                                <Menu
-                                    className={`w-6 h-6 ${isScrolled ? "text-dark" : "text-white"}`}
-                                />
+                                <Menu className="w-6 h-6 text-dark" />
                             )}
                         </button>
                     </div>

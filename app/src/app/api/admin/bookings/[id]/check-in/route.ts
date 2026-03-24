@@ -1,10 +1,9 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { handleApiError } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
-import { requireHostOrAdmin } from "@/lib/api-auth";
-import { getWorkshopOwnerLookup } from "@/lib/workshop-attendees";
-import { z } from "zod";
+import { requireAdminUser } from "@/lib/api-auth";
 
 const checkInSchema = z.object({
     attended: z.boolean(),
@@ -33,7 +32,7 @@ function isMissingAttendedColumnError(error: unknown) {
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
-    const auth = await requireHostOrAdmin(request);
+    const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
     }
@@ -56,7 +55,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
         const { data: booking, error: fetchError } = await serviceClient
             .from("bookings")
-            .select("id, workshop_id")
+            .select("id")
             .eq("id", params.id)
             .maybeSingle();
 
@@ -64,21 +63,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             return NextResponse.json(
                 { error: "Booking not found", success: false },
                 { status: 404 }
-            );
-        }
-
-        const workshop = await getWorkshopOwnerLookup(serviceClient, booking.workshop_id);
-        if (!workshop.exists) {
-            return NextResponse.json(
-                { error: "Workshop not found", success: false },
-                { status: 404 }
-            );
-        }
-
-        if (auth.role !== "admin" && workshop.ownerUserId !== auth.user.id) {
-            return NextResponse.json(
-                { error: "Unauthorized access", success: false },
-                { status: 403 }
             );
         }
 

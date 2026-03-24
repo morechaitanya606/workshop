@@ -2,7 +2,7 @@ import type { User } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/core";
-import type { Tables } from "@/lib/database.types";
+import type { Tables, TablesInsert } from "@/lib/database.types";
 import {
     createSupabaseAnonServerClient,
     createSupabaseServiceClient,
@@ -224,21 +224,43 @@ export async function ensureUserProfile(user: User) {
 
     try {
         const metadata = (user.user_metadata || {}) as Record<string, unknown>;
+        const fullName =
+            typeof metadata.full_name === "string" && metadata.full_name.trim()
+                ? metadata.full_name.trim()
+                : null;
+        const avatarUrl =
+            typeof metadata.avatar_url === "string" && metadata.avatar_url.trim()
+                ? metadata.avatar_url.trim()
+                : null;
         const dateOfBirth =
-            typeof metadata.date_of_birth === "string" ? metadata.date_of_birth : null;
+            typeof metadata.date_of_birth === "string" && metadata.date_of_birth.trim()
+                ? metadata.date_of_birth.trim()
+                : null;
         const phoneNumber =
-            typeof metadata.phone_number === "string" ? metadata.phone_number : user.phone || null;
+            typeof metadata.phone_number === "string" && metadata.phone_number.trim()
+                ? metadata.phone_number.trim()
+                : typeof user.phone === "string" && user.phone.trim()
+                  ? user.phone.trim()
+                  : null;
+        const profileSeed: TablesInsert<"profiles"> = {
+            id: user.id,
+        };
+
+        if (fullName) {
+            profileSeed.full_name = fullName;
+        }
+        if (avatarUrl) {
+            profileSeed.avatar_url = avatarUrl;
+        }
+        if (dateOfBirth) {
+            profileSeed.date_of_birth = dateOfBirth;
+        }
+        if (phoneNumber) {
+            profileSeed.phone_number = phoneNumber;
+        }
+
         const serviceClient = createSupabaseServiceClient();
-        await serviceClient.from("profiles").upsert(
-            {
-                id: user.id,
-                full_name: user.user_metadata?.full_name || null,
-                avatar_url: user.user_metadata?.avatar_url || null,
-                date_of_birth: dateOfBirth,
-                phone_number: phoneNumber,
-            },
-            { onConflict: "id" }
-        );
+        await serviceClient.from("profiles").upsert(profileSeed, { onConflict: "id" });
     } catch {
         // Non-blocking: profile table may not exist yet.
     }

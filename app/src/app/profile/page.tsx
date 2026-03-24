@@ -391,25 +391,63 @@ export default function ProfilePage() {
         updateDraft(bookingId, { photos: newPhotos });
     };
 
+    const syncProfileAvatar = async (nextAvatar: string | null) => {
+        if (!session?.access_token) return nextAvatar;
+
+        const result = await updateProfile(session.access_token, {
+            avatarUrl: nextAvatar || "",
+        });
+
+        if (isSupabaseConfigured) {
+            await supabase.auth.updateUser({
+                data: {
+                    avatar_url: nextAvatar || null,
+                },
+            });
+        }
+
+        return result.profile.avatarUrl || null;
+    };
+
     const handleAvatarUpload = async (event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         event.target.value = "";
         if (!file || !session?.access_token) return;
 
+        const previousAvatar = profileAvatar;
         setAvatarUploading(true);
         setProfileError(null);
+        setProfileMessage(null);
         try {
             const data = await uploadMedia(session.access_token, file);
             setProfileAvatar(data.url);
+            const persistedAvatar = await syncProfileAvatar(data.url);
+            setProfileAvatar(persistedAvatar);
+            setProfileMessage("Profile photo updated.");
         } catch (error) {
+            setProfileAvatar(previousAvatar);
             setProfileError(toApiErrorMessage(error, "Unable to upload profile photo."));
         } finally {
             setAvatarUploading(false);
         }
     };
 
-    const handleRemoveAvatar = () => {
+    const handleRemoveAvatar = async () => {
+        if (!session?.access_token) return;
+
+        const previousAvatar = profileAvatar;
         setProfileAvatar(null);
+        setProfileError(null);
+        setProfileMessage(null);
+
+        try {
+            const persistedAvatar = await syncProfileAvatar(null);
+            setProfileAvatar(persistedAvatar);
+            setProfileMessage("Profile photo removed.");
+        } catch (error) {
+            setProfileAvatar(previousAvatar);
+            setProfileError(toApiErrorMessage(error, "Unable to remove profile photo."));
+        }
     };
 
     const handleSaveProfile = async () => {

@@ -107,6 +107,37 @@ export async function askSupportChatbot(payload: {
     };
 }
 
+export type SupportTicket = {
+    id: string;
+    subject: string;
+    description: string;
+    email: string;
+    status: "open" | "in_progress" | "resolved";
+    created_at: string;
+    workshop_id?: string | null;
+    workshop?: {
+        id: string;
+        title: string;
+    } | null;
+    replies: Array<{
+        id: string;
+        message: string;
+        author: "admin" | "user";
+        created_at: string;
+    }>;
+};
+
+export type SupportTicketsResponse = {
+    tickets: SupportTicket[];
+};
+
+export function getSupportTickets(accessToken: string) {
+    return apiRequest<SupportTicketsResponse>("/api/support", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
 export type BookingHoldResponse = {
     hold: {
         id: string;
@@ -329,6 +360,85 @@ export function toApiErrorMessage(error: unknown, fallbackMessage: string) {
         return error.message || fallbackMessage;
     }
     return fallbackMessage;
+}
+
+export type PlatformSettings = {
+    service_fee?: number;
+};
+
+export type PlatformSettingsResponse = {
+    settings: PlatformSettings;
+};
+
+export function getPlatformSettings(accessToken?: string) {
+    return apiRequest<PlatformSettingsResponse>("/api/settings", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function updatePlatformSettings(
+    accessToken: string,
+    payload: {
+        settings: PlatformSettings;
+    }
+) {
+    return apiRequest<{ success: boolean }>("/api/settings", {
+        method: "PATCH",
+        accessToken,
+        body: payload,
+    });
+}
+
+export type AdminCoupon = {
+    id: string;
+    code: string;
+    discount_type: "percentage" | "fixed";
+    discount_value: number;
+    is_active: boolean | null;
+    used_count: number | null;
+    valid_until: string | null;
+    created_at: string | null;
+};
+
+export type AdminCouponsResponse = {
+    coupons: AdminCoupon[];
+};
+
+export function getAdminCoupons(accessToken: string) {
+    return apiRequest<AdminCouponsResponse>("/api/coupons", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function createAdminCoupon(
+    accessToken: string,
+    payload: {
+        code: string;
+        discount_type: AdminCoupon["discount_type"];
+        discount_value: number;
+    }
+) {
+    return apiRequest<{ coupon: AdminCoupon }>("/api/coupons", {
+        method: "POST",
+        accessToken,
+        body: payload,
+    });
+}
+
+export function updateAdminCoupon(
+    accessToken: string,
+    couponId: string,
+    payload: {
+        is_active: boolean;
+    }
+) {
+    return apiRequest<{ coupon: AdminCoupon }>(`/api/coupons/${couponId}`, {
+        method: "PATCH",
+        accessToken,
+        body: payload,
+    });
 }
 
 export type EventProperties = Record<string, Primitive>;
@@ -888,4 +998,62 @@ export function getHostWorkshops(accessToken: string) {
         accessToken,
         cache: "no-store",
     });
+}
+
+export type WorkshopAttendee = {
+    id: string;
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string | null;
+    guests: number;
+    attended: boolean;
+    status?: string;
+    created_at?: string;
+};
+
+export type WorkshopAttendeesResponse = {
+    success: boolean;
+    attendees: WorkshopAttendee[];
+};
+
+type DashboardScope = "admin" | "host";
+
+function getWorkshopAttendeesPath(workshopId: string, scope: DashboardScope) {
+    return scope === "admin"
+        ? `/api/admin/workshops/${workshopId}/attendees`
+        : `/api/host/workshops/${workshopId}/attendees`;
+}
+
+function getWorkshopAttendeeCheckInPath(bookingId: string, scope: DashboardScope) {
+    return scope === "admin"
+        ? `/api/admin/bookings/${bookingId}/check-in`
+        : `/api/host/bookings/${bookingId}/check-in`;
+}
+
+export function getWorkshopAttendees(
+    accessToken: string,
+    workshopId: string,
+    scope: DashboardScope = "host"
+) {
+    return apiRequest<WorkshopAttendeesResponse>(getWorkshopAttendeesPath(workshopId, scope), {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function updateWorkshopAttendeeCheckIn(
+    accessToken: string,
+    bookingId: string,
+    attended: boolean,
+    scope: DashboardScope = "host"
+) {
+    return apiRequest<{ success: boolean; attended: boolean }>(
+        getWorkshopAttendeeCheckInPath(bookingId, scope),
+        {
+            method: "PATCH",
+            accessToken,
+            body: { attended },
+        }
+    );
 }

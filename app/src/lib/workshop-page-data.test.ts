@@ -260,6 +260,30 @@ describe("workshop-page-data", () => {
         expect(mockState.warnDevFallback).not.toHaveBeenCalled();
     });
 
+    it("normalizes known category ids before filtering explore workshops", async () => {
+        const exploreChain = createExploreChain(
+            Promise.resolve({
+                data: [{ id: "explore-1", title: "Explore Workshop" }],
+                error: null,
+                count: 1,
+            })
+        );
+
+        mockState.createSupabaseServiceClient.mockReturnValue({
+            from: vi.fn(() => ({
+                select: vi.fn(() => exploreChain),
+            })),
+        });
+
+        await loadExploreWorkshops({
+            category: "pottery",
+            page: "1",
+            pageSize: "8",
+        });
+
+        expect(exploreChain.eq).toHaveBeenCalledWith("category", "Pottery");
+    });
+
     it("falls back to mock explore workshops in development when Supabase times out", async () => {
         const timeoutError = new Error("Explore timeout");
         const exploreChain = createExploreChain(Promise.reject(timeoutError));

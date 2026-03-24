@@ -15,69 +15,6 @@ const hostApplicationSchema = z.object({
     details: z.any().default({}),
 });
 
-async function ensureHostProfileAndRecord(
-    service: ReturnType<typeof requireSupabaseService>,
-    userId: string,
-    application: {
-        name: string;
-        bio: string;
-        portfolio_url: string | null;
-    }
-) {
-    if (!service.ok) {
-        return;
-    }
-
-    const client = service.client;
-
-    const { error: profileError } = await client
-        .from("profiles")
-        .update({ role: "host" })
-        .eq("id", userId);
-
-    if (profileError) {
-        throw profileError;
-    }
-
-    const { data: existingHost, error: existingHostError } = await client
-        .from("hosts")
-        .select("id")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-    if (existingHostError) {
-        throw existingHostError;
-    }
-
-    if (existingHost?.id) {
-        const { error: hostUpdateError } = await client
-            .from("hosts")
-            .update({
-                name: application.name,
-                bio: application.bio,
-                social_links: application.portfolio_url
-                    ? { website: application.portfolio_url }
-                    : {},
-            })
-            .eq("id", existingHost.id);
-
-        if (hostUpdateError) {
-            throw hostUpdateError;
-        }
-    } else {
-        const { error: hostInsertError } = await client.from("hosts").insert({
-            user_id: userId,
-            name: application.name,
-            bio: application.bio,
-            social_links: application.portfolio_url ? { website: application.portfolio_url } : {},
-        });
-
-        if (hostInsertError) {
-            throw hostInsertError;
-        }
-    }
-}
-
 export async function GET(request: NextRequest) {
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
@@ -172,7 +109,7 @@ export async function POST(request: NextRequest) {
             portfolio_url: parsed.data.portfolioUrl || null,
             application_type: parsed.data.applicationType,
             details: parsed.data.details as any,
-            status: "approved" as const,
+            status: "pending" as const,
         };
 
         if (existing?.id) {
@@ -187,15 +124,12 @@ export async function POST(request: NextRequest) {
                 throw error;
             }
 
-            await ensureHostProfileAndRecord(service, auth.user.id, {
-                name: data.name,
-                bio: data.bio,
-                portfolio_url: data.portfolio_url,
-            });
-
             return NextResponse.json({
                 application: data,
-                message: "You are now approved as a host.",
+                message:
+                    existing.status === "rejected"
+                        ? "Application resubmitted for admin review."
+                        : "Application updated and waiting for admin review.",
             });
         }
 
@@ -209,14 +143,8 @@ export async function POST(request: NextRequest) {
             throw error;
         }
 
-        await ensureHostProfileAndRecord(service, auth.user.id, {
-            name: data.name,
-            bio: data.bio,
-            portfolio_url: data.portfolio_url,
-        });
-
         return NextResponse.json(
-            { application: data, message: "You are now approved as a host." },
+            { application: data, message: "Application submitted for admin review." },
             { status: 201 }
         );
     } catch (error) {

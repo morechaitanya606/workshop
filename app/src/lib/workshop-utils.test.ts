@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Tables } from "@/lib/database.types";
-import { mapWorkshopRowToWorkshop, sortWorkshops } from "@/lib/workshop-utils";
+import { mapWorkshopRowToWorkshop, queryMockWorkshops, sortWorkshops } from "@/lib/workshop-utils";
 
 function buildWorkshopRow(overrides: Partial<Tables<"workshops">> = {}): Tables<"workshops"> {
     const row: Tables<"workshops"> = {
@@ -77,5 +77,24 @@ describe("sortWorkshops", () => {
 
         const sorted = sortWorkshops(items, "price_desc");
         expect(sorted.map((item: any) => item.id)).toEqual(["w2", "w3", "w1"]);
+    });
+});
+
+describe("queryMockWorkshops", () => {
+    it("matches known category ids against workshop category labels", () => {
+        const result = queryMockWorkshops({
+            q: "",
+            category: "pottery",
+            city: "",
+            dateFrom: "",
+            dateTo: "",
+            sort: "date_asc",
+            page: 1,
+            pageSize: 8,
+        });
+
+        expect(result.total).toBeGreaterThan(0);
+        expect(result.data.map((item: any) => item.category)).toContain("Pottery");
+        expect(result.data.map((item: any) => item.id)).toContain("1");
     });
 });

@@ -147,7 +147,7 @@ export default function AdminWorkshopsPage() {
                                     </p>
                                     <div className="flex items-center gap-2">
                                         <Link
-                                            href={`/host/workshops/${workshop.id}/attendees`}
+                                            href={`/admin/workshops/${workshop.id}/attendees`}
                                             className="btn-secondary !py-2 !px-4 text-sm"
                                         >
                                             <Users className="w-4 h-4" />

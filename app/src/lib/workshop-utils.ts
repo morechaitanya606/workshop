@@ -1,5 +1,9 @@
 import type { Workshop } from "@/lib/data";
-import { mockWorkshops, PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
+import {
+    mockWorkshops,
+    normalizeFilterCategoryLabel,
+    PAST_EVENTS_CATEGORY_LABEL,
+} from "@/lib/data";
 import type { TablesInsert, Json } from "@/lib/database.types";
 import type { SupabaseServerClient } from "@/lib/supabase-server";
 import type { WorkshopCreateInput, WorkshopQueryInput } from "@/lib/validators";
@@ -176,7 +180,7 @@ export function buildWorkshopInsertPayload(
 
 function matchesWorkshopQuery(workshop: Workshop, query: WorkshopQueryInput) {
     const q = query.q.toLowerCase().trim();
-    const category = query.category.toLowerCase().trim();
+    const category = normalizeFilterCategoryLabel(query.category).toLowerCase().trim();
     const city = query.city.toLowerCase().trim();
     const isPastEventsCategory = category === PAST_EVENTS_CATEGORY_LABEL.toLowerCase();
     const today = new Date().toISOString().slice(0, 10);

@@ -1,410 +1,495 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { Loader2, Plus, Tag, ToggleLeft, ToggleRight, ArrowLeft } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { IndianRupee, Loader2, Plus, Tag, ToggleLeft, ToggleRight } from "lucide-react";
+import AdminShell from "@/components/admin/AdminShell";
+import { Stat } from "@/components/ui";
+import {
+    createAdminCoupon,
+    getAdminCoupons,
+    getPlatformSettings,
+    toApiErrorMessage,
+    updateAdminCoupon,
+    updatePlatformSettings,
+    type AdminCoupon,
+    type PlatformSettings,
+} from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { formatCurrency } from "@/lib/utils";
 
-type PlatformSettings = {
-    service_fee?: number;
-};
+const DEFAULT_SERVICE_FEE = 99;
 
-type Coupon = {
-    id: string;
-    code: string;
-    discount_type: "percentage" | "fixed";
-    discount_value: number;
+type CouponRecord = Omit<AdminCoupon, "is_active" | "used_count"> & {
     is_active: boolean;
     used_count: number;
-    valid_until: string | null;
-    created_at: string;
 };
+
+type CouponFormState = {
+    code: string;
+    discount_type: "percentage" | "fixed";
+    discount_value: string;
+};
+
+const INITIAL_COUPON_FORM: CouponFormState = {
+    code: "",
+    discount_type: "percentage",
+    discount_value: "",
+};
+
+function normalizeCoupon(coupon: AdminCoupon): CouponRecord {
+    return {
+        ...coupon,
+        is_active: coupon.is_active ?? false,
+        used_count: coupon.used_count ?? 0,
+    };
+}
 
 export default function AdminSettingsPage() {
     const { session } = useAuth();
-    const accessToken = session?.access_token;
     const [settings, setSettings] = useState<PlatformSettings>({});
-    const [coupons, setCoupons] = useState<Coupon[]>([]);
+    const [coupons, setCoupons] = useState<CouponRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [reloadKey, setReloadKey] = useState(0);
 
-    const [feeInput, setFeeInput] = useState("");
+    const [feeInput, setFeeInput] = useState(String(DEFAULT_SERVICE_FEE));
     const [savingSettings, setSavingSettings] = useState(false);
-    const [settingsMsg, setSettingsMsg] = useState("");
+    const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
 
     const [creatingCoupon, setCreatingCoupon] = useState(false);
-    const [couponMsg, setCouponMsg] = useState("");
-    const [newCoupon, setNewCoupon] = useState({
-        code: "",
-        discount_type: "percentage" as "percentage" | "fixed",
-        discount_value: "",
-    });
+    const [couponMsg, setCouponMsg] = useState<string | null>(null);
+    const [updatingCouponId, setUpdatingCouponId] = useState<string | null>(null);
+    const [newCoupon, setNewCoupon] = useState<CouponFormState>(INITIAL_COUPON_FORM);
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const headers: Record<string, string> = {};
-                if (accessToken) {
-                    headers["Authorization"] = `Bearer ${accessToken}`;
-                }
+        if (!session?.access_token) return;
 
-                const [settingsRes, couponsRes] = await Promise.all([
-                    fetch("/api/settings", { headers }),
-                    fetch("/api/coupons", { headers }),
+        let cancelled = false;
+
+        const loadSettingsData = async () => {
+            setLoading(true);
+            setError(null);
+
+            try {
+                const [settingsResult, couponsResult] = await Promise.all([
+                    getPlatformSettings(session.access_token),
+                    getAdminCoupons(session.access_token),
                 ]);
 
-                if (settingsRes.ok) {
-                    const data = await settingsRes.json();
-                    setSettings(data.settings);
-                    setFeeInput((data.settings.service_fee || "").toString());
-                }
+                if (cancelled) return;
 
-                if (couponsRes.ok) {
-                    const data = await couponsRes.json();
-                    setCoupons(data.coupons);
+                const nextSettings = settingsResult.settings || {};
+                const rawFee = Number(nextSettings.service_fee);
+                setSettings(nextSettings);
+                setFeeInput(
+                    Number.isFinite(rawFee) && rawFee >= 0
+                        ? String(rawFee)
+                        : String(DEFAULT_SERVICE_FEE)
+                );
+                setCoupons(
+                    Array.isArray(couponsResult.coupons)
+                        ? couponsResult.coupons.map(normalizeCoupon)
+                        : []
+                );
+            } catch (loadError) {
+                if (!cancelled) {
+                    setError(
+                        toApiErrorMessage(loadError, "Unable to load platform settings right now.")
+                    );
                 }
-            } catch (error) {
-                console.error("Failed to load settings data", error);
             } finally {
-                setLoading(false);
+                if (!cancelled) {
+                    setLoading(false);
+                }
             }
         };
 
-        void fetchData();
-    }, [accessToken]);
+        void loadSettingsData();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [session?.access_token, reloadKey]);
+
+    const handleRetry = () => {
+        setError(null);
+        setReloadKey((prev) => prev + 1);
+    };
 
     const handleSaveSettings = async () => {
+        if (!session?.access_token) return;
+
+        const fee = Number.parseFloat(feeInput);
+        if (!Number.isFinite(fee) || fee < 0) {
+            setSettingsMsg("Please enter a valid non-negative fee.");
+            return;
+        }
+
         setSavingSettings(true);
-        setSettingsMsg("");
-
-        const fee = parseFloat(feeInput);
-        if (isNaN(fee) || fee < 0) {
-            setSettingsMsg("Please enter a valid non-negative number.");
-            setSavingSettings(false);
-            return;
-        }
+        setSettingsMsg(null);
 
         try {
-            const res = await fetch("/api/settings", {
-                method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json",
-                    ...(session?.access_token && {
-                        Authorization: `Bearer ${session.access_token}`,
-                    }),
-                },
-                body: JSON.stringify({ settings: { service_fee: fee } }),
+            await updatePlatformSettings(session.access_token, {
+                settings: { service_fee: fee },
             });
 
-            if (res.ok) {
-                setSettings({ ...settings, service_fee: fee });
-                setSettingsMsg("Settings saved successfully!");
-                setTimeout(() => setSettingsMsg(""), 3000);
-            } else {
-                const data = await res.json();
-                setSettingsMsg(data.error || "Failed to save settings.");
-            }
-        } catch (error) {
-            setSettingsMsg("Network error trying to save.");
+            setSettings((prev) => ({
+                ...prev,
+                service_fee: fee,
+            }));
+            setSettingsMsg("Platform settings updated.");
+        } catch (saveError) {
+            setSettingsMsg(
+                toApiErrorMessage(saveError, "Unable to save platform settings right now.")
+            );
         } finally {
             setSavingSettings(false);
         }
     };
 
-    const handleCreateCoupon = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleCreateCoupon = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!session?.access_token) return;
+
+        const code = newCoupon.code.trim().toUpperCase();
+        const discountValue = Number.parseFloat(newCoupon.discount_value);
+
+        if (!code || !Number.isFinite(discountValue) || discountValue <= 0) {
+            setCouponMsg("Enter a coupon code and a valid discount value.");
+            return;
+        }
+
         setCreatingCoupon(true);
-        setCouponMsg("");
-
-        if (!newCoupon.code.trim() || !newCoupon.discount_value) {
-            setCouponMsg("Please fill out all fields.");
-            setCreatingCoupon(false);
-            return;
-        }
+        setCouponMsg(null);
 
         try {
-            const res = await fetch("/api/coupons", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    ...(session?.access_token && {
-                        Authorization: `Bearer ${session.access_token}`,
-                    }),
-                },
-                body: JSON.stringify({
-                    code: newCoupon.code,
-                    discount_type: newCoupon.discount_type,
-                    discount_value: parseFloat(newCoupon.discount_value),
-                }),
+            const result = await createAdminCoupon(session.access_token, {
+                code,
+                discount_type: newCoupon.discount_type,
+                discount_value: discountValue,
             });
 
-            const data = await res.json();
-            if (res.ok) {
-                setCoupons([data.coupon, ...coupons]);
-                setNewCoupon({ code: "", discount_type: "percentage", discount_value: "" });
-                setCouponMsg("Coupon created successfully!");
-                setTimeout(() => setCouponMsg(""), 3000);
-            } else {
-                setCouponMsg(data.error || "Failed to create coupon.");
-            }
-        } catch (error) {
-            setCouponMsg("Network error.");
+            setCoupons((prev) => [normalizeCoupon(result.coupon), ...prev]);
+            setNewCoupon(INITIAL_COUPON_FORM);
+            setCouponMsg("Coupon created successfully.");
+        } catch (createError) {
+            setCouponMsg(toApiErrorMessage(createError, "Unable to create coupon right now."));
         } finally {
             setCreatingCoupon(false);
         }
     };
 
-    const handleToggleCoupon = async (id: string, currentStatus: boolean) => {
+    const handleToggleCoupon = async (coupon: CouponRecord) => {
+        if (!session?.access_token) return;
+
+        const nextStatus = !coupon.is_active;
+        setUpdatingCouponId(coupon.id);
+        setCouponMsg(null);
+
+        setCoupons((prev) =>
+            prev.map((item) => (item.id === coupon.id ? { ...item, is_active: nextStatus } : item))
+        );
+
         try {
-            const res = await fetch(`/api/coupons/${id}`, {
-                method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json",
-                    ...(session?.access_token && {
-                        Authorization: `Bearer ${session.access_token}`,
-                    }),
-                },
-                body: JSON.stringify({ is_active: !currentStatus }),
+            const result = await updateAdminCoupon(session.access_token, coupon.id, {
+                is_active: nextStatus,
             });
 
-            if (res.ok) {
-                setCoupons(
-                    coupons.map((c) => (c.id === id ? { ...c, is_active: !currentStatus } : c))
-                );
-            }
-        } catch (error) {
-            console.error("Failed to toggle coupon status", error);
+            setCoupons((prev) =>
+                prev.map((item) => (item.id === coupon.id ? normalizeCoupon(result.coupon) : item))
+            );
+        } catch (updateError) {
+            setCoupons((prev) =>
+                prev.map((item) =>
+                    item.id === coupon.id ? { ...item, is_active: coupon.is_active } : item
+                )
+            );
+            setCouponMsg(toApiErrorMessage(updateError, "Unable to update coupon status."));
+        } finally {
+            setUpdatingCouponId(null);
         }
     };
 
-    if (loading) {
-        return (
-            <div className="flex h-64 items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-terracotta" />
-            </div>
-        );
-    }
+    const serviceFee = Number(settings.service_fee ?? DEFAULT_SERVICE_FEE);
+    const activeCoupons = coupons.filter((coupon) => coupon.is_active).length;
 
     return (
-        <div className="space-y-8 pb-12">
-            <div className="flex items-center justify-between">
-                <div>
-                    <Link
-                        href="/admin/dashboard"
-                        className="inline-flex items-center gap-2 text-sm font-medium text-dark-muted hover:text-dark transition-colors mb-2"
-                    >
-                        <ArrowLeft className="w-4 h-4" />
-                        Back to Dashboard
-                    </Link>
-                    <h1 className="heading-lg text-dark">Platform Settings</h1>
-                    <p className="text-body text-dark-muted mt-1">
-                        Manage global parameters, service fees, and discount coupons.
-                    </p>
-                </div>
+        <AdminShell>
+            <div className="mb-8">
+                <p className="mb-2 text-xs font-inter font-bold uppercase tracking-wider text-terracotta">
+                    Admin
+                </p>
+                <h1 className="heading-md">Platform Settings</h1>
+                <p className="mt-1 text-body text-dark-muted">
+                    Manage the service fee and platform-wide coupon campaigns.
+                </p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Global Settings */}
-                <div className="lg:col-span-1 space-y-6">
-                    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-soft">
-                        <h2 className="text-lg font-playfair font-bold text-dark mb-4">
-                            Service Fee
-                        </h2>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-inter font-semibold uppercase tracking-wider text-dark-muted mb-2">
-                                    Fixed Amount (Rupees)
-                                </label>
-                                <div className="relative">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-dark-muted font-medium">
-                                        ₹
-                                    </span>
+            {error && (
+                <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-inter text-red-700">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <span>{error}</span>
+                        <button
+                            type="button"
+                            onClick={handleRetry}
+                            className="inline-flex items-center justify-center rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                        >
+                            Try again
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {loading ? (
+                <div className="flex items-center gap-2 text-sm font-inter text-dark-muted">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading platform settings...
+                </div>
+            ) : (
+                <div className="space-y-8">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <Stat
+                            label="Service Fee"
+                            value={formatCurrency(serviceFee)}
+                            icon={<IndianRupee className="w-5 h-5 text-terracotta" />}
+                        />
+                        <Stat
+                            label="Coupon Codes"
+                            value={coupons.length}
+                            icon={<Tag className="w-5 h-5 text-terracotta" />}
+                        />
+                        <Stat
+                            label="Active Coupons"
+                            value={activeCoupons}
+                            icon={<ToggleRight className="w-5 h-5 text-terracotta" />}
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px,1fr]">
+                        <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-soft">
+                            <h2 className="text-lg font-playfair font-bold text-dark">
+                                Service Fee
+                            </h2>
+                            <p className="mt-1 text-sm font-inter text-dark-muted">
+                                Applied to each successful booking across the platform.
+                            </p>
+
+                            <div className="mt-6 space-y-4">
+                                <div>
+                                    <label className="mb-2 block text-xs font-inter font-semibold uppercase tracking-wider text-dark-muted">
+                                        Fixed Amount (Rupees)
+                                    </label>
+                                    <div className="relative">
+                                        <IndianRupee className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dark-muted" />
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="1"
+                                            value={feeInput}
+                                            onChange={(event) => setFeeInput(event.target.value)}
+                                            className="w-full rounded-xl border border-gray-200 bg-cream-100 py-3 pl-10 pr-4 text-sm font-inter text-dark outline-none transition-all focus:border-terracotta/50 focus:bg-white focus:ring-2 focus:ring-terracotta/10"
+                                        />
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={handleSaveSettings}
+                                    disabled={savingSettings}
+                                    className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {savingSettings ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : null}
+                                    {savingSettings ? "Saving..." : "Save Settings"}
+                                </button>
+
+                                {settingsMsg && (
+                                    <p
+                                        className={`text-sm font-medium ${
+                                            settingsMsg.toLowerCase().includes("updated")
+                                                ? "text-emerald-600"
+                                                : "text-red-500"
+                                        }`}
+                                    >
+                                        {settingsMsg}
+                                    </p>
+                                )}
+                            </div>
+                        </section>
+
+                        <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-soft">
+                            <div className="mb-6">
+                                <h2 className="flex items-center gap-2 text-lg font-playfair font-bold text-dark">
+                                    <Tag className="h-5 w-5 text-terracotta" />
+                                    Coupon Codes
+                                </h2>
+                                <p className="mt-1 text-sm font-inter text-dark-muted">
+                                    Create and manage promotional discounts for checkout.
+                                </p>
+                            </div>
+
+                            <form
+                                onSubmit={handleCreateCoupon}
+                                className="mb-8 grid grid-cols-1 gap-4 rounded-xl border border-clay/30 bg-cream-50 p-4 sm:grid-cols-4 sm:items-end"
+                            >
+                                <div className="sm:col-span-2">
+                                    <label className="mb-1 block text-xs font-inter font-semibold text-dark-muted">
+                                        Coupon Code
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="SUMMER20"
+                                        value={newCoupon.code}
+                                        onChange={(event) =>
+                                            setNewCoupon((prev) => ({
+                                                ...prev,
+                                                code: event.target.value.toUpperCase(),
+                                            }))
+                                        }
+                                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm uppercase text-dark outline-none focus:border-terracotta/50"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-xs font-inter font-semibold text-dark-muted">
+                                        Type
+                                    </label>
+                                    <select
+                                        value={newCoupon.discount_type}
+                                        onChange={(event) =>
+                                            setNewCoupon((prev) => ({
+                                                ...prev,
+                                                discount_type: event.target.value as
+                                                    | "percentage"
+                                                    | "fixed",
+                                            }))
+                                        }
+                                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
+                                    >
+                                        <option value="percentage">Percentage (%)</option>
+                                        <option value="fixed">Fixed (Rupees)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-xs font-inter font-semibold text-dark-muted">
+                                        Amount
+                                    </label>
                                     <input
                                         type="number"
                                         min="0"
                                         step="1"
-                                        value={feeInput}
-                                        onChange={(e) => setFeeInput(e.target.value)}
-                                        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 pl-8 text-sm font-inter text-dark outline-none focus:border-terracotta/50 focus:bg-white focus:ring-2 focus:ring-terracotta/10 transition-all"
+                                        placeholder="Value"
+                                        value={newCoupon.discount_value}
+                                        onChange={(event) =>
+                                            setNewCoupon((prev) => ({
+                                                ...prev,
+                                                discount_value: event.target.value,
+                                            }))
+                                        }
+                                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
                                     />
                                 </div>
-                                <p className="text-xs text-dark-muted mt-2">
-                                    This fee is charged to customers on every transaction.
-                                </p>
-                            </div>
-
-                            <button
-                                onClick={handleSaveSettings}
-                                disabled={savingSettings}
-                                className="btn-primary w-full"
-                            >
-                                {savingSettings ? "Saving..." : "Save Settings"}
-                            </button>
-
-                            {settingsMsg && (
-                                <p
-                                    className={`text-sm font-medium ${settingsMsg.includes("success") ? "text-emerald-600" : "text-red-500"}`}
-                                >
-                                    {settingsMsg}
-                                </p>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Coupons */}
-                <div className="lg:col-span-2 space-y-6">
-                    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-soft overflow-hidden">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                            <h2 className="text-lg font-playfair font-bold text-dark flex items-center gap-2">
-                                <Tag className="w-5 h-5 text-terracotta" />
-                                Coupon Codes
-                            </h2>
-                        </div>
-
-                        {/* Create form */}
-                        <form
-                            onSubmit={handleCreateCoupon}
-                            className="bg-cream-50 p-4 rounded-xl border border-clay/30 mb-8 grid grid-cols-1 sm:grid-cols-4 gap-4 items-end"
-                        >
-                            <div className="col-span-1 sm:col-span-2">
-                                <label className="block text-xs font-inter font-semibold text-dark-muted mb-1">
-                                    Coupon Code
-                                </label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g. SUMMER20"
-                                    value={newCoupon.code}
-                                    onChange={(e) =>
-                                        setNewCoupon({
-                                            ...newCoupon,
-                                            code: e.target.value.toUpperCase(),
-                                        })
-                                    }
-                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm uppercase"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-inter font-semibold text-dark-muted mb-1">
-                                    Type
-                                </label>
-                                <select
-                                    value={newCoupon.discount_type}
-                                    onChange={(e) =>
-                                        setNewCoupon({
-                                            ...newCoupon,
-                                            discount_type: e.target.value as any,
-                                        })
-                                    }
-                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
-                                >
-                                    <option value="percentage">Percentage (%)</option>
-                                    <option value="fixed">Fixed (₹)</option>
-                                </select>
-                            </div>
-                            <div className="relative">
-                                <label className="block text-xs font-inter font-semibold text-dark-muted mb-1">
-                                    Amount
-                                </label>
-                                <input
-                                    type="number"
-                                    placeholder="Value"
-                                    value={newCoupon.discount_value}
-                                    onChange={(e) =>
-                                        setNewCoupon({
-                                            ...newCoupon,
-                                            discount_value: e.target.value,
-                                        })
-                                    }
-                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
-                                />
-                            </div>
-                            <div className="col-span-1 sm:col-span-4 flex items-center justify-between flex-wrap gap-2">
-                                <button
-                                    type="submit"
-                                    disabled={creatingCoupon}
-                                    className="btn-secondary !py-2 !px-4 text-sm flex items-center gap-2"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    {creatingCoupon ? "Adding..." : "Add Coupon"}
-                                </button>
-                                {couponMsg && (
-                                    <p
-                                        className={`text-xs font-medium ${couponMsg.includes("success") ? "text-emerald-600" : "text-red-500"}`}
+                                <div className="flex flex-wrap items-center justify-between gap-2 sm:col-span-4">
+                                    <button
+                                        type="submit"
+                                        disabled={creatingCoupon}
+                                        className="btn-secondary !px-4 !py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                     >
-                                        {couponMsg}
-                                    </p>
-                                )}
-                            </div>
-                        </form>
-
-                        {/* List */}
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm font-inter">
-                                <thead className="border-b border-gray-100 text-dark-muted text-xs uppercase tracking-wider">
-                                    <tr>
-                                        <th className="pb-3 font-semibold">Code</th>
-                                        <th className="pb-3 font-semibold">Discount</th>
-                                        <th className="pb-3 font-semibold">Uses</th>
-                                        <th className="pb-3 font-semibold">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50">
-                                    {coupons.map((coupon) => (
-                                        <tr key={coupon.id} className="group">
-                                            <td className="py-4">
-                                                <span className="font-bold font-mono bg-gray-100 text-gray-800 px-2 py-1 rounded">
-                                                    {coupon.code}
-                                                </span>
-                                            </td>
-                                            <td className="py-4 text-dark font-medium">
-                                                {coupon.discount_type === "percentage"
-                                                    ? `${coupon.discount_value}% OFF`
-                                                    : `${formatCurrency(coupon.discount_value)} OFF`}
-                                            </td>
-                                            <td className="py-4 text-dark-muted">
-                                                {coupon.used_count} uses
-                                            </td>
-                                            <td className="py-4">
-                                                <button
-                                                    onClick={() =>
-                                                        handleToggleCoupon(
-                                                            coupon.id,
-                                                            coupon.is_active
-                                                        )
-                                                    }
-                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                                                        coupon.is_active
-                                                            ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                                            : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                                                    }`}
-                                                >
-                                                    {coupon.is_active ? "Active" : "Disabled"}
-                                                    {coupon.is_active ? (
-                                                        <ToggleRight className="w-4 h-4 ml-1" />
-                                                    ) : (
-                                                        <ToggleLeft className="w-4 h-4 ml-1" />
-                                                    )}
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {coupons.length === 0 && (
-                                        <tr>
-                                            <td
-                                                colSpan={4}
-                                                className="py-8 text-center text-dark-muted"
-                                            >
-                                                No coupons created yet.
-                                            </td>
-                                        </tr>
+                                        {creatingCoupon ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <Plus className="w-4 h-4" />
+                                        )}
+                                        {creatingCoupon ? "Adding..." : "Add Coupon"}
+                                    </button>
+                                    {couponMsg && (
+                                        <p
+                                            className={`text-xs font-medium ${
+                                                couponMsg.toLowerCase().includes("success")
+                                                    ? "text-emerald-600"
+                                                    : "text-red-500"
+                                            }`}
+                                        >
+                                            {couponMsg}
+                                        </p>
                                     )}
-                                </tbody>
-                            </table>
-                        </div>
+                                </div>
+                            </form>
+
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm font-inter">
+                                    <thead className="border-b border-gray-100 text-xs uppercase tracking-wider text-dark-muted">
+                                        <tr>
+                                            <th className="pb-3 font-semibold">Code</th>
+                                            <th className="pb-3 font-semibold">Discount</th>
+                                            <th className="pb-3 font-semibold">Uses</th>
+                                            <th className="pb-3 font-semibold">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {coupons.map((coupon) => {
+                                            const isUpdating = updatingCouponId === coupon.id;
+
+                                            return (
+                                                <tr key={coupon.id}>
+                                                    <td className="py-4">
+                                                        <span className="rounded bg-gray-100 px-2 py-1 font-mono font-bold text-gray-800">
+                                                            {coupon.code}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-4 font-medium text-dark">
+                                                        {coupon.discount_type === "percentage"
+                                                            ? `${coupon.discount_value}% OFF`
+                                                            : `${formatCurrency(coupon.discount_value)} OFF`}
+                                                    </td>
+                                                    <td className="py-4 text-dark-muted">
+                                                        {coupon.used_count} uses
+                                                    </td>
+                                                    <td className="py-4">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                void handleToggleCoupon(coupon)
+                                                            }
+                                                            disabled={isUpdating}
+                                                            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${
+                                                                coupon.is_active
+                                                                    ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                                                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                                            }`}
+                                                        >
+                                                            {coupon.is_active
+                                                                ? "Active"
+                                                                : "Disabled"}
+                                                            {isUpdating ? (
+                                                                <Loader2 className="ml-1 h-4 w-4 animate-spin" />
+                                                            ) : coupon.is_active ? (
+                                                                <ToggleRight className="ml-1 h-4 w-4" />
+                                                            ) : (
+                                                                <ToggleLeft className="ml-1 h-4 w-4" />
+                                                            )}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {coupons.length === 0 && (
+                                            <tr>
+                                                <td
+                                                    colSpan={4}
+                                                    className="py-8 text-center text-dark-muted"
+                                                >
+                                                    No coupons created yet.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
                     </div>
                 </div>
-            </div>
-        </div>
+            )}
+        </AdminShell>
     );
 }

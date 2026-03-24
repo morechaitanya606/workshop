@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { handleApiError, parseQuery } from "@/lib/api-route";
 import { workshopQuerySchema } from "@/lib/validators";
 import { mapWorkshopRowToWorkshop, queryMockWorkshops } from "@/lib/workshop-utils";
+import { normalizeFilterCategoryLabel } from "@/lib/data";
 import { createSupabaseAnonServerClient, isSupabasePublicConfigured } from "@/lib/supabase-server";
 
 const WORKSHOP_LIST_CACHE_HEADERS = {
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
     }
 
     const query = parsed.data;
+    const normalizedCategory = normalizeFilterCategoryLabel(query.category);
     const from = (query.page - 1) * query.pageSize;
     const to = from + query.pageSize - 1;
     const allowMockFallback = process.env.NODE_ENV !== "production";
@@ -35,7 +37,10 @@ export async function GET(request: NextRequest) {
                 { status: 500 }
             );
         }
-        const fallback = queryMockWorkshops(query);
+        const fallback = queryMockWorkshops({
+            ...query,
+            category: normalizedCategory,
+        });
         return NextResponse.json(fallback, { headers: WORKSHOP_LIST_CACHE_HEADERS });
     }
 
@@ -50,8 +55,8 @@ export async function GET(request: NextRequest) {
                 `title.ilike.%${q}%,description.ilike.%${q}%,location.ilike.%${q}%,city.ilike.%${q}%`
             );
         }
-        if (query.category) {
-            dbQuery = dbQuery.eq("category", query.category);
+        if (normalizedCategory) {
+            dbQuery = dbQuery.eq("category", normalizedCategory);
         }
         if (query.city) {
             dbQuery = dbQuery.eq("city", query.city);
@@ -91,7 +96,10 @@ export async function GET(request: NextRequest) {
         );
     } catch (error) {
         if (allowMockFallback) {
-            const fallback = queryMockWorkshops(query);
+            const fallback = queryMockWorkshops({
+                ...query,
+                category: normalizedCategory,
+            });
             return NextResponse.json(
                 {
                     ...fallback,

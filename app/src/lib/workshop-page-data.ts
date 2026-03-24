@@ -6,7 +6,7 @@ import { warnDevFallback } from "@/lib/dev-warnings";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { workshopQuerySchema } from "@/lib/validators";
 import { mapWorkshopRowToWorkshop, queryMockWorkshops } from "@/lib/workshop-utils";
-import { PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
+import { normalizeFilterCategoryLabel, PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
 
 export type WorkshopPageSource = "supabase" | "mock" | "error";
@@ -142,6 +142,7 @@ export async function loadExploreWorkshops(searchParams: {
     }
 
     const query = parsed.data;
+    const normalizedCategory = normalizeFilterCategoryLabel(query.category);
     const from = (query.page - 1) * query.pageSize;
     const to = from + query.pageSize - 1;
 
@@ -158,9 +159,9 @@ export async function loadExploreWorkshops(searchParams: {
                 );
             }
             const isPastEventsCategory =
-                query.category.toLowerCase() === PAST_EVENTS_CATEGORY_LABEL.toLowerCase();
-            if (query.category && !isPastEventsCategory) {
-                dbQuery = dbQuery.eq("category", query.category);
+                normalizedCategory.toLowerCase() === PAST_EVENTS_CATEGORY_LABEL.toLowerCase();
+            if (normalizedCategory && !isPastEventsCategory) {
+                dbQuery = dbQuery.eq("category", normalizedCategory);
             }
             if (isPastEventsCategory) {
                 const today = new Date().toISOString().slice(0, 10);
@@ -222,7 +223,10 @@ export async function loadExploreWorkshops(searchParams: {
 
     if (allowMockFallback) {
         warnDevFallback("explore_page", `Using mock workshops because ${fallbackReason}`);
-        return queryMockWorkshops(query);
+        return queryMockWorkshops({
+            ...query,
+            category: normalizedCategory,
+        });
     }
 
     noStore();

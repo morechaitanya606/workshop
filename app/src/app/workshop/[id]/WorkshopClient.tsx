@@ -760,7 +760,7 @@ export default function WorkshopClient({
         : publicFeedback;
 
     return (
-        <main className="min-h-screen pb-24 md:pb-0">
+        <main className="min-h-screen pb-44 min-[900px]:pb-0">
             <Navbar />
 
             <div className="pt-20 sm:pt-24">
@@ -788,7 +788,7 @@ export default function WorkshopClient({
                 </div>
 
                 <div className="section-padding">
-                    <div className="grid grid-cols-1 lg:grid-cols-[1fr,380px] gap-8 lg:gap-12">
+                    <div className="grid grid-cols-1 items-start gap-8 min-[900px]:grid-cols-[minmax(0,1fr),320px] xl:grid-cols-[minmax(0,1fr),380px] xl:gap-12">
                         {/* ═══ LEFT COLUMN ═══ */}
                         <div>
                             <motion.div
@@ -1410,7 +1410,7 @@ export default function WorkshopClient({
                         </div>
 
                         {/* ═══ RIGHT COLUMN - BOOKING SIDEBAR ═══ */}
-                        <div className="hidden lg:block">
+                        <div className="hidden min-[900px]:block min-[900px]:self-start">
                             {isPastWorkshop ? (
                                 <motion.div
                                     variants={prefersReducedMotion ? undefined : slideInRight}
@@ -1421,7 +1421,7 @@ export default function WorkshopClient({
                                             ? { duration: 0 }
                                             : { ...standardTransition, delay: 0.3 }
                                     }
-                                    className="sticky top-28 bg-white rounded-2xl shadow-card p-6 border border-clay/50"
+                                    className="min-[900px]:sticky min-[900px]:top-28 min-[900px]:max-h-[calc(100vh-8rem)] min-[900px]:overflow-y-auto bg-white rounded-2xl shadow-card p-6 border border-clay/50"
                                 >
                                     <div className="inline-flex items-center gap-2 bg-terracotta/10 text-terracotta text-xs font-inter font-bold uppercase tracking-wider px-3 py-1.5 rounded-full mb-4">
                                         Past Event
@@ -1938,8 +1938,8 @@ export default function WorkshopClient({
                 </div>
             )}
 
-            {isPastWorkshop ? (
-                <div className="section-padding mt-8 lg:hidden">
+            {isPastWorkshop && (
+                <div className="section-padding mt-8 min-[900px]:hidden">
                     <motion.div
                         variants={prefersReducedMotion ? undefined : fadeInUp}
                         initial={prefersReducedMotion ? undefined : "hidden"}
@@ -2175,74 +2175,6 @@ export default function WorkshopClient({
                         )}
                     </motion.div>
                 </div>
-            ) : (
-                <div className="fixed bottom-16 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-gray-100 px-4 py-3 lg:hidden safe-area-bottom">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            {isEbEligible && (
-                                <span className="text-xs font-inter text-dark-muted line-through mr-2">
-                                    {formatCurrency(workshop.price)}
-                                </span>
-                            )}
-                            <span className="font-playfair text-2xl font-bold text-dark">
-                                {formatCurrency(currentPricePerGuest)}
-                            </span>
-                            <span className="text-sm font-inter text-dark-muted"> / person</span>
-                            <p
-                                className={`mt-1 text-xs font-inter ${
-                                    isSoldOut ? "text-red-700" : "text-emerald-700"
-                                }`}
-                            >
-                                {seatAvailabilityLabel}
-                            </p>
-                        </div>
-                        {isBookingClosed ? (
-                            <button
-                                type="button"
-                                disabled
-                                className="rounded-full bg-gray-100 text-dark-muted px-6 py-3 text-sm font-inter font-semibold cursor-not-allowed"
-                            >
-                                Booking Closed
-                            </button>
-                        ) : isSoldOut ? (
-                            <button
-                                onClick={() => setShowWaitlistModal(true)}
-                                className="rounded-full bg-white border border-terracotta text-terracotta px-6 py-3 text-sm font-inter font-semibold hover:bg-terracotta hover:text-white transition-colors"
-                            >
-                                Join Waitlist
-                            </button>
-                        ) : user ? (
-                            <button
-                                onClick={handleBooking}
-                                disabled={bookingLoading}
-                                className="btn-primary !py-3 !px-8 disabled:opacity-60 disabled:cursor-not-allowed"
-                            >
-                                {bookingLoading ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        Reserving
-                                    </>
-                                ) : (
-                                    "Book My Spot"
-                                )}
-                            </button>
-                        ) : (
-                            <Link href={loginRedirectHref} className="btn-primary !py-3 !px-8">
-                                Log in to Book
-                            </Link>
-                        )}
-                    </div>
-                    {holdError && (
-                        <p className="text-center text-xs font-inter text-red-600 mt-2">
-                            {holdError}
-                        </p>
-                    )}
-                    {isSoldOut && (
-                        <p className="mt-2 text-center text-xs font-inter text-dark-secondary">
-                            This workshop is full. Scroll up for similar workshops.
-                        </p>
-                    )}
-                </div>
             )}
 
             {/* ═══ RELATED WORKSHOPS SECTION ═══ */}
@@ -2374,19 +2306,41 @@ export default function WorkshopClient({
             )}
 
             {/* ═══ STICKY MOBILE BOOKING BAR ═══ */}
-            {!isPastWorkshop && !isBookingClosed && (
-                <div className="fixed bottom-0 inset-x-0 z-40 lg:hidden">
+            {!isPastWorkshop && (
+                <div className="fixed inset-x-0 bottom-16 z-40 md:bottom-0 min-[900px]:hidden">
                     <div className="bg-white/95 backdrop-blur-xl border-t border-clay/30 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] px-4 py-3">
                         <div className="flex items-center justify-between gap-4 max-w-lg mx-auto">
-                            <div>
+                            <div className="min-w-0 flex-1">
+                                {isEbEligible && (
+                                    <span className="mr-2 text-xs font-inter text-dark-muted line-through">
+                                        {formatCurrency(workshop.price)}
+                                    </span>
+                                )}
                                 <span className="font-playfair text-lg font-bold text-dark">
-                                    {formatCurrency(workshop.price)}
+                                    {formatCurrency(currentPricePerGuest)}
                                 </span>
                                 <span className="text-xs font-inter text-dark-muted ml-1">
                                     / person
                                 </span>
+                                <p
+                                    className={`mt-1 text-[11px] font-inter ${
+                                        isSoldOut || isBookingClosed
+                                            ? "text-red-700"
+                                            : "text-emerald-700"
+                                    }`}
+                                >
+                                    {seatAvailabilityLabel}
+                                </p>
                             </div>
-                            {isSoldOut ? (
+                            {isBookingClosed ? (
+                                <button
+                                    type="button"
+                                    disabled
+                                    className="rounded-full bg-gray-100 px-5 py-2.5 text-sm font-inter font-semibold text-dark-muted cursor-not-allowed"
+                                >
+                                    Booking Closed
+                                </button>
+                            ) : isSoldOut ? (
                                 <button
                                     onClick={() => setShowWaitlistModal(true)}
                                     className="btn-secondary !py-2.5 !px-6 text-sm"
@@ -2397,19 +2351,24 @@ export default function WorkshopClient({
                                 <button
                                     onClick={handleBooking}
                                     disabled={bookingLoading}
-                                    className="btn-primary !py-2.5 !px-6 text-sm disabled:opacity-60"
+                                    className="btn-primary shrink-0 !py-2.5 !px-5 text-sm disabled:opacity-60"
                                 >
                                     {bookingLoading ? "Reserving..." : "Reserve Spot →"}
                                 </button>
                             ) : (
                                 <Link
                                     href={loginRedirectHref}
-                                    className="btn-primary !py-2.5 !px-6 text-sm"
+                                    className="btn-primary shrink-0 !py-2.5 !px-5 text-sm"
                                 >
                                     Log in to Book
                                 </Link>
                             )}
                         </div>
+                        {holdError && (
+                            <p className="mt-2 text-center text-xs font-inter text-red-600">
+                                {holdError}
+                            </p>
+                        )}
                     </div>
                 </div>
             )}

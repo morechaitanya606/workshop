@@ -1,25 +1,25 @@
-import HostShell from "@/components/host/HostShell";
+import AdminShell from "@/components/admin/AdminShell";
 import WorkshopAttendeesPanel from "@/components/workshops/WorkshopAttendeesPanel";
 import { isMockWorkshopId } from "@/lib/workshop-attendees";
 
-type HostWorkshopAttendeesPageProps = {
+type AdminWorkshopAttendeesPageProps = {
     params: {
         id: string;
     };
 };
 
-export default function HostWorkshopAttendeesPage({ params }: HostWorkshopAttendeesPageProps) {
+export default function AdminWorkshopAttendeesPage({ params }: AdminWorkshopAttendeesPageProps) {
     const isMockWorkshop = isMockWorkshopId(params.id);
 
     return (
-        <HostShell>
+        <AdminShell>
             <WorkshopAttendeesPanel
                 workshopId={params.id}
-                backHref="/host/workshops"
-                backLabel="Back to My Workshops"
-                scope="host"
+                backHref="/admin/workshops"
+                backLabel="Back to Workshops"
+                scope="admin"
                 isMockWorkshop={isMockWorkshop}
             />
-        </HostShell>
+        </AdminShell>
     );
 }

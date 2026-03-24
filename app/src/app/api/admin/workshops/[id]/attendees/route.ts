@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
-import { requireHostOrAdmin } from "@/lib/api-auth";
+import { requireAdminUser } from "@/lib/api-auth";
 import {
     getConfirmedWorkshopAttendees,
     getWorkshopOwnerLookup,
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, { params }: Params) {
         return NextResponse.json({ success: true, attendees: [] });
     }
 
-    const auth = await requireHostOrAdmin(request);
+    const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
     }
@@ -34,13 +34,6 @@ export async function GET(request: NextRequest, { params }: Params) {
             return NextResponse.json(
                 { error: "Workshop not found", success: false },
                 { status: 404 }
-            );
-        }
-
-        if (auth.role !== "admin" && workshop.ownerUserId !== auth.user.id) {
-            return NextResponse.json(
-                { error: "Unauthorized access", success: false },
-                { status: 403 }
             );
         }
 

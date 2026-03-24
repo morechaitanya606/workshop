@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useReducedMotion } from "framer-motion";
 import { Sheet } from "@/components/ui/sheet";
-import { categories } from "@/lib/data";
+import { categories, findCategory, normalizeFilterCategoryLabel } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
 import { trackEvent } from "@/lib/analytics";
 import {
@@ -44,10 +44,7 @@ const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
 ];
 
 const OTHER_CATEGORY_VALUE = "__other__";
-const CATEGORY_OPTIONS = categories
-    .filter((item) => item.id !== "trending")
-    .map((item) => item.label);
-const CATEGORY_OPTION_SET = new Set(CATEGORY_OPTIONS);
+const CATEGORY_OPTIONS = categories.filter((item) => item.id !== "trending");
 const CITY_OPTIONS = ["", "City", "Mumbai", "Bangalore", "Delhi", "Hyderabad"];
 const PAGE_SIZE = 8;
 
@@ -83,9 +80,11 @@ export default function ExploreClient({
 
     const parsedQuery = useMemo(() => {
         const urlSort = searchParams.get("sort") as SortOption | null;
+        const parsedCategory = normalizeFilterCategoryLabel(searchParams.get("category") || "");
+
         return {
             q: searchParams.get("q") || "",
-            category: searchParams.get("category") || "",
+            category: parsedCategory,
             city: searchParams.get("city") || "",
             dateFrom: searchParams.get("dateFrom") || "",
             dateTo: searchParams.get("dateTo") || "",
@@ -102,20 +101,19 @@ export default function ExploreClient({
         };
     }, [searchParams]);
 
-    const initialCategoryIsKnown =
-        Boolean(parsedQuery.category) && CATEGORY_OPTION_SET.has(parsedQuery.category);
+    const initialCategoryMatch = findCategory(parsedQuery.category);
     const [searchQuery, setSearchQuery] = useState(parsedQuery.q);
     const [showFilters, setShowFilters] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState(parsedQuery.category);
     const [categorySelection, setCategorySelection] = useState(
         parsedQuery.category
-            ? initialCategoryIsKnown
-                ? parsedQuery.category
+            ? initialCategoryMatch
+                ? initialCategoryMatch.id
                 : OTHER_CATEGORY_VALUE
             : ""
     );
     const [customCategory, setCustomCategory] = useState(
-        parsedQuery.category && !initialCategoryIsKnown ? parsedQuery.category : ""
+        parsedQuery.category && !initialCategoryMatch ? parsedQuery.category : ""
     );
     const [categoryError, setCategoryError] = useState<string | null>(null);
     const [selectedCity, setSelectedCity] = useState(parsedQuery.city);
@@ -131,16 +129,15 @@ export default function ExploreClient({
     useEffect(() => {
         setSearchQuery(parsedQuery.q);
         setSelectedCategory(parsedQuery.category);
-        const isKnownCategory =
-            Boolean(parsedQuery.category) && CATEGORY_OPTION_SET.has(parsedQuery.category);
+        const parsedCategoryMatch = findCategory(parsedQuery.category);
         setCategorySelection(
             parsedQuery.category
-                ? isKnownCategory
-                    ? parsedQuery.category
+                ? parsedCategoryMatch
+                    ? parsedCategoryMatch.id
                     : OTHER_CATEGORY_VALUE
                 : ""
         );
-        setCustomCategory(parsedQuery.category && !isKnownCategory ? parsedQuery.category : "");
+        setCustomCategory(parsedQuery.category && !parsedCategoryMatch ? parsedQuery.category : "");
         setSelectedCity(parsedQuery.city);
         setDateFrom(parsedQuery.dateFrom);
         setDateTo(parsedQuery.dateTo);
@@ -283,9 +280,11 @@ export default function ExploreClient({
         if (value === OTHER_CATEGORY_VALUE) {
             return;
         }
+
+        const normalizedValue = normalizeFilterCategoryLabel(value);
         setCustomCategory("");
-        setSelectedCategory(value);
-        pushFilters({ category: value, page: 1 });
+        setSelectedCategory(normalizedValue);
+        pushFilters({ category: normalizedValue, page: 1 });
     };
 
     const handleCustomCategoryChange = (value: string) => {
@@ -300,12 +299,18 @@ export default function ExploreClient({
 
     const applyFilters = () => {
         const trimmedCustomCategory = customCategory.trim();
-        const nextCategory =
-            categorySelection === OTHER_CATEGORY_VALUE ? trimmedCustomCategory : categorySelection;
         if (categorySelection === OTHER_CATEGORY_VALUE && !trimmedCustomCategory) {
             setCategoryError("Please enter a custom category.");
             return;
         }
+
+        const nextCategory = normalizeFilterCategoryLabel(
+            categorySelection === OTHER_CATEGORY_VALUE ? trimmedCustomCategory : categorySelection
+        );
+        const nextCategoryMatch = findCategory(nextCategory);
+
+        setCategorySelection(nextCategoryMatch?.id ?? categorySelection);
+        setCustomCategory(nextCategoryMatch ? "" : trimmedCustomCategory);
         setSelectedCategory(nextCategory);
         pushFilters({ category: nextCategory, page: 1 });
         if (isMobileViewport) {
@@ -349,8 +354,8 @@ export default function ExploreClient({
             >
                 <option value="">All Categories</option>
                 {categoryOptions.map((category) => (
-                    <option key={category} value={category}>
-                        {category}
+                    <option key={category.id} value={category.id}>
+                        {category.label}
                     </option>
                 ))}
                 <option value={OTHER_CATEGORY_VALUE}>Other (type below)</option>

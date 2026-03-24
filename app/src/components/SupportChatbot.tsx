@@ -244,6 +244,7 @@ export default function SupportChatbot() {
                     description: description.trim(),
                     email: email.trim(),
                     userId: user?.id ?? null,
+                    workshopId: contextWorkshopId || currentPathWorkshopId || null,
                 }),
             });
 

@@ -97,7 +97,13 @@ export interface Workshop {
 export const PAST_EVENTS_CATEGORY_ID = "past-events";
 export const PAST_EVENTS_CATEGORY_LABEL = "Past Events";
 
-export const categories = [
+type WorkshopCategory = {
+    id: string;
+    label: string;
+    icon: string;
+};
+
+export const categories: WorkshopCategory[] = [
     { id: "trending", label: "Trending", icon: "🔥" },
     { id: PAST_EVENTS_CATEGORY_ID, label: PAST_EVENTS_CATEGORY_LABEL, icon: "P" },
     { id: "arts-crafts", label: "Arts & Crafts", icon: "✂️" },
@@ -108,6 +114,49 @@ export const categories = [
     { id: "wellness", label: "Wellness", icon: "🧘" },
     { id: "photography", label: "Photography", icon: "📷" },
 ];
+
+const categoryLookup = new Map<string, WorkshopCategory>();
+
+for (const category of categories) {
+    categoryLookup.set(category.id.toLowerCase(), category);
+    categoryLookup.set(category.label.toLowerCase(), category);
+}
+
+export function findCategory(value: string | null | undefined) {
+    const trimmedValue = value?.trim();
+    if (!trimmedValue) {
+        return undefined;
+    }
+
+    return categoryLookup.get(trimmedValue.toLowerCase());
+}
+
+export function normalizeCategoryLabel(value: string | null | undefined) {
+    const trimmedValue = value?.trim() ?? "";
+    if (!trimmedValue) {
+        return "";
+    }
+
+    return findCategory(trimmedValue)?.label ?? trimmedValue;
+}
+
+export function normalizeFilterCategoryLabel(value: string | null | undefined) {
+    const category = findCategory(value);
+    if (category?.id === "trending") {
+        return "";
+    }
+
+    return normalizeCategoryLabel(value);
+}
+
+export function normalizeCategoryId(value: string | null | undefined) {
+    const trimmedValue = value?.trim() ?? "";
+    if (!trimmedValue) {
+        return "";
+    }
+
+    return findCategory(trimmedValue)?.id ?? trimmedValue;
+}
 
 export const mockWorkshops: Workshop[] = [
     {
@@ -496,6 +545,10 @@ export const mockWorkshops: Workshop[] = [
         feedbackAuthor: "Ananya P.",
     },
 ];
+
+export function isKnownMockWorkshopId(workshopId: string) {
+    return mockWorkshops.some((workshop) => workshop.id === workshopId);
+}
 
 // Social proof metrics
 export const socialMetrics = [
