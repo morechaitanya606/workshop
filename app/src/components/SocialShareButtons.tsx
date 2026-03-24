@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, Link2 } from "lucide-react";
+import { Check, Link2 } from "lucide-react";
 
 interface SocialShareButtonsProps {
     title: string;

@@ -30,7 +30,6 @@ import {
     removeFavorite,
     getWorkshopById,
     getMyBookings,
-    getWorkshopFeedback,
     getBulkWorkshopFeedback,
     submitWorkshopFeedback,
     toApiErrorMessage,

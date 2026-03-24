@@ -1,6 +1,6 @@
 import type { Workshop } from "@/lib/data";
 import { mockWorkshops, PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
-import type { TablesInsert, Tables, Json } from "@/lib/database.types";
+import type { TablesInsert, Json } from "@/lib/database.types";
 import type { SupabaseServerClient } from "@/lib/supabase-server";
 import type { WorkshopCreateInput, WorkshopQueryInput } from "@/lib/validators";
 import {

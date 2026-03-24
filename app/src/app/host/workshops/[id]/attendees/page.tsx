@@ -18,7 +18,7 @@ type Attendee = {
 };
 
 export default function AttendeesPage({ params }: { params: { id: string } }) {
-    const { session, user } = useAuth();
+    const { session } = useAuth();
     const [attendees, setAttendees] = useState<Attendee[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);

@@ -8,7 +8,6 @@ import {
     Search,
     MessageSquare,
     ChevronDown,
-    X,
     Send,
     ArrowLeft,
     User,

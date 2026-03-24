@@ -128,11 +128,6 @@ export default function ExploreClient({
 
     const totalPages = Math.max(1, Math.ceil(total / parsedQuery.pageSize));
 
-    const selectedCategoryLabel = useMemo(() => {
-        if (!parsedQuery.category) return null;
-        return categories.find((c) => c.id === parsedQuery.category)?.label || parsedQuery.category;
-    }, [parsedQuery.category]);
-
     useEffect(() => {
         setSearchQuery(parsedQuery.q);
         setSelectedCategory(parsedQuery.category);

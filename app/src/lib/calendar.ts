@@ -7,12 +7,6 @@ export type CalendarEventData = {
     durationMinutes: number; // in minutes
 };
 
-function formatICSDate(dateStr: string, timeStr: string): string {
-    const d = new Date(`${dateStr}T${timeStr}:00`);
-    if (isNaN(d.getTime())) return "";
-    return d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-}
-
 export function generateICSContent(data: CalendarEventData): string {
     const startObj = new Date(`${data.startDate}T${data.startTime}:00`);
     const endObj = new Date(startObj.getTime() + data.durationMinutes * 60000);
