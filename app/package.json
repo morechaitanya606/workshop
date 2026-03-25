@@ -3,9 +3,9 @@
     "version": "0.1.0",
     "private": true,
     "scripts": {
-        "dev": "cross-env NODE_OPTIONS=--max-old-space-size=8192 next dev",
-        "build": "cross-env NODE_OPTIONS=--max-old-space-size=8192 next build",
-        "start": "cross-env NODE_OPTIONS=--max-old-space-size=8192 next start",
+        "dev": "node scripts/run-next-with-memory.cjs dev",
+        "build": "node scripts/run-next-with-memory.cjs build",
+        "start": "node scripts/run-next-with-memory.cjs start",
         "lint": "next lint",
         "typecheck": "tsc --noEmit",
         "test": "vitest run",

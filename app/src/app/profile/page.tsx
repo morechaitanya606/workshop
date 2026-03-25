@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState, useRef, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -17,12 +18,11 @@ import {
     MessageSquare,
     Settings,
     Heart,
-    HeartOff,
     Banknote,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import MobileNav from "@/components/MobileNav";
-import { formatCurrency, formatDate, getInitials } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import {
@@ -40,7 +40,6 @@ import {
     type HostLedgerResponse,
 } from "@/lib/api-client";
 import type { Workshop } from "@/lib/data";
-import WorkshopTicket from "@/app/booking/WorkshopTicket";
 
 type BookingItem = {
     id: string;
@@ -82,6 +81,31 @@ const defaultDraft: FeedbackDraft = {
     videoUrl: "",
 };
 const MIN_REVIEW_LENGTH = 10;
+
+const WorkshopTicket = dynamic(() => import("@/app/booking/WorkshopTicket"), {
+    loading: () => <ProfileDeferredPanelFallback message="Loading your ticket..." />,
+});
+
+const ProfileEarningsPanel = dynamic(() => import("@/components/profile/ProfileEarningsPanel"), {
+    loading: () => <ProfileDeferredPanelFallback message="Loading earnings..." />,
+});
+
+const ProfileSettingsPanel = dynamic(() => import("@/components/profile/ProfileSettingsPanel"), {
+    loading: () => <ProfileDeferredPanelFallback message="Loading settings..." />,
+});
+
+const ProfileWishlistPanel = dynamic(() => import("@/components/profile/ProfileWishlistPanel"), {
+    loading: () => <ProfileDeferredPanelFallback message="Loading wishlist..." />,
+});
+
+function ProfileDeferredPanelFallback({ message }: { message: string }) {
+    return (
+        <div className="flex flex-col items-center justify-center py-20 text-dark/60">
+            <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-terracotta/20 border-t-terracotta" />
+            <p>{message}</p>
+        </div>
+    );
+}
 
 export default function ProfilePage() {
     const router = useRouter();
@@ -693,449 +717,38 @@ export default function ProfilePage() {
                                         <p>Loading your profile data...</p>
                                     </div>
                                 ) : tab === "earnings" ? (
-                                    <div className="space-y-6">
-                                        {loadingLedger ? (
-                                            <div className="flex flex-col items-center justify-center py-20 text-dark/60">
-                                                <Loader2 className="w-8 h-8 animate-spin mb-4 text-terracotta" />
-                                                <p>Loading your earnings...</p>
-                                            </div>
-                                        ) : !ledger ? (
-                                            <div className="bg-white rounded-2xl p-12 text-center shadow-soft border border-dark/5">
-                                                <p className="text-dark/60">
-                                                    No earnings data found.
-                                                </p>
-                                            </div>
-                                        ) : (
-                                            <div className="space-y-8">
-                                                <div className="bg-white rounded-2xl p-8 shadow-soft border border-dark/5">
-                                                    <h2 className="text-xl font-playfair font-medium mb-6">
-                                                        Earnings Overview
-                                                    </h2>
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                        <div className="p-5 rounded-xl bg-cream">
-                                                            <p className="text-sm text-dark/60 font-medium mb-1">
-                                                                Available to Payout
-                                                            </p>
-                                                            <p className="text-3xl font-playfair text-terracotta">
-                                                                {formatCurrency(
-                                                                    ledger.earnings
-                                                                        .filter(
-                                                                            (e) =>
-                                                                                e.status ===
-                                                                                "available"
-                                                                        )
-                                                                        .reduce(
-                                                                            (acc, curr) =>
-                                                                                acc + curr.amount,
-                                                                            0
-                                                                        )
-                                                                )}
-                                                            </p>
-                                                        </div>
-                                                        <div className="p-5 rounded-xl bg-cream-50">
-                                                            <p className="text-sm text-dark/60 font-medium mb-1">
-                                                                Pending Clearance
-                                                            </p>
-                                                            <p className="text-3xl font-playfair text-dark">
-                                                                {formatCurrency(
-                                                                    ledger.earnings
-                                                                        .filter(
-                                                                            (e) =>
-                                                                                e.status ===
-                                                                                "pending"
-                                                                        )
-                                                                        .reduce(
-                                                                            (acc, curr) =>
-                                                                                acc + curr.amount,
-                                                                            0
-                                                                        )
-                                                                )}
-                                                            </p>
-                                                        </div>
-                                                        <div className="p-5 rounded-xl bg-cream-50">
-                                                            <p className="text-sm text-dark/60 font-medium mb-1">
-                                                                Total Paid Out
-                                                            </p>
-                                                            <p className="text-3xl font-playfair text-dark">
-                                                                {formatCurrency(
-                                                                    ledger.payouts
-                                                                        .filter(
-                                                                            (p) =>
-                                                                                p.status ===
-                                                                                "completed"
-                                                                        )
-                                                                        .reduce(
-                                                                            (acc, curr) =>
-                                                                                acc + curr.amount,
-                                                                            0
-                                                                        )
-                                                                )}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="bg-white rounded-2xl p-8 shadow-soft border border-dark/5">
-                                                    <h2 className="text-xl font-playfair font-medium mb-6">
-                                                        Recent Earnings
-                                                    </h2>
-                                                    {ledger.earnings.length === 0 ? (
-                                                        <p className="text-dark/60">
-                                                            No transactions yet.
-                                                        </p>
-                                                    ) : (
-                                                        <div className="space-y-4">
-                                                            {ledger.earnings
-                                                                .slice(0, 10)
-                                                                .map((earning) => (
-                                                                    <div
-                                                                        key={earning.id}
-                                                                        className="flex justify-between items-center p-4 border border-dark/5 rounded-xl hover:border-dark/10 transition-colors"
-                                                                    >
-                                                                        <div>
-                                                                            <p className="font-medium text-dark">
-                                                                                {earning.booking
-                                                                                    ?.workshop
-                                                                                    ?.title ||
-                                                                                    "Workshop Booking"}
-                                                                            </p>
-                                                                            <p className="text-sm text-dark/60">
-                                                                                {formatDate(
-                                                                                    earning.created_at.split(
-                                                                                        "T"
-                                                                                    )[0]
-                                                                                )}{" "}
-                                                                                &middot;{" "}
-                                                                                {
-                                                                                    earning.booking
-                                                                                        ?.guests
-                                                                                }{" "}
-                                                                                guest
-                                                                                {earning.booking
-                                                                                    ?.guests !== 1
-                                                                                    ? "s"
-                                                                                    : ""}
-                                                                            </p>
-                                                                        </div>
-                                                                        <div className="text-right flex flex-col items-end gap-1">
-                                                                            <p className="font-semibold text-dark">
-                                                                                +
-                                                                                {formatCurrency(
-                                                                                    earning.amount
-                                                                                )}
-                                                                            </p>
-                                                                            <span
-                                                                                className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                                                                                    earning.status ===
-                                                                                    "available"
-                                                                                        ? "bg-emerald-100 text-emerald-800"
-                                                                                        : earning.status ===
-                                                                                            "pending"
-                                                                                          ? "bg-amber-100 text-amber-800"
-                                                                                          : "bg-blue-100 text-blue-800"
-                                                                                }`}
-                                                                            >
-                                                                                {earning.status}
-                                                                            </span>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                <div className="bg-white rounded-2xl p-8 shadow-soft border border-dark/5">
-                                                    <h2 className="text-xl font-playfair font-medium mb-6">
-                                                        Payout History
-                                                    </h2>
-                                                    {ledger.payouts.length === 0 ? (
-                                                        <p className="text-dark/60">
-                                                            No payouts yet.
-                                                        </p>
-                                                    ) : (
-                                                        <div className="space-y-4">
-                                                            {ledger.payouts.map((payout) => (
-                                                                <div
-                                                                    key={payout.id}
-                                                                    className="flex justify-between items-center p-4 border border-dark/5 rounded-xl"
-                                                                >
-                                                                    <div>
-                                                                        <p className="font-medium text-dark">
-                                                                            Payout
-                                                                        </p>
-                                                                        <p className="text-sm text-dark/60">
-                                                                            {formatDate(
-                                                                                payout.created_at.split(
-                                                                                    "T"
-                                                                                )[0]
-                                                                            )}{" "}
-                                                                            {payout.reference_note
-                                                                                ? `· ${payout.reference_note}`
-                                                                                : ""}
-                                                                        </p>
-                                                                    </div>
-                                                                    <div className="text-right flex flex-col items-end gap-1">
-                                                                        <p className="font-semibold text-dark">
-                                                                            {formatCurrency(
-                                                                                payout.amount
-                                                                            )}
-                                                                        </p>
-                                                                        <span
-                                                                            className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                                                                                payout.status ===
-                                                                                "completed"
-                                                                                    ? "bg-emerald-100 text-emerald-800"
-                                                                                    : "bg-amber-100 text-amber-800"
-                                                                            }`}
-                                                                        >
-                                                                            {payout.status}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
+                                    <ProfileEarningsPanel ledger={ledger} loading={loadingLedger} />
                                 ) : tab === "settings" ? (
-                                    <div className="bg-white rounded-2xl p-8 shadow-soft border border-dark/5">
-                                        <h2 className="text-xl font-playfair font-medium mb-6">
-                                            Account Settings
-                                        </h2>
-                                        <div className="space-y-6">
-                                            <div>
-                                                <label className="block text-sm font-medium text-dark/70 mb-2">
-                                                    Profile Photo
-                                                </label>
-                                                <div className="flex flex-wrap items-center gap-4">
-                                                    <div className="h-16 w-16 rounded-full bg-cream border border-clay/40 overflow-hidden flex items-center justify-center text-sm font-inter font-semibold text-dark-secondary">
-                                                        {profileAvatar ? (
-                                                            <Image
-                                                                src={profileAvatar}
-                                                                alt={profileName || "Profile"}
-                                                                width={64}
-                                                                height={64}
-                                                                className="h-full w-full object-cover"
-                                                            />
-                                                        ) : (
-                                                            getInitials(
-                                                                profileName || user.email || "User"
-                                                            )
-                                                        )}
-                                                    </div>
-                                                    <div className="flex flex-wrap items-center gap-3">
-                                                        <label className="inline-flex items-center gap-2 rounded-full border border-clay/40 px-4 py-2 text-xs font-inter font-semibold text-dark-secondary cursor-pointer hover:border-terracotta hover:text-terracotta transition-colors">
-                                                            <input
-                                                                type="file"
-                                                                accept="image/*"
-                                                                onChange={handleAvatarUpload}
-                                                                ref={avatarInputRef}
-                                                                className="sr-only"
-                                                                disabled={
-                                                                    avatarUploading ||
-                                                                    profileLoading
-                                                                }
-                                                            />
-                                                            {avatarUploading
-                                                                ? "Uploading..."
-                                                                : "Upload photo"}
-                                                        </label>
-                                                        {profileAvatar && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={handleRemoveAvatar}
-                                                                className="text-xs font-inter font-semibold text-dark-muted hover:text-terracotta transition-colors"
-                                                            >
-                                                                Remove
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-dark/70 mb-2">
-                                                    Username
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={profileName}
-                                                    onChange={(event) =>
-                                                        setProfileName(event.target.value)
-                                                    }
-                                                    placeholder="Enter your username"
-                                                    className="w-full max-w-md bg-cream-50 border border-dark/10 rounded-xl px-4 py-3 text-dark"
-                                                    disabled={profileLoading}
-                                                />
-                                                <p className="text-xs text-dark/50 mt-2">
-                                                    This name appears on your public workshop
-                                                    reviews.
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-dark/70 mb-2">
-                                                    Date of Birth
-                                                </label>
-                                                <input
-                                                    type="date"
-                                                    value={profileDob}
-                                                    onChange={(event) =>
-                                                        setProfileDob(event.target.value)
-                                                    }
-                                                    className="w-full max-w-md bg-cream-50 border border-dark/10 rounded-xl px-4 py-3 text-dark"
-                                                    disabled={profileLoading}
-                                                />
-                                                <p className="text-xs text-dark/50 mt-2">
-                                                    We use this for age-appropriate recommendations.
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-dark/70 mb-2">
-                                                    Phone Number
-                                                </label>
-                                                <input
-                                                    type="tel"
-                                                    value={profilePhone}
-                                                    onChange={(event) =>
-                                                        setProfilePhone(event.target.value)
-                                                    }
-                                                    placeholder="Enter your phone number"
-                                                    className="w-full max-w-md bg-cream-50 border border-dark/10 rounded-xl px-4 py-3 text-dark"
-                                                    disabled={profileLoading}
-                                                />
-                                                <p className="text-xs text-dark/50 mt-2">
-                                                    We&apos;ll only use this for important updates.
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-dark/70 mb-2">
-                                                    Email Address
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    disabled
-                                                    value={user.email || ""}
-                                                    className="w-full max-w-md bg-cream-50 border border-dark/10 rounded-xl px-4 py-3 text-dark cursor-not-allowed"
-                                                />
-                                                <p className="text-xs text-dark/50 mt-2">
-                                                    Your email address is managed by your
-                                                    authentication provider.
-                                                </p>
-                                            </div>
-                                            <div className="flex flex-wrap items-center gap-3">
-                                                <button
-                                                    type="button"
-                                                    onClick={handleSaveProfile}
-                                                    disabled={profileSaving || profileLoading}
-                                                    className="btn-primary !px-6 !py-2.5 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                                                >
-                                                    {profileSaving ? "Saving..." : "Save changes"}
-                                                </button>
-                                                {profileMessage && (
-                                                    <span className="text-xs font-inter text-emerald-700">
-                                                        {profileMessage}
-                                                    </span>
-                                                )}
-                                                {profileError && (
-                                                    <span className="text-xs font-inter text-red-600">
-                                                        {profileError}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <ProfileSettingsPanel
+                                        avatarInputRef={avatarInputRef}
+                                        avatarUploading={avatarUploading}
+                                        onAvatarUpload={handleAvatarUpload}
+                                        onRemoveAvatar={handleRemoveAvatar}
+                                        onSaveProfile={handleSaveProfile}
+                                        profileAvatar={profileAvatar}
+                                        profileDob={profileDob}
+                                        profileError={profileError}
+                                        profileLoading={profileLoading}
+                                        profileMessage={profileMessage}
+                                        profileName={profileName}
+                                        profilePhone={profilePhone}
+                                        profileSaving={profileSaving}
+                                        setProfileDob={setProfileDob}
+                                        setProfileName={setProfileName}
+                                        setProfilePhone={setProfilePhone}
+                                        userEmail={user.email}
+                                    />
                                 ) : tab === "wishlist" ? (
-                                    <div className="space-y-4">
-                                        {loadingFavorites ? (
-                                            <div className="flex flex-col items-center justify-center py-20 text-dark/60">
-                                                <Loader2 className="w-8 h-8 animate-spin mb-4 text-terracotta" />
-                                                <p>Loading your wishlist...</p>
-                                            </div>
-                                        ) : favoriteWorkshops.length === 0 ? (
-                                            <div className="bg-white rounded-2xl p-12 text-center shadow-soft border border-dark/5">
-                                                <div className="w-16 h-16 bg-cream rounded-full flex items-center justify-center mx-auto mb-6 text-terracotta">
-                                                    <Heart className="w-8 h-8" />
-                                                </div>
-                                                <h3 className="text-lg font-medium mb-2">
-                                                    No saved workshops yet
-                                                </h3>
-                                                <p className="text-dark/60 mb-8 max-w-md mx-auto">
-                                                    Save workshops from the detail page to see them
-                                                    here.
-                                                </p>
-                                                <button
-                                                    onClick={() => router.push("/explore")}
-                                                    className="btn-primary"
-                                                >
-                                                    Explore Workshops
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                {favoriteWorkshops.map((workshop) => (
-                                                    <div
-                                                        key={workshop.id}
-                                                        className="rounded-2xl bg-white p-5 shadow-soft border border-dark/5 hover:border-terracotta/40 transition-colors"
-                                                    >
-                                                        <div className="mb-3 flex items-start justify-between gap-2">
-                                                            <p className="text-xs font-semibold uppercase tracking-wider text-terracotta">
-                                                                {workshop.category}
-                                                            </p>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() =>
-                                                                    void handleUnsaveWorkshop(
-                                                                        workshop.id
-                                                                    )
-                                                                }
-                                                                disabled={
-                                                                    removingFavoriteId ===
-                                                                    workshop.id
-                                                                }
-                                                                aria-label={`Remove ${workshop.title} from wishlist`}
-                                                                className="inline-flex items-center gap-1 rounded-full border border-dark/10 px-3 py-1 text-xs font-medium text-dark/70 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                                                            >
-                                                                {removingFavoriteId ===
-                                                                workshop.id ? (
-                                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                                ) : (
-                                                                    <HeartOff className="h-3.5 w-3.5" />
-                                                                )}
-                                                                Unsave
-                                                            </button>
-                                                        </div>
-                                                        <h3 className="font-playfair text-xl text-dark mb-2">
-                                                            {workshop.title}
-                                                        </h3>
-                                                        <p className="text-sm text-dark/70 mb-2">
-                                                            {workshop.location}, {workshop.city}
-                                                        </p>
-                                                        <p className="text-sm text-dark/70 mb-4">
-                                                            {formatDate(workshop.date)} |{" "}
-                                                            {workshop.time}
-                                                        </p>
-                                                        <div className="flex items-center justify-between gap-2">
-                                                            <p className="font-semibold text-dark">
-                                                                {formatCurrency(workshop.price)}
-                                                            </p>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() =>
-                                                                    router.push(
-                                                                        `/workshop/${workshop.id}`
-                                                                    )
-                                                                }
-                                                                className="text-sm font-semibold text-terracotta hover:underline"
-                                                            >
-                                                                View workshop
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
+                                    <ProfileWishlistPanel
+                                        favoriteWorkshops={favoriteWorkshops}
+                                        loadingFavorites={loadingFavorites}
+                                        onExplore={() => router.push("/explore")}
+                                        onUnsaveWorkshop={handleUnsaveWorkshop}
+                                        onViewWorkshop={(workshopId) =>
+                                            router.push(`/workshop/${workshopId}`)
+                                        }
+                                        removingFavoriteId={removingFavoriteId}
+                                    />
                                 ) : activeList.length === 0 ? (
                                     <div className="bg-white rounded-2xl p-12 text-center shadow-soft border border-dark/5">
                                         <div className="w-16 h-16 bg-cream rounded-full flex items-center justify-center mx-auto mb-6 text-terracotta">

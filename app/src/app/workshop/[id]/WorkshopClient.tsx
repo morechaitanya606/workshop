@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import WorkshopCard from "@/components/WorkshopCard";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -31,8 +31,6 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import SocialShareButtons from "@/components/SocialShareButtons";
-import WorkshopFAQ from "@/components/WorkshopFAQ";
 import MobileNav from "@/components/MobileNav";
 import { useToast } from "@/components/ToastProvider";
 import type { Workshop } from "@/lib/data";
@@ -65,6 +63,40 @@ import {
     standardTransition,
 } from "@/lib/motion-presets";
 import { isDirectVideoFileUrl } from "@/lib/workshop-media";
+import type { PlatformSettingsType } from "@/lib/workshop-page-data";
+
+const SocialShareButtons = dynamic(() => import("@/components/SocialShareButtons"), {
+    loading: () => (
+        <div className="flex gap-2">
+            <div className="h-10 w-10 rounded-full bg-cream-200 animate-pulse" />
+            <div className="h-10 w-10 rounded-full bg-cream-200 animate-pulse" />
+            <div className="h-10 w-10 rounded-full bg-cream-200 animate-pulse" />
+        </div>
+    ),
+});
+
+const WorkshopFAQ = dynamic(() => import("@/components/WorkshopFAQ"), {
+    loading: () => (
+        <div className="card-section">
+            <span className="eyebrow-label">FAQ</span>
+            <div className="mt-4 space-y-3">
+                <div className="h-14 rounded-xl bg-cream-100 animate-pulse" />
+                <div className="h-14 rounded-xl bg-cream-100 animate-pulse" />
+                <div className="h-14 rounded-xl bg-cream-100 animate-pulse" />
+            </div>
+        </div>
+    ),
+});
+
+const WorkshopCard = dynamic(() => import("@/components/WorkshopCard"), {
+    loading: () => (
+        <div className="rounded-3xl border border-clay/30 bg-white p-6 shadow-card">
+            <div className="aspect-[4/3] rounded-2xl bg-cream-100 animate-pulse" />
+            <div className="mt-4 h-5 w-2/3 rounded bg-cream-100 animate-pulse" />
+            <div className="mt-2 h-4 w-1/2 rounded bg-cream-100 animate-pulse" />
+        </div>
+    ),
+});
 
 function toFiniteNumberOrNull(value: unknown) {
     if (typeof value !== "number" && typeof value !== "string") return null;
@@ -103,9 +135,6 @@ function extractAvailableSeatsFromBookingError(error: unknown) {
 
     return null;
 }
-
-import type { PlatformSettingsType } from "@/lib/workshop-page-data";
-
 export interface WorkshopClientProps {
     workshop: Workshop;
     similarWorkshops?: Workshop[];

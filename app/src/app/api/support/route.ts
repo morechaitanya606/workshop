@@ -2,22 +2,12 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireHostOrAdmin } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
+import type { Database } from "@/lib/database.types";
 import { createSupabaseAnonServerClient } from "@/lib/supabase-server";
 
-type SupportTicketRow = {
-    id: string;
-    subject: string;
-    description: string;
-    email: string;
-    status: "open" | "in_progress" | "resolved";
-    created_at: string;
-    workshop_id: string | null;
-};
+type SupportTicketRow = Database["public"]["Tables"]["support_tickets"]["Row"];
 
-type WorkshopRow = {
-    id: string;
-    title: string;
-};
+type WorkshopRow = Pick<Database["public"]["Tables"]["workshops"]["Row"], "id" | "title">;
 
 function isMissingSupportTableError(error: unknown) {
     const message =
@@ -98,17 +88,14 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        // @ts-expect-error support_tickets may exist in Supabase before generated types are updated.
-        let ticketsQuery = service.client
+        const ticketsBaseQuery = service.client
             .from("support_tickets")
             .select("id, subject, description, email, status, created_at, workshop_id")
             .order("created_at", { ascending: false });
 
-        if (workshopIds) {
-            ticketsQuery = ticketsQuery.in("workshop_id", workshopIds);
-        }
-
-        const { data, error } = await ticketsQuery;
+        const { data, error } = workshopIds
+            ? await ticketsBaseQuery.in("workshop_id", workshopIds)
+            : await ticketsBaseQuery;
 
         if (error) {
             if (isMissingSupportTableError(error)) {
@@ -176,9 +163,6 @@ export async function POST(request: Request) {
         const service = requireSupabaseService();
         const supabase = service.ok ? service.client : createSupabaseAnonServerClient();
 
-        // Attempt to insert into a 'support_tickets' table. If it doesn't exist, we'll
-        // gracefully fallback to success to not break the frontend demo.
-        // @ts-expect-error table might not be in the generated types yet
         const { error } = await supabase.from("support_tickets").insert([
             {
                 user_id: userId || null,

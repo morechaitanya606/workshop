@@ -516,6 +516,50 @@ export type Database = {
                 };
                 Relationships: [];
             };
+            support_tickets: {
+                Row: {
+                    created_at: string;
+                    description: string;
+                    email: string;
+                    id: string;
+                    status: Database["public"]["Enums"]["support_ticket_status"];
+                    subject: string;
+                    updated_at: string;
+                    user_id: string | null;
+                    workshop_id: string | null;
+                };
+                Insert: {
+                    created_at?: string;
+                    description: string;
+                    email: string;
+                    id?: string;
+                    status?: Database["public"]["Enums"]["support_ticket_status"];
+                    subject: string;
+                    updated_at?: string;
+                    user_id?: string | null;
+                    workshop_id?: string | null;
+                };
+                Update: {
+                    created_at?: string;
+                    description?: string;
+                    email?: string;
+                    id?: string;
+                    status?: Database["public"]["Enums"]["support_ticket_status"];
+                    subject?: string;
+                    updated_at?: string;
+                    user_id?: string | null;
+                    workshop_id?: string | null;
+                };
+                Relationships: [
+                    {
+                        foreignKeyName: "support_tickets_workshop_id_fkey";
+                        columns: ["workshop_id"];
+                        isOneToOne: false;
+                        referencedRelation: "workshops";
+                        referencedColumns: ["id"];
+                    },
+                ];
+            };
 
             user_favorites: {
                 Row: {
@@ -846,6 +890,7 @@ export type Database = {
             email_delivery_status: "pending" | "sent" | "failed";
             host_application_status: "pending" | "approved" | "rejected";
             payout_status: "processing" | "completed";
+            support_ticket_status: "open" | "in_progress" | "resolved";
             waitlist_status: "pending" | "notified" | "joined";
         };
         CompositeTypes: {
