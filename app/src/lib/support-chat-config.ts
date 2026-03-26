@@ -1,3 +1,5 @@
+import { CANCELLATION_POLICY } from "@/lib/cancellation-policy";
+
 export const SUPPORT_CHAT_CACHE_TTL_MS = 60_000;
 export const SUPPORT_CHAT_LIST_LIMIT = 3;
 export const SUPPORT_CHAT_PROVIDER_WORKSHOP_LIMIT = 3;
@@ -23,16 +25,16 @@ export const SUPPORT_CHAT_POLICY = {
         confirmationText: "Once payment succeeds, your booking is confirmed instantly.",
     },
     cancellation: {
-        generalSummary:
-            "Bookings are generally non-refundable, except where the cancellation policy below allows otherwise.",
-        listingLeadTimeDays: 7,
-        earlyBirdWindowDaysAfterListing: 2,
-        earlyBirdRefundPercent: 80,
-        noRefundCutoffHoursBeforeWorkshop: 48,
-        manualReviewSummary:
-            "After the Early Bird window ends, you may still request a refund, but approval is case by case and not guaranteed.",
-        hostCancellationSummary: "If a host cancels, you receive a full refund.",
-        refundProcessingWindow: "5 to 7 business days",
+        generalSummary: CANCELLATION_POLICY.generalSummary,
+        listingLeadTimeDays: CANCELLATION_POLICY.listingLeadTimeDays,
+        earlyBirdWindowDaysAfterListing: CANCELLATION_POLICY.earlyBirdWindowDaysAfterListing,
+        earlyBirdRefundPercent: CANCELLATION_POLICY.earlyBirdRefundPercent,
+        noRefundCutoffHoursBeforeWorkshop:
+            CANCELLATION_POLICY.noCancellationCutoffHoursBeforeWorkshop,
+        manualReviewSummary: CANCELLATION_POLICY.manualReviewSummary,
+        noCancellationSummary: CANCELLATION_POLICY.noCancellationSummary,
+        hostCancellationSummary: CANCELLATION_POLICY.hostCancellationSummary,
+        refundProcessingWindow: CANCELLATION_POLICY.refundProcessingWindow,
     },
     payment: {
         providerName: "Razorpay",

@@ -3,11 +3,10 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
     title: "About Us | Only Workshops",
     description:
-        "Learn about Only Workshops — our mission to connect creative professionals with curious learners through curated workshop experiences.",
+        "Learn how Only Workshops makes weekends more meaningful through hands-on creative experiences.",
     openGraph: {
         title: "About Only Workshops",
-        description:
-            "Connecting creative professionals with curious learners through curated workshop experiences.",
+        description: "Making weekends more meaningful through hands-on creative experiences.",
     },
 };
 

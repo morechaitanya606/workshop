@@ -47,6 +47,18 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
             return jsonError("Workshop not found.", 404);
         }
 
+        const { data: workshop, error: workshopError } = await serviceClient
+            .from("workshops")
+            .select("date, time")
+            .eq("id", workshopId)
+            .maybeSingle();
+
+        if (workshopError || !workshop) {
+            return jsonError("Workshop not found.", 404);
+        }
+
+        const canLeaveFeedback = isWorkshopPast(String(workshop.date), String(workshop.time));
+
         const { data: bookingData, error: bookingError } = await serviceClient
             .from("bookings")
             .select("id")
@@ -55,11 +67,15 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
             .eq("status", "confirmed")
             .limit(1);
 
-        if (bookingError || !bookingData || bookingData.length === 0) {
-            return jsonError(
-                "You must have a confirmed booking to leave or view feedback for this workshop.",
-                403
-            );
+        if (bookingError) {
+            return jsonError("Unable to load feedback.", 500, bookingError);
+        }
+
+        if (!bookingData || bookingData.length === 0 || !canLeaveFeedback) {
+            return NextResponse.json({
+                feedback: null,
+                canLeaveFeedback: false,
+            });
         }
 
         const { data, error } = await serviceClient
@@ -73,6 +89,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
             const fallback = getFallbackFeedback(auth.user.id, workshopId);
             return NextResponse.json({
                 feedback: fallback ? toFallbackWorkshopFeedbackResponse(fallback) : null,
+                canLeaveFeedback: true,
             });
         }
 
@@ -80,7 +97,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
             return jsonError("Unable to load feedback.", 500, error);
         }
 
-        return NextResponse.json({ feedback: (data as FeedbackRow | null) || null });
+        return NextResponse.json({
+            feedback: (data as FeedbackRow | null) || null,
+            canLeaveFeedback: true,
+        });
     } catch (error) {
         return jsonError("Unable to load feedback.", 500, String(error));
     }

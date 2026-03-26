@@ -17,8 +17,10 @@ import {
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
+import ExploreCommunitiesSection from "@/components/communities/ExploreCommunitiesSection";
 import ExploreResultsSection from "@/components/explore/ExploreResultsSection";
 import ExploreToolbarSection from "@/components/explore/ExploreToolbarSection";
+import { mockCommunities } from "@/lib/communities";
 
 type SortOption = "date_asc" | "date_desc" | "price_asc" | "price_desc" | "rating_desc";
 
@@ -551,6 +553,8 @@ export default function ExploreClient({
                         )
                     }
                 />
+
+                <ExploreCommunitiesSection communities={mockCommunities} />
             </div>
 
             <Sheet

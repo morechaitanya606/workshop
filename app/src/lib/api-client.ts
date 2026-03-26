@@ -1,5 +1,10 @@
 import type { Workshop } from "@/lib/data";
-import type { WorkshopCreateInput, WorkshopUpdateInput } from "@/lib/validators";
+import type {
+    CommunityCreateInput,
+    CommunityJoinInput,
+    WorkshopCreateInput,
+    WorkshopUpdateInput,
+} from "@/lib/validators";
 
 type Primitive = string | number | boolean | null | undefined;
 
@@ -207,6 +212,7 @@ export type WorkshopFeedbackResponse = {
         created_at: string;
         updated_at: string;
     } | null;
+    canLeaveFeedback?: boolean;
     message?: string;
 };
 
@@ -712,6 +718,14 @@ export function createAdminWorkshop(accessToken: string, payload: WorkshopCreate
     });
 }
 
+export function createHostWorkshop(accessToken: string, payload: WorkshopCreateInput) {
+    return apiRequest<AdminWorkshopResponse>("/api/host/workshops", {
+        method: "POST",
+        accessToken,
+        body: payload,
+    });
+}
+
 export function updateAdminWorkshop(
     accessToken: string,
     workshopId: string,
@@ -927,6 +941,20 @@ export function deleteAdminWorkshop(accessToken: string, workshopId: string) {
     });
 }
 
+export function approveAdminWorkshop(accessToken: string, workshopId: string) {
+    return apiRequest<AdminWorkshopResponse>(`/api/admin/workshops/${workshopId}/approve`, {
+        method: "POST",
+        accessToken,
+    });
+}
+
+export function rejectAdminWorkshop(accessToken: string, workshopId: string) {
+    return apiRequest<AdminWorkshopResponse>(`/api/admin/workshops/${workshopId}/reject`, {
+        method: "POST",
+        accessToken,
+    });
+}
+
 export type FavoritesResponse = {
     favorites: string[];
     source: "supabase" | "memory";
@@ -997,6 +1025,48 @@ export function getHostWorkshops(accessToken: string) {
     return apiRequest<HostWorkshopsResponse>("/api/host/workshops", {
         accessToken,
         cache: "no-store",
+    });
+}
+
+export type CommunityResponse = {
+    community: {
+        id: string;
+        slug: string;
+        title: string;
+        summary: string;
+        description: string;
+        category: string;
+        city: string;
+        hostName: string;
+        hostEmail: string;
+        hostPhone: string;
+        meetingFormat: string;
+        meetupFrequency: string;
+        coverImage: string | null;
+        instagramUrl: string | null;
+        websiteUrl: string | null;
+        whatsappUrl: string | null;
+        createdAt: string;
+    };
+    message?: string;
+};
+
+export function createCommunity(payload: CommunityCreateInput) {
+    return apiRequest<CommunityResponse>("/api/communities", {
+        method: "POST",
+        body: payload,
+    });
+}
+
+export type CommunityJoinResponse = {
+    success: boolean;
+    message: string;
+};
+
+export function submitCommunityJoinRequest(slug: string, payload: CommunityJoinInput) {
+    return apiRequest<CommunityJoinResponse>(`/api/communities/${slug}/join`, {
+        method: "POST",
+        body: payload,
     });
 }
 

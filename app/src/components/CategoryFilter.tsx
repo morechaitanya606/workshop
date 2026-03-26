@@ -53,7 +53,7 @@ export default function CategoryFilter({ onCategoryChange, activeCategory }: Cat
 
     return (
         <div>
-            <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide py-2 px-1">
+            <div className="flex items-center gap-3 overflow-x-auto px-1 pt-2 pb-3 scrollbar-subtle">
                 {filterCategories.map((cat) => (
                     <motion.button
                         key={cat.id}
@@ -65,7 +65,7 @@ export default function CategoryFilter({ onCategoryChange, activeCategory }: Cat
                             activeId === cat.id ? "pill-active" : "pill-default"
                         }`}
                     >
-                        <span className="text-base">{cat.icon}</span>
+                        {cat.icon ? <span className="text-base">{cat.icon}</span> : null}
                         {cat.label}
                     </motion.button>
                 ))}

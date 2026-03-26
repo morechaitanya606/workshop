@@ -6,6 +6,7 @@ import { warnDevFallback } from "@/lib/dev-warnings";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { workshopQuerySchema } from "@/lib/validators";
 import { mapWorkshopRowToWorkshop, queryMockWorkshops } from "@/lib/workshop-utils";
+import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
 import { normalizeFilterCategoryLabel, PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
 
@@ -30,6 +31,83 @@ function getSortConfig(sort: string) {
     return { column: "date", ascending: true };
 }
 
+function buildHomeWorkshopQuery(
+    serviceClient: ReturnType<typeof createSupabaseServiceClient>,
+    options: {
+        comparison: "gte" | "lt";
+        date: string;
+        limit: number;
+        ascending: boolean;
+        includeApprovalFilter?: boolean;
+    }
+) {
+    let query = serviceClient.from("workshops").select("*");
+
+    if (options.includeApprovalFilter !== false) {
+        query = query.eq("approval_status", "approved");
+    }
+
+    query =
+        options.comparison === "gte"
+            ? query.gte("date", options.date)
+            : query.lt("date", options.date);
+
+    return query.order("date", { ascending: options.ascending }).limit(options.limit);
+}
+
+function buildExploreWorkshopQuery(
+    serviceClient: ReturnType<typeof createSupabaseServiceClient>,
+    query: ReturnType<typeof workshopQuerySchema.parse>,
+    normalizedCategory: string,
+    from: number,
+    to: number,
+    includeApprovalFilter = true
+) {
+    const sortConfig = getSortConfig(query.sort);
+    let dbQuery = serviceClient.from("workshops").select("*", { count: "exact" });
+
+    if (includeApprovalFilter) {
+        dbQuery = dbQuery.eq("approval_status", "approved");
+    }
+
+    if (query.q) {
+        const q = query.q.replace(/[%]/g, "");
+        dbQuery = dbQuery.or(
+            `title.ilike.%${q}%,description.ilike.%${q}%,location.ilike.%${q}%,city.ilike.%${q}%`
+        );
+    }
+    const isPastEventsCategory =
+        normalizedCategory.toLowerCase() === PAST_EVENTS_CATEGORY_LABEL.toLowerCase();
+    if (normalizedCategory && !isPastEventsCategory) {
+        dbQuery = dbQuery.eq("category", normalizedCategory);
+    }
+    if (isPastEventsCategory) {
+        const today = new Date().toISOString().slice(0, 10);
+        dbQuery = dbQuery.lt("date", today);
+    }
+    if (!isPastEventsCategory) {
+        const today = new Date().toISOString().slice(0, 10);
+        dbQuery = dbQuery.gte("date", today);
+    }
+    if (query.city) {
+        dbQuery = dbQuery.eq("city", query.city);
+    }
+    if (query.dateFrom) {
+        dbQuery = dbQuery.gte("date", query.dateFrom);
+    }
+    if (query.dateTo) {
+        dbQuery = dbQuery.lte("date", query.dateTo);
+    }
+    if (typeof query.minPrice === "number") {
+        dbQuery = dbQuery.gte("price", query.minPrice);
+    }
+    if (typeof query.maxPrice === "number") {
+        dbQuery = dbQuery.lte("price", query.maxPrice);
+    }
+
+    return dbQuery.order(sortConfig.column, { ascending: sortConfig.ascending }).range(from, to);
+}
+
 export async function loadHomeWorkshops(): Promise<HomeWorkshopsResult> {
     const allowMockFallback = process.env.NODE_ENV !== "production";
     let fallbackReason = "Supabase service is unavailable.";
@@ -39,24 +117,47 @@ export async function loadHomeWorkshops(): Promise<HomeWorkshopsResult> {
             const serviceClient = createSupabaseServiceClient({ requestTimeoutMs: 5000 });
             const today = new Date().toISOString().slice(0, 10);
 
-            const [upcomingRes, pastRes] = await Promise.all([
-                serviceClient
-                    .from("workshops")
-                    .select("*")
-                    .gte("date", today)
-                    .order("date", { ascending: true })
-                    .limit(12),
-                serviceClient
-                    .from("workshops")
-                    .select("*")
-                    .lt("date", today)
-                    .order("date", { ascending: false })
-                    .limit(8),
+            let [upcomingRes, pastRes] = await Promise.all([
+                buildHomeWorkshopQuery(serviceClient, {
+                    comparison: "gte",
+                    date: today,
+                    limit: 12,
+                    ascending: true,
+                }),
+                buildHomeWorkshopQuery(serviceClient, {
+                    comparison: "lt",
+                    date: today,
+                    limit: 8,
+                    ascending: false,
+                }),
             ]);
 
-            const error = upcomingRes.error || pastRes.error;
-            const upcomingData = upcomingRes.data || [];
-            const pastData = pastRes.data || [];
+            let error = upcomingRes.error || pastRes.error;
+            let upcomingData = upcomingRes.data || [];
+            let pastData = pastRes.data || [];
+
+            if (error && isMissingApprovalStatusColumnError(error)) {
+                [upcomingRes, pastRes] = await Promise.all([
+                    buildHomeWorkshopQuery(serviceClient, {
+                        comparison: "gte",
+                        date: today,
+                        limit: 12,
+                        ascending: true,
+                        includeApprovalFilter: false,
+                    }),
+                    buildHomeWorkshopQuery(serviceClient, {
+                        comparison: "lt",
+                        date: today,
+                        limit: 8,
+                        ascending: false,
+                        includeApprovalFilter: false,
+                    }),
+                ]);
+
+                error = upcomingRes.error || pastRes.error;
+                upcomingData = upcomingRes.data || [];
+                pastData = pastRes.data || [];
+            }
 
             if (!error) {
                 const allData = [...upcomingData, ...pastData];
@@ -149,47 +250,24 @@ export async function loadExploreWorkshops(searchParams: {
     if (isSupabaseServiceConfigured) {
         try {
             const serviceClient = createSupabaseServiceClient({ requestTimeoutMs: 5000 });
-            const sortConfig = getSortConfig(query.sort);
-            let dbQuery = serviceClient.from("workshops").select("*", { count: "exact" });
+            let { data, error, count } = await buildExploreWorkshopQuery(
+                serviceClient,
+                query,
+                normalizedCategory,
+                from,
+                to
+            );
 
-            if (query.q) {
-                const q = query.q.replace(/[%]/g, "");
-                dbQuery = dbQuery.or(
-                    `title.ilike.%${q}%,description.ilike.%${q}%,location.ilike.%${q}%,city.ilike.%${q}%`
-                );
+            if (error && isMissingApprovalStatusColumnError(error)) {
+                ({ data, error, count } = await buildExploreWorkshopQuery(
+                    serviceClient,
+                    query,
+                    normalizedCategory,
+                    from,
+                    to,
+                    false
+                ));
             }
-            const isPastEventsCategory =
-                normalizedCategory.toLowerCase() === PAST_EVENTS_CATEGORY_LABEL.toLowerCase();
-            if (normalizedCategory && !isPastEventsCategory) {
-                dbQuery = dbQuery.eq("category", normalizedCategory);
-            }
-            if (isPastEventsCategory) {
-                const today = new Date().toISOString().slice(0, 10);
-                dbQuery = dbQuery.lt("date", today);
-            }
-            if (!isPastEventsCategory) {
-                const today = new Date().toISOString().slice(0, 10);
-                dbQuery = dbQuery.gte("date", today);
-            }
-            if (query.city) {
-                dbQuery = dbQuery.eq("city", query.city);
-            }
-            if (query.dateFrom) {
-                dbQuery = dbQuery.gte("date", query.dateFrom);
-            }
-            if (query.dateTo) {
-                dbQuery = dbQuery.lte("date", query.dateTo);
-            }
-            if (typeof query.minPrice === "number") {
-                dbQuery = dbQuery.gte("price", query.minPrice);
-            }
-            if (typeof query.maxPrice === "number") {
-                dbQuery = dbQuery.lte("price", query.maxPrice);
-            }
-
-            const { data, error, count } = await dbQuery
-                .order(sortConfig.column, { ascending: sortConfig.ascending })
-                .range(from, to);
 
             if (!error) {
                 return {

@@ -44,14 +44,17 @@ export function Dialog({
 
     return (
         <div
-            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4"
+            className="fixed inset-0 z-[120] flex items-end justify-center bg-black/60 p-2 sm:items-center sm:p-4"
             onClick={() => onOpenChange(false)}
             role="dialog"
             aria-modal="true"
             aria-label={title}
         >
             <div
-                className={cn("w-full max-w-lg rounded-2xl bg-white p-5 shadow-card", className)}
+                className={cn(
+                    "w-full max-w-lg max-h-[calc(100vh-1rem)] overflow-y-auto rounded-2xl bg-white p-4 shadow-card sm:max-h-[calc(100vh-2rem)] sm:p-5",
+                    className
+                )}
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="mb-4 flex items-start justify-between gap-4">

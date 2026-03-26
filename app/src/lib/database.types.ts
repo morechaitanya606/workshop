@@ -173,6 +173,110 @@ export type Database = {
                     },
                 ];
             };
+            communities: {
+                Row: {
+                    category: string;
+                    city: string;
+                    cover_image: string | null;
+                    created_at: string;
+                    description: string;
+                    host_email: string;
+                    host_name: string;
+                    host_phone: string;
+                    id: string;
+                    instagram_url: string | null;
+                    meeting_format: string;
+                    meetup_frequency: string;
+                    slug: string;
+                    summary: string;
+                    title: string;
+                    updated_at: string;
+                    website_url: string | null;
+                    whatsapp_url: string | null;
+                };
+                Insert: {
+                    category: string;
+                    city: string;
+                    cover_image?: string | null;
+                    created_at?: string;
+                    description: string;
+                    host_email: string;
+                    host_name: string;
+                    host_phone: string;
+                    id?: string;
+                    instagram_url?: string | null;
+                    meeting_format?: string;
+                    meetup_frequency: string;
+                    slug: string;
+                    summary: string;
+                    title: string;
+                    updated_at?: string;
+                    website_url?: string | null;
+                    whatsapp_url?: string | null;
+                };
+                Update: {
+                    category?: string;
+                    city?: string;
+                    cover_image?: string | null;
+                    created_at?: string;
+                    description?: string;
+                    host_email?: string;
+                    host_name?: string;
+                    host_phone?: string;
+                    id?: string;
+                    instagram_url?: string | null;
+                    meeting_format?: string;
+                    meetup_frequency?: string;
+                    slug?: string;
+                    summary?: string;
+                    title?: string;
+                    updated_at?: string;
+                    website_url?: string | null;
+                    whatsapp_url?: string | null;
+                };
+                Relationships: [];
+            };
+            community_join_requests: {
+                Row: {
+                    community_id: string;
+                    created_at: string;
+                    email: string;
+                    full_name: string;
+                    id: string;
+                    note: string | null;
+                    phone: string;
+                    status: string;
+                };
+                Insert: {
+                    community_id: string;
+                    created_at?: string;
+                    email: string;
+                    full_name: string;
+                    id?: string;
+                    note?: string | null;
+                    phone: string;
+                    status?: string;
+                };
+                Update: {
+                    community_id?: string;
+                    created_at?: string;
+                    email?: string;
+                    full_name?: string;
+                    id?: string;
+                    note?: string | null;
+                    phone?: string;
+                    status?: string;
+                };
+                Relationships: [
+                    {
+                        foreignKeyName: "community_join_requests_community_id_fkey";
+                        columns: ["community_id"];
+                        isOneToOne: false;
+                        referencedRelation: "communities";
+                        referencedColumns: ["id"];
+                    },
+                ];
+            };
             coupons: {
                 Row: {
                     applicable_categories: string[] | null;
@@ -717,6 +821,7 @@ export type Database = {
 
             workshops: {
                 Row: {
+                    approval_status: "pending" | "approved" | "rejected";
                     badge_labels: string[] | null;
                     category: string;
                     city: string;
@@ -758,6 +863,7 @@ export type Database = {
                     what_you_learn: string[];
                 };
                 Insert: {
+                    approval_status?: "pending" | "approved" | "rejected";
                     badge_labels?: string[] | null;
                     category: string;
                     city: string;
@@ -799,6 +905,7 @@ export type Database = {
                     what_you_learn?: string[];
                 };
                 Update: {
+                    approval_status?: "pending" | "approved" | "rejected";
                     badge_labels?: string[] | null;
                     category?: string;
                     city?: string;

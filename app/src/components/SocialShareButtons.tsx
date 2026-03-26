@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Check, Link2 } from "lucide-react";
+import { useToast } from "@/components/ToastProvider";
 
 interface SocialShareButtonsProps {
     title: string;
@@ -10,6 +11,8 @@ interface SocialShareButtonsProps {
     seatsRemaining: number;
     url: string;
 }
+
+const INSTAGRAM_DM_FALLBACK_URL = "https://www.instagram.com/direct/inbox/";
 
 function WhatsAppIcon({ className }: { className?: string }) {
     return (
@@ -35,6 +38,8 @@ function SnapchatIcon({ className }: { className?: string }) {
     );
 }
 
+type ShareResult = "shared" | "cancelled" | "failed" | "unavailable";
+
 export default function SocialShareButtons({
     title,
     date,
@@ -42,45 +47,101 @@ export default function SocialShareButtons({
     seatsRemaining,
     url,
 }: SocialShareButtonsProps) {
-    const [copied, setCopied] = useState(false);
+    const toast = useToast();
+    const [linkCopied, setLinkCopied] = useState(false);
 
-    const shareMessage = `Hey! Check out this workshop — ${title} on ${date} in ${city}.${seatsRemaining > 0 && seatsRemaining <= 10 ? ` Only ${seatsRemaining} spots left!` : ""} ${url}`;
+    const shareMessage = [
+        `Hey! Check out this workshop - ${title}`,
+        `When: ${date}`,
+        `Where: ${city}`,
+        seatsRemaining > 0 && seatsRemaining <= 10
+            ? `Only ${seatsRemaining} spot${seatsRemaining === 1 ? "" : "s"} left!`
+            : "",
+        url,
+    ]
+        .filter(Boolean)
+        .join("\n");
 
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareMessage)}`;
 
-    const handleCopyLink = async () => {
-        try {
-            await navigator.clipboard.writeText(url);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch {
-            // Fallback: do nothing, the URL is already in the address bar
+    const copyText = useCallback(async (text: string) => {
+        if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+            return false;
         }
-    };
 
-    const handleInstagramShare = async () => {
-        // Instagram doesn't support direct URL sharing via web — copy the message and prompt the user
         try {
-            await navigator.clipboard.writeText(shareMessage);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+            await navigator.clipboard.writeText(text);
+            return true;
         } catch {
-            // silently fail
+            return false;
         }
-        // Attempt deep link to Instagram
-        window.open("https://www.instagram.com/", "_blank");
-    };
+    }, []);
 
-    const handleSnapchatShare = () => {
+    const openPopup = useCallback((targetUrl: string) => {
+        if (typeof window === "undefined") return;
+        window.open(targetUrl, "_blank", "noopener,noreferrer");
+    }, []);
+
+    const shareNatively = useCallback(async (): Promise<ShareResult> => {
+        if (typeof navigator === "undefined" || !navigator.share) {
+            return "unavailable";
+        }
+
+        try {
+            await navigator.share({
+                title,
+                text: shareMessage,
+                url,
+            });
+            return "shared";
+        } catch (error) {
+            if (error instanceof DOMException && error.name === "AbortError") {
+                return "cancelled";
+            }
+            return "failed";
+        }
+    }, [shareMessage, title, url]);
+
+    const handleCopyLink = useCallback(async () => {
+        const copied = await copyText(url);
+        if (!copied) return;
+
+        setLinkCopied(true);
+        window.setTimeout(() => setLinkCopied(false), 2000);
+    }, [copyText, url]);
+
+    const handleInstagramShare = useCallback(async () => {
+        const shareResult = await shareNatively();
+        if (shareResult === "shared" || shareResult === "cancelled") {
+            return;
+        }
+
+        const copied = await copyText(shareMessage);
+        if (copied) {
+            toast.info(
+                "Instagram share ready",
+                "We copied a DM-ready message. Paste it into Instagram and send it."
+            );
+        } else {
+            toast.info(
+                "Open Instagram",
+                "Instagram does not support direct web DM links here. Open Instagram and paste the workshop link manually."
+            );
+        }
+
+        openPopup(INSTAGRAM_DM_FALLBACK_URL);
+    }, [copyText, openPopup, shareMessage, shareNatively, toast]);
+
+    const handleSnapchatShare = useCallback(() => {
         const snapUrl = `https://www.snapchat.com/scan?attachmentUrl=${encodeURIComponent(url)}`;
-        window.open(snapUrl, "_blank");
-    };
+        openPopup(snapUrl);
+    }, [openPopup, url]);
 
     const buttons = [
         {
             label: "WhatsApp",
             icon: WhatsAppIcon,
-            onClick: () => window.open(whatsappUrl, "_blank"),
+            onClick: () => openPopup(whatsappUrl),
             bgClass: "bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366]",
         },
         {
@@ -97,10 +158,10 @@ export default function SocialShareButtons({
             bgClass: "bg-[#FFFC00]/10 hover:bg-[#FFFC00]/20 text-[#FFD700]",
         },
         {
-            label: copied ? "Copied!" : "Copy Link",
-            icon: copied ? Check : Link2,
+            label: linkCopied ? "Copied!" : "Copy Link",
+            icon: linkCopied ? Check : Link2,
             onClick: handleCopyLink,
-            bgClass: copied
+            bgClass: linkCopied
                 ? "bg-emerald-100 text-emerald-600"
                 : "bg-gray-100 hover:bg-gray-200 text-dark-muted",
         },

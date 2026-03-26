@@ -16,6 +16,10 @@ import type { SupabaseServerClient } from "@/lib/supabase-server";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 import { sendPaymentNotification } from "@/lib/payment-notifications";
 import { BOOKING_CUTOFF_HOURS, isBookingClosedNow } from "@/lib/booking-time";
+import {
+    getWorkshopApprovalStatus,
+    isMissingApprovalStatusColumnError,
+} from "@/lib/workshop-approval-compat";
 
 // Removed hardcoded SERVICE_FEE
 const PAYMENT_CURRENCY = "INR";
@@ -33,6 +37,7 @@ type HoldWithWorkshop = {
         title: string;
         price: number;
         seats_remaining: number;
+        approval_status?: "pending" | "approved" | "rejected" | null;
         date?: string | null;
         time?: string | null;
     } | null;
@@ -97,6 +102,87 @@ async function loadBookingById(serviceClient: SupabaseServerClient, bookingId: s
         .single();
 
     return booking;
+}
+
+async function loadHoldWithWorkshop(
+    serviceClient: SupabaseServerClient,
+    holdId: string,
+    workshopId: string,
+    userId: string
+) {
+    const primary = await serviceClient
+        .from("booking_holds")
+        .select(
+            `
+                id,
+                workshop_id,
+                user_id,
+                guests,
+                status,
+                expires_at,
+                workshop:workshops (
+                    id,
+                    title,
+                    price,
+                    seats_remaining,
+                    approval_status,
+                    date,
+                    time
+                )
+            `
+        )
+        .eq("id", holdId)
+        .eq("workshop_id", workshopId)
+        .eq("user_id", userId)
+        .single();
+
+    if (!primary.error || !isMissingApprovalStatusColumnError(primary.error)) {
+        return {
+            data: primary.data as HoldWithWorkshop | null,
+            error: primary.error,
+        };
+    }
+
+    const fallback = await serviceClient
+        .from("booking_holds")
+        .select(
+            `
+                id,
+                workshop_id,
+                user_id,
+                guests,
+                status,
+                expires_at,
+                workshop:workshops (
+                    id,
+                    title,
+                    price,
+                    seats_remaining,
+                    date,
+                    time
+                )
+            `
+        )
+        .eq("id", holdId)
+        .eq("workshop_id", workshopId)
+        .eq("user_id", userId)
+        .single();
+
+    const fallbackHold = fallback.data as HoldWithWorkshop | null;
+
+    return {
+        data:
+            fallbackHold && fallbackHold.workshop
+                ? {
+                      ...fallbackHold,
+                      workshop: {
+                          ...fallbackHold.workshop,
+                          approval_status: "approved",
+                      },
+                  }
+                : fallbackHold,
+        error: fallback.error,
+    };
 }
 
 async function sendConfirmedBookingNotification(
@@ -179,30 +265,12 @@ export async function POST(request: NextRequest) {
     try {
         await ensureWorkshopSeededFromMock(serviceClient, payload.workshopId);
 
-        const { data: holdData, error: holdError } = await serviceClient
-            .from("booking_holds")
-            .select(
-                `
-                id,
-                workshop_id,
-                user_id,
-                guests,
-                status,
-                expires_at,
-                workshop:workshops (
-                    id,
-                    title,
-                    price,
-                    seats_remaining,
-                    date,
-                    time
-                )
-            `
-            )
-            .eq("id", payload.holdId)
-            .eq("workshop_id", payload.workshopId)
-            .eq("user_id", auth.user.id)
-            .single();
+        const { data: holdData, error: holdError } = await loadHoldWithWorkshop(
+            serviceClient,
+            payload.holdId,
+            payload.workshopId,
+            auth.user.id
+        );
 
         const hold = holdData as HoldWithWorkshop | null;
 
@@ -241,6 +309,14 @@ export async function POST(request: NextRequest) {
                 userId: auth.user.id,
                 holdId: payload.holdId,
                 workshopId: payload.workshopId,
+            });
+        }
+        if (getWorkshopApprovalStatus(workshop.approval_status) !== "approved") {
+            return paymentError("This workshop is not open for bookings yet.", 409, {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                code: "WORKSHOP_PENDING_APPROVAL",
             });
         }
 

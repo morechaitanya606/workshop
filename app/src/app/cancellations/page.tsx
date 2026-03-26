@@ -2,6 +2,7 @@
 
 import StaticPage from "@/components/StaticPage";
 import { ShieldX, UserX, Clock, AlertTriangle } from "lucide-react";
+import { CANCELLATION_POLICY } from "@/lib/cancellation-policy";
 
 export default function CancellationsPage() {
     return (
@@ -18,29 +19,21 @@ export default function CancellationsPage() {
                     </h2>
                 </div>
                 <ul className="space-y-2 ml-8 list-disc marker:text-terracotta/40">
+                    <li>{CANCELLATION_POLICY.generalSummary}</li>
                     <li>
-                        Once a booking is confirmed, it is generally <strong>non-refundable</strong>
-                        , except where a specific refund path is stated below (such as the Early
-                        Bird refund policy).
+                        Workshops are typically listed{" "}
+                        <strong>
+                            {CANCELLATION_POLICY.listingLeadTimeDays} days before the event
+                        </strong>
+                        , and the <strong>Early Bird window</strong> covers the first{" "}
+                        <strong>
+                            {CANCELLATION_POLICY.earlyBirdWindowDaysAfterListing} days after the
+                            listing goes live
+                        </strong>
+                        .
                     </li>
                     <li>
-                        Workshops are typically listed <strong>7 days before the event</strong>, and
-                        the <strong>Early Bird window</strong> covers the first{" "}
-                        <strong>2 days after listing goes live</strong>.
-                    </li>
-                    <li>
-                        If you booked during that Early Bird window and submit a cancellation
-                        request <strong>only in 24 hours you can cancel </strong>, up to{" "}
-                        <strong>80% of the booking amount</strong> may be refunded.
-                    </li>
-                    <li>
-                        After the Early Bird window ends, you may still request a refund if the
-                        workshop is more than 48 hours away, but approval is{" "}
-                        <strong>case by case and not guaranteed</strong>.
-                    </li>
-                    <li>
-                        Within <strong>48 hours of the workshop start time</strong>, bookings are{" "}
-                        <strong>not cancellable and not refundable</strong>.
+                        <strong>{CANCELLATION_POLICY.noCancellationSummary}</strong>
                     </li>
                 </ul>
             </section>
@@ -70,8 +63,9 @@ export default function CancellationsPage() {
                 <ul className="space-y-2 ml-8 list-disc marker:text-terracotta/40">
                     <li>
                         Approved refunds are processed back to the original payment method (Bank
-                        Account / UPI / Card) within <strong>5-7 business days</strong> from the
-                        date of approval.
+                        Account / UPI / Card) within{" "}
+                        <strong>{CANCELLATION_POLICY.refundProcessingWindow}</strong> from the date
+                        of approval.
                     </li>
                     <li>
                         If your request needs manual review, our team will assess it based on the

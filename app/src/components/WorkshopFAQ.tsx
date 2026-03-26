@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { CANCELLATION_POLICY } from "@/lib/cancellation-policy";
 
 const DEFAULT_FAQS = [
     {
@@ -19,7 +20,7 @@ const DEFAULT_FAQS = [
     },
     {
         question: "What if I need to cancel or reschedule?",
-        answer: "Bookings are generally non-refundable. If you booked during the first 2 days after a workshop was listed, you may be eligible for up to an 80% refund as long as you cancel more than 48 hours before the session. After that, refund requests are reviewed case by case and are not guaranteed, and there are no cancellations or refunds within 48 hours of the workshop. Host cancellations are always fully refunded.",
+        answer: `${CANCELLATION_POLICY.generalSummary} ${CANCELLATION_POLICY.earlyBirdSummary} ${CANCELLATION_POLICY.manualReviewSummary} ${CANCELLATION_POLICY.noCancellationSummary} ${CANCELLATION_POLICY.hostCancellationSummary}`,
     },
     {
         question: "Can I bring a friend who hasn't booked?",

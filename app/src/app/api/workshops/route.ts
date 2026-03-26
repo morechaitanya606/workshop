@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { handleApiError, parseQuery } from "@/lib/api-route";
 import { workshopQuerySchema } from "@/lib/validators";
 import { mapWorkshopRowToWorkshop, queryMockWorkshops } from "@/lib/workshop-utils";
+import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
 import { normalizeFilterCategoryLabel } from "@/lib/data";
 import { createSupabaseAnonServerClient, isSupabasePublicConfigured } from "@/lib/supabase-server";
 
@@ -16,6 +17,49 @@ function getSortConfig(sort: string) {
     if (sort === "price_desc") return { column: "price", ascending: false };
     if (sort === "rating_desc") return { column: "rating", ascending: false };
     return { column: "date", ascending: true };
+}
+
+function buildWorkshopListQuery(
+    supabase: ReturnType<typeof createSupabaseAnonServerClient>,
+    query: ReturnType<typeof workshopQuerySchema.parse>,
+    normalizedCategory: string,
+    from: number,
+    to: number,
+    includeApprovalFilter = true
+) {
+    const sortConfig = getSortConfig(query.sort);
+    let dbQuery = supabase.from("workshops").select("*", { count: "exact" });
+
+    if (includeApprovalFilter) {
+        dbQuery = dbQuery.eq("approval_status", "approved");
+    }
+
+    if (query.q) {
+        const q = query.q.replace(/[%]/g, "");
+        dbQuery = dbQuery.or(
+            `title.ilike.%${q}%,description.ilike.%${q}%,location.ilike.%${q}%,city.ilike.%${q}%`
+        );
+    }
+    if (normalizedCategory) {
+        dbQuery = dbQuery.eq("category", normalizedCategory);
+    }
+    if (query.city) {
+        dbQuery = dbQuery.eq("city", query.city);
+    }
+    if (query.dateFrom) {
+        dbQuery = dbQuery.gte("date", query.dateFrom);
+    }
+    if (query.dateTo) {
+        dbQuery = dbQuery.lte("date", query.dateTo);
+    }
+    if (typeof query.minPrice === "number") {
+        dbQuery = dbQuery.gte("price", query.minPrice);
+    }
+    if (typeof query.maxPrice === "number") {
+        dbQuery = dbQuery.lte("price", query.maxPrice);
+    }
+
+    return dbQuery.order(sortConfig.column, { ascending: sortConfig.ascending }).range(from, to);
 }
 
 export async function GET(request: NextRequest) {
@@ -46,37 +90,24 @@ export async function GET(request: NextRequest) {
 
     try {
         const supabase = createSupabaseAnonServerClient();
-        const sortConfig = getSortConfig(query.sort);
-        let dbQuery = supabase.from("workshops").select("*", { count: "exact" });
+        let { data, error, count } = await buildWorkshopListQuery(
+            supabase,
+            query,
+            normalizedCategory,
+            from,
+            to
+        );
 
-        if (query.q) {
-            const q = query.q.replace(/[%]/g, "");
-            dbQuery = dbQuery.or(
-                `title.ilike.%${q}%,description.ilike.%${q}%,location.ilike.%${q}%,city.ilike.%${q}%`
-            );
+        if (error && isMissingApprovalStatusColumnError(error)) {
+            ({ data, error, count } = await buildWorkshopListQuery(
+                supabase,
+                query,
+                normalizedCategory,
+                from,
+                to,
+                false
+            ));
         }
-        if (normalizedCategory) {
-            dbQuery = dbQuery.eq("category", normalizedCategory);
-        }
-        if (query.city) {
-            dbQuery = dbQuery.eq("city", query.city);
-        }
-        if (query.dateFrom) {
-            dbQuery = dbQuery.gte("date", query.dateFrom);
-        }
-        if (query.dateTo) {
-            dbQuery = dbQuery.lte("date", query.dateTo);
-        }
-        if (typeof query.minPrice === "number") {
-            dbQuery = dbQuery.gte("price", query.minPrice);
-        }
-        if (typeof query.maxPrice === "number") {
-            dbQuery = dbQuery.lte("price", query.maxPrice);
-        }
-
-        const { data, error, count } = await dbQuery
-            .order(sortConfig.column, { ascending: sortConfig.ascending })
-            .range(from, to);
 
         if (error) {
             throw error;

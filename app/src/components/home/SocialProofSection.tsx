@@ -30,7 +30,7 @@ export default function SocialProofSection({
         <section className="section-padding mt-24 sm:mt-20">
             <motion.div
                 {...socialSectionMotionProps}
-                className="relative bg-dark rounded-3xl p-10 sm:p-16 overflow-hidden"
+                className="relative overflow-hidden rounded-3xl bg-dark px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-14"
             >
                 <div className="absolute inset-0 opacity-[0.03] pointer-events-none">
                     <div
@@ -45,10 +45,10 @@ export default function SocialProofSection({
 
                 <motion.div
                     {...socialHeaderMotionProps}
-                    className="relative z-10 text-center mb-12"
+                    className="relative z-10 mb-8 text-center sm:mb-10 lg:mb-12"
                 >
                     <h2 className="heading-lg text-white mb-4">Join Creative Community</h2>
-                    <p className="text-body text-white/60 max-w-lg mx-auto mb-8">
+                    <p className="mx-auto mb-8 max-w-2xl text-body leading-relaxed text-white/80">
                         Friends, couples and teams across the city are discovering new hobbies and
                         meeting people through our workshops.
                     </p>
@@ -71,16 +71,16 @@ export default function SocialProofSection({
                     </a>
                 </motion.div>
 
-                <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-8 sm:gap-12">
+                <div className="relative z-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:gap-5 xl:grid-cols-4">
                     {socialMetrics.map((metric, index) => (
                         <motion.div
                             key={metric.label}
                             {...getMotionProps(shouldReduceMotion, fadeInUp, standardTransition, {
                                 delay: index * 0.08,
                             })}
-                            className="text-center"
+                            className="flex min-h-[208px] flex-col items-center justify-center rounded-[1.75rem] border border-white/20 bg-white/[0.04] px-5 py-6 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm sm:min-h-[220px]"
                         >
-                            <div className="text-terracotta-300 mb-3 flex justify-center">
+                            <div className="mb-4 flex items-center justify-center rounded-full border border-white/15 bg-white/[0.05] p-3 text-[#f3b8a3]">
                                 {(() => {
                                     const Icon = METRIC_ICONS[index];
                                     return Icon ? <Icon className="w-7 h-7" /> : null;
@@ -90,8 +90,11 @@ export default function SocialProofSection({
                                 value={metric.value}
                                 suffix={metric.suffix}
                                 reduceMotion={shouldReduceMotion}
+                                className="text-white drop-shadow-[0_1px_8px_rgba(255,255,255,0.08)]"
                             />
-                            <p className="text-sm font-inter text-white/50 mt-2">{metric.label}</p>
+                            <p className="mt-3 text-sm font-inter font-medium leading-snug text-white/80 sm:text-base">
+                                {metric.label}
+                            </p>
                         </motion.div>
                     ))}
                 </div>

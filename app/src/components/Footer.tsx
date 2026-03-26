@@ -2,8 +2,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { Phone, Instagram } from "lucide-react";
 import { RevealGroup, RevealItem } from "@/components/ui";
+import { CONTACT_PAGE_HREF, CONTACT_PHONE_NUMBERS } from "@/lib/contact";
 
 export default function Footer() {
+    const footerPhoneText = CONTACT_PHONE_NUMBERS.map((phone) =>
+        phone.value.replace(/^\+91/, "")
+    ).join(" / ");
+
     return (
         <footer className="bg-cream-100 border-t border-clay/30 mt-20">
             <RevealGroup className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-10">
@@ -25,24 +30,17 @@ export default function Footer() {
                             </span>
                         </Link>
                         <p className="text-body-sm max-w-xs">
-                            Curating the best weekend experiences in the city so you can stop
-                            scrolling and start doing.
+                            Discover creative workshops across the city and make your weekends more
+                            meaningful.
                         </p>
                         <div className="mt-4 space-y-2">
-                            <a
-                                href="tel:+917028478109"
+                            <Link
+                                href={CONTACT_PAGE_HREF}
                                 className="interactive-link flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta"
                             >
                                 <Phone className="w-4 h-4" />
-                                +91 70284 78109
-                            </a>
-                            <a
-                                href="tel:+919623818909"
-                                className="interactive-link flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta"
-                            >
-                                <Phone className="w-4 h-4" />
-                                +91 96238 18909
-                            </a>
+                                {footerPhoneText}
+                            </Link>
                             <a
                                 href="https://www.instagram.com/only_workshops"
                                 target="_blank"
@@ -68,10 +66,21 @@ export default function Footer() {
                                 { label: "Careers", href: "/careers" },
                                 { label: "Become a Host", href: "/become-a-host" },
                                 { label: "List your Space", href: "/list-your-space" },
+                                {
+                                    label: "List Your Community",
+                                    href: "/communities/new",
+                                    target: "_blank",
+                                },
                             ].map((item) => (
                                 <li key={item.label}>
                                     <Link
                                         href={item.href}
+                                        target={item.target}
+                                        rel={
+                                            item.target === "_blank"
+                                                ? "noopener noreferrer"
+                                                : undefined
+                                        }
                                         className="interactive-link text-sm font-inter text-dark-muted hover:text-terracotta"
                                     >
                                         {item.label}

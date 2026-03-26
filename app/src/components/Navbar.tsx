@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Search, Menu, X, LogOut } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { CONTACT_PAGE_HREF } from "@/lib/contact";
 
 const SUGGESTIONS = [
     "Pottery Workshop",
@@ -283,7 +284,7 @@ export default function Navbar() {
                                 ...(user && !roleLoading && role === "host"
                                     ? [{ href: "/host/dashboard", label: "Host Panel" }]
                                     : []),
-                                { href: "mailto:hello@onlyworkshop.com", label: "Contact Us" },
+                                { href: CONTACT_PAGE_HREF, label: "Contact Us" },
                             ].map((link, i) => (
                                 <motion.div
                                     key={link.href}

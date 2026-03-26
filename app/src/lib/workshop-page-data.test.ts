@@ -43,12 +43,14 @@ const TEST_ENV = process.env as Record<string, string | undefined>;
 
 function createHomeChain(result: Promise<unknown> | unknown, operator: "gte" | "lt") {
     const chain = {
+        eq: vi.fn(),
         gte: vi.fn(),
         lt: vi.fn(),
         order: vi.fn(),
         limit: vi.fn(),
     };
 
+    chain.eq.mockImplementation(() => chain);
     chain.gte.mockImplementation(() => chain);
     chain.lt.mockImplementation(() => chain);
     chain.order.mockImplementation(() => chain);
@@ -152,7 +154,9 @@ describe("workshop-page-data", () => {
 
     it("falls back to mock home workshops in development when Supabase times out", async () => {
         const timeoutError = new Error("Supabase timeout");
-        const upcomingChain = createHomeChain(Promise.reject(timeoutError), "gte");
+        const rejectedQuery = Promise.reject(timeoutError);
+        rejectedQuery.catch(() => {});
+        const upcomingChain = createHomeChain(rejectedQuery, "gte");
         const pastChain = createHomeChain(
             Promise.resolve({
                 data: [],
@@ -190,6 +194,68 @@ describe("workshop-page-data", () => {
             "home_page",
             expect.stringContaining("Supabase timeout")
         );
+    });
+
+    it("retries home workshops without approval status when the column is missing", async () => {
+        const missingColumnError = {
+            message: 'column "approval_status" does not exist',
+        };
+        const firstUpcomingChain = createHomeChain(
+            Promise.resolve({
+                data: null,
+                error: missingColumnError,
+            }),
+            "gte"
+        );
+        const firstPastChain = createHomeChain(
+            Promise.resolve({
+                data: null,
+                error: missingColumnError,
+            }),
+            "lt"
+        );
+        const fallbackUpcomingChain = createHomeChain(
+            Promise.resolve({
+                data: [{ id: "upcoming-compat", title: "Upcoming Compat" }],
+                error: null,
+            }),
+            "gte"
+        );
+        const fallbackPastChain = createHomeChain(
+            Promise.resolve({
+                data: [{ id: "past-compat", title: "Past Compat" }],
+                error: null,
+            }),
+            "lt"
+        );
+
+        mockState.createSupabaseServiceClient.mockReturnValue({
+            from: vi
+                .fn()
+                .mockImplementationOnce(() => ({
+                    select: vi.fn(() => firstUpcomingChain),
+                }))
+                .mockImplementationOnce(() => ({
+                    select: vi.fn(() => firstPastChain),
+                }))
+                .mockImplementationOnce(() => ({
+                    select: vi.fn(() => fallbackUpcomingChain),
+                }))
+                .mockImplementationOnce(() => ({
+                    select: vi.fn(() => fallbackPastChain),
+                })),
+        });
+
+        const result = await loadHomeWorkshops();
+
+        expect(result).toEqual({
+            data: [
+                { id: "upcoming-compat", title: "Upcoming Compat" },
+                { id: "past-compat", title: "Past Compat" },
+            ],
+            source: "supabase",
+        });
+        expect(mockState.warnDevFallback).not.toHaveBeenCalled();
     });
 
     it("returns source error for the home page in production when loading fails", async () => {
@@ -317,6 +383,49 @@ describe("workshop-page-data", () => {
             "explore_page",
             expect.stringContaining("Explore timeout")
         );
+    });
+
+    it("retries explore workshops without approval status when the column is missing", async () => {
+        const missingColumnError = {
+            message: 'column "approval_status" does not exist',
+        };
+        const firstExploreChain = createExploreChain(
+            Promise.resolve({
+                data: null,
+                error: missingColumnError,
+                count: null,
+            })
+        );
+        const fallbackExploreChain = createExploreChain(
+            Promise.resolve({
+                data: [{ id: "explore-compat", title: "Explore Compat" }],
+                error: null,
+                count: 1,
+            })
+        );
+
+        mockState.createSupabaseServiceClient.mockReturnValue({
+            from: vi
+                .fn()
+                .mockImplementationOnce(() => ({
+                    select: vi.fn(() => firstExploreChain),
+                }))
+                .mockImplementationOnce(() => ({
+                    select: vi.fn(() => fallbackExploreChain),
+                })),
+        });
+
+        const result = await loadExploreWorkshops({
+            page: "1",
+            pageSize: "8",
+        });
+
+        expect(result).toEqual({
+            data: [{ id: "explore-compat", title: "Explore Compat" }],
+            total: 1,
+            source: "supabase",
+        });
+        expect(mockState.warnDevFallback).not.toHaveBeenCalled();
     });
 
     it("returns source error for the explore page in production when loading fails", async () => {

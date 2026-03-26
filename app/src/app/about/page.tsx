@@ -12,15 +12,15 @@ export default function AboutPage() {
                 <h2 className="heading-sm mb-2">Our Story</h2>
                 <p>
                     Only Workshops started to make weekends more meaningful through hands-on
-                    creative experiences. We connect people with local hosts who teach practical
-                    skills in welcoming venues.
+                    creative experiences. We want people to feel like a child again, less sure
+                    about everything and more open to explore.
                 </p>
             </section>
             <section>
                 <h2 className="heading-sm mb-2">What We Value</h2>
                 <p>
-                    We focus on quality, community, and accessibility. Every workshop should feel
-                    beginner-friendly, thoughtfully hosted, and worth recommending to a friend.
+                    Every workshop should feel beginner-friendly, thoughtfully hosted, and worth
+                    recommending to a friend.
                 </p>
             </section>
             <section>

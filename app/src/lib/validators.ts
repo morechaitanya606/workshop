@@ -1,25 +1,37 @@
 import { z } from "zod";
+import {
+    normalizeUrlInput,
+    normalizeWorkshopImageUrlInput,
+    normalizeWorkshopVideoUrlInput,
+} from "@/lib/workshop-media";
 
 const urlOrEmpty = z
     .string()
-    .trim()
     .optional()
-    .transform((value) => value || "")
+    .transform((value) => normalizeUrlInput(value || ""))
     .refine((value) => value === "" || /^https?:\/\/.+/i.test(value), "Must be a valid URL.");
 
-const mediaUrl = z
+const imageUrl = z
     .string()
-    .trim()
+    .transform((value) => normalizeWorkshopImageUrlInput(value))
     .refine(
         (value) => value.startsWith("/") || /^https?:\/\/.+/i.test(value),
         "Must be a valid URL."
     );
 
-const mediaUrlOrEmpty = z
+const imageUrlOrEmpty = z
     .string()
-    .trim()
     .optional()
-    .transform((value) => value || "")
+    .transform((value) => normalizeWorkshopImageUrlInput(value || ""))
+    .refine(
+        (value) => value === "" || value.startsWith("/") || /^https?:\/\/.+/i.test(value),
+        "Must be a valid URL."
+    );
+
+const videoUrlOrEmpty = z
+    .string()
+    .optional()
+    .transform((value) => normalizeWorkshopVideoUrlInput(value || ""))
     .refine(
         (value) => value === "" || value.startsWith("/") || /^https?:\/\/.+/i.test(value),
         "Must be a valid URL."
@@ -42,9 +54,9 @@ export const workshopCreateSchema = z.object({
     date: z.string().trim().min(8).max(20),
     time: z.string().trim().min(3).max(20),
     maxSeats: z.coerce.number().int().min(1).max(500),
-    coverImage: mediaUrl,
-    galleryImages: z.array(mediaUrl).max(20).default([]),
-    videoUrl: mediaUrlOrEmpty,
+    coverImage: imageUrl,
+    galleryImages: z.array(imageUrl).max(20).default([]),
+    videoUrl: videoUrlOrEmpty,
     socialLinks: socialLinksSchema.default({
         instagram: "",
         youtube: "",
@@ -64,7 +76,7 @@ export const workshopCreateSchema = z.object({
     eventAddress: z.string().trim().max(300).optional().default(""),
     latitude: z.coerce.number().min(-90).max(90).optional(),
     longitude: z.coerce.number().min(-180).max(180).optional(),
-    locationImages: z.array(mediaUrl).max(10).optional().default([]),
+    locationImages: z.array(imageUrl).max(10).optional().default([]),
     earlyBirdEnabled: z.boolean().optional().default(false),
     earlyBirdDiscountType: z.enum(["percentage", "fixed"]).optional().default("percentage"),
     earlyBirdDiscountValue: z.coerce.number().int().min(0).max(100000).optional().default(0),
@@ -85,14 +97,21 @@ export const workshopUpdateSchema = z
         date: z.string().trim().min(8).max(20).optional(),
         time: z.string().trim().min(3).max(20).optional(),
         maxSeats: z.coerce.number().int().min(1).max(500).optional(),
-        coverImage: mediaUrl.optional(),
-        galleryImages: z.array(mediaUrl).max(20).optional(),
-        videoUrl: mediaUrlOrEmpty.optional(),
+        coverImage: imageUrl.optional(),
+        galleryImages: z.array(imageUrl).max(20).optional(),
+        videoUrl: videoUrlOrEmpty.optional(),
+        socialLinks: socialLinksSchema.optional(),
+        hostName: z.string().trim().min(2).max(120).optional(),
+        hostBio: z.string().trim().min(10).max(2000).optional(),
+        hostExperience: z.string().trim().max(120).optional(),
+        hostSocialLinks: socialLinksSchema.optional(),
+        whatYouLearn: z.array(z.string().trim().min(1).max(240)).min(1).max(20).optional(),
+        materialsProvided: z.array(z.string().trim().min(1).max(240)).min(1).max(20).optional(),
         badgeLabels: z.array(z.string().trim().min(1).max(120)).max(8).optional(),
         eventAddress: z.string().trim().max(300).optional(),
         latitude: z.coerce.number().min(-90).max(90).optional(),
         longitude: z.coerce.number().min(-180).max(180).optional(),
-        locationImages: z.array(mediaUrl).max(10).optional(),
+        locationImages: z.array(imageUrl).max(10).optional(),
         earlyBirdEnabled: z.boolean().optional(),
         earlyBirdDiscountType: z.enum(["percentage", "fixed"]).optional(),
         earlyBirdDiscountValue: z.coerce.number().int().min(0).max(100000).optional(),
@@ -152,8 +171,8 @@ export type WorkshopNotificationInput = z.infer<typeof workshopNotificationSchem
 export const workshopFeedbackSchema = z.object({
     rating: z.coerce.number().int().min(1).max(5).optional().default(5),
     comment: z.string().trim().min(3).max(2000),
-    photos: z.array(mediaUrl).optional().default([]),
-    videoUrl: mediaUrlOrEmpty.optional(),
+    photos: z.array(imageUrl).optional().default([]),
+    videoUrl: videoUrlOrEmpty.optional(),
 });
 
 export type WorkshopFeedbackInput = z.infer<typeof workshopFeedbackSchema>;
@@ -161,7 +180,7 @@ export type WorkshopFeedbackInput = z.infer<typeof workshopFeedbackSchema>;
 export const profileUpdateSchema = z
     .object({
         fullName: z.string().trim().min(2).max(120).optional(),
-        avatarUrl: mediaUrlOrEmpty.optional(),
+        avatarUrl: imageUrlOrEmpty.optional(),
         dateOfBirth: z
             .string()
             .trim()
@@ -259,3 +278,71 @@ export const supportChatRequestSchema = z.object({
 });
 
 export type SupportChatRequestInput = z.infer<typeof supportChatRequestSchema>;
+
+export const careersApplicationSchema = z.object({
+    fullName: z.string().trim().min(2).max(120),
+    email: z.string().trim().email().max(320),
+    phone: z.string().trim().min(7).max(32),
+    location: z.string().trim().min(2).max(120),
+    role: z.string().trim().min(2).max(80),
+    portfolioUrl: urlOrEmpty,
+    coverLetter: z.string().trim().min(20).max(4000),
+});
+
+export type CareersApplicationInput = z.infer<typeof careersApplicationSchema>;
+
+export const communityCreateSchema = z
+    .object({
+        title: z.string().trim().min(2).max(120),
+        summary: z.string().trim().min(10).max(240),
+        description: z.string().trim().min(20).max(4000),
+        category: z.string().trim().min(2).max(80),
+        city: z.string().trim().min(2).max(120),
+        hostName: z.string().trim().min(2).max(120),
+        hostEmail: z.string().trim().email().max(320),
+        hostPhone: z.string().trim().min(7).max(32),
+        meetingFormat: z.string().trim().min(2).max(40),
+        meetupFrequency: z.string().trim().min(2).max(120),
+        coverImage: imageUrlOrEmpty.optional(),
+        instagramUrl: urlOrEmpty,
+        websiteUrl: urlOrEmpty,
+        whatsappUrl: urlOrEmpty,
+    })
+    .superRefine((value, ctx) => {
+        const hasAtLeastOneLink = Boolean(
+            value.instagramUrl || value.websiteUrl || value.whatsappUrl
+        );
+
+        if (hasAtLeastOneLink) {
+            return;
+        }
+
+        const message = "Add at least one Instagram, Website, or WhatsApp community link.";
+
+        ctx.addIssue({
+            code: "custom",
+            message,
+            path: ["instagramUrl"],
+        });
+        ctx.addIssue({
+            code: "custom",
+            message,
+            path: ["websiteUrl"],
+        });
+        ctx.addIssue({
+            code: "custom",
+            message,
+            path: ["whatsappUrl"],
+        });
+    });
+
+export type CommunityCreateInput = z.infer<typeof communityCreateSchema>;
+
+export const communityJoinSchema = z.object({
+    fullName: z.string().trim().min(2).max(120),
+    email: z.string().trim().email().max(320),
+    phone: z.string().trim().min(7).max(32),
+    note: z.string().trim().max(1000).optional().default(""),
+});
+
+export type CommunityJoinInput = z.infer<typeof communityJoinSchema>;

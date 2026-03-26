@@ -7,8 +7,88 @@ import { requireSupabaseService } from "@/lib/api-helpers";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 import { BOOKING_CUTOFF_HOURS, isBookingClosedNow } from "@/lib/booking-time";
+import type { SupabaseServerClient } from "@/lib/supabase-server";
+import {
+    getWorkshopApprovalStatus,
+    isMissingApprovalStatusColumnError,
+} from "@/lib/workshop-approval-compat";
 
 const HOLD_DURATION_MINUTES = 15;
+
+type WorkshopTimingRow = {
+    id: string;
+    date: string;
+    time: string;
+    approval_status?: "pending" | "approved" | "rejected" | null;
+};
+
+type WorkshopSeatRow = {
+    id: string;
+    seats_remaining: number;
+    approval_status?: "pending" | "approved" | "rejected" | null;
+};
+
+async function loadWorkshopTimingWithApprovalCompat(
+    serviceClient: SupabaseServerClient,
+    workshopId: string
+) {
+    const primary = await serviceClient
+        .from("workshops")
+        .select("id, date, time, approval_status")
+        .eq("id", workshopId)
+        .single();
+
+    if (!primary.error || !isMissingApprovalStatusColumnError(primary.error)) {
+        return primary as { data: WorkshopTimingRow | null; error: typeof primary.error };
+    }
+
+    const fallback = await serviceClient
+        .from("workshops")
+        .select("id, date, time")
+        .eq("id", workshopId)
+        .single();
+
+    return {
+        data: fallback.data
+            ? {
+                  ...fallback.data,
+                  approval_status: "approved" as const,
+              }
+            : null,
+        error: fallback.error,
+    };
+}
+
+async function loadWorkshopSeatsWithApprovalCompat(
+    serviceClient: SupabaseServerClient,
+    workshopId: string
+) {
+    const primary = await serviceClient
+        .from("workshops")
+        .select("id, seats_remaining, approval_status")
+        .eq("id", workshopId)
+        .single();
+
+    if (!primary.error || !isMissingApprovalStatusColumnError(primary.error)) {
+        return primary as { data: WorkshopSeatRow | null; error: typeof primary.error };
+    }
+
+    const fallback = await serviceClient
+        .from("workshops")
+        .select("id, seats_remaining")
+        .eq("id", workshopId)
+        .single();
+
+    return {
+        data: fallback.data
+            ? {
+                  ...fallback.data,
+                  approval_status: "approved" as const,
+              }
+            : null,
+        error: fallback.error,
+    };
+}
 
 export async function POST(request: NextRequest) {
     const auth = await requireAuthenticatedUser(request);
@@ -51,14 +131,18 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { data: workshopTiming, error: timingError } = await serviceClient
-            .from("workshops")
-            .select("id, date, time")
-            .eq("id", workshopId)
-            .single();
+        const {
+            data: workshopTiming,
+            error: timingError,
+        } = await loadWorkshopTimingWithApprovalCompat(serviceClient, workshopId);
 
         if (timingError || !workshopTiming) {
             return jsonError("Workshop not found.", 404);
+        }
+        if (getWorkshopApprovalStatus(workshopTiming.approval_status) !== "approved") {
+            return jsonError("This workshop is not open for bookings yet.", 409, {
+                code: "WORKSHOP_PENDING_APPROVAL",
+            });
         }
 
         if (isBookingClosedNow(workshopTiming.date, workshopTiming.time)) {
@@ -101,14 +185,18 @@ export async function POST(request: NextRequest) {
                 .eq("status", "active")
                 .lt("expires_at", new Date().toISOString());
 
-            const { data: workshop, error: workshopError } = await serviceClient
-                .from("workshops")
-                .select("id, seats_remaining")
-                .eq("id", workshopId)
-                .single();
+            const {
+                data: workshop,
+                error: workshopError,
+            } = await loadWorkshopSeatsWithApprovalCompat(serviceClient, workshopId);
 
             if (workshopError || !workshop) {
                 return jsonError("Workshop not found.", 404);
+            }
+            if (getWorkshopApprovalStatus(workshop.approval_status) !== "approved") {
+                return jsonError("This workshop is not open for bookings yet.", 409, {
+                    code: "WORKSHOP_PENDING_APPROVAL",
+                });
             }
 
             const { data: activeHolds } = await serviceClient

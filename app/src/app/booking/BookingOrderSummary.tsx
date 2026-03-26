@@ -14,6 +14,7 @@ import {
     Users,
     X,
 } from "lucide-react";
+import { CANCELLATION_POLICY } from "@/lib/cancellation-policy";
 import type { Workshop } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { AppliedCoupon } from "./types";
@@ -208,7 +209,8 @@ export default function BookingOrderSummary({
                 <div className="flex items-center gap-2 bg-cream-100 rounded-xl px-3 py-2.5">
                     <RotateCcw className="w-4 h-4 text-blue-600 flex-shrink-0" />
                     <span className="text-xs font-inter text-dark-secondary">
-                        Up to 80% refund before 48h
+                        No cancellation within{" "}
+                        {CANCELLATION_POLICY.noCancellationCutoffHoursBeforeWorkshop}h
                     </span>
                 </div>
                 <div className="flex items-center gap-2 bg-cream-100 rounded-xl px-3 py-2.5">

@@ -62,6 +62,17 @@ In Vercel Project Settings → Environment Variables, set:
 - `CRON_SECRET` (random long value)
 - `EMAIL_CRON_INTERVAL_HOURS=24` for Hobby
 
+### 4.1) Configure GitHub Actions secrets for Vercel CI/CD
+If you want deployments to run from GitHub Actions using `.github/workflows/vercel-deploy.yml`,
+add these repository secrets in GitHub:
+
+- `VERCEL_TOKEN`
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
+
+This workflow builds from `app/`, creates preview deployments for non-`main` pushes or manual
+runs, and creates production deployments for pushes to `main`.
+
 ### 5) Schedule cron (Vercel Cron)
 This repo includes `app/vercel.json` which schedules:
 - `GET /api/cron/emails` once per day (`0 0 * * *`)

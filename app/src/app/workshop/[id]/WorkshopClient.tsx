@@ -330,7 +330,7 @@ export default function WorkshopClient({
                 try {
                     const feedbackResult = await getWorkshopFeedback(workshop.id, accessToken);
                     if (!cancelled) {
-                        setCanLeaveFeedback(true);
+                        setCanLeaveFeedback(Boolean(feedbackResult.canLeaveFeedback));
                         setUserFeedback(feedbackResult.feedback || null);
                         if (feedbackResult.feedback) {
                             setFeedbackRating(feedbackResult.feedback.rating ?? 5);
@@ -341,7 +341,7 @@ export default function WorkshopClient({
                         }
                     }
                 } catch (error) {
-                    if (!cancelled && isApiClientError(error) && error.status === 403) {
+                    if (!cancelled) {
                         setCanLeaveFeedback(false);
                     }
                 }
@@ -353,7 +353,7 @@ export default function WorkshopClient({
         return () => {
             cancelled = true;
         };
-    }, [accessToken, isPastWorkshop, workshop]);
+    }, [accessToken, isPastWorkshop, workshop.id]);
 
     useEffect(() => {
         setLiveAvailableSeatCount(null);

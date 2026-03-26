@@ -3,12 +3,50 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Loader2, Plus, PencilLine, MapPin, CalendarDays, Trash2, Users } from "lucide-react";
+import {
+    CheckCircle2,
+    Loader2,
+    Plus,
+    PencilLine,
+    MapPin,
+    CalendarDays,
+    Trash2,
+    Users,
+    XCircle,
+} from "lucide-react";
 import type { Workshop } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import AdminShell from "@/components/admin/AdminShell";
-import { deleteAdminWorkshop, getAdminWorkshops, toApiErrorMessage } from "@/lib/api-client";
+import {
+    approveAdminWorkshop,
+    deleteAdminWorkshop,
+    getAdminWorkshops,
+    rejectAdminWorkshop,
+    toApiErrorMessage,
+} from "@/lib/api-client";
+
+function getApprovalBadgeClasses(status: Workshop["approvalStatus"]) {
+    switch (status) {
+        case "pending":
+            return "border-amber-200 bg-amber-50 text-amber-800";
+        case "rejected":
+            return "border-red-200 bg-red-50 text-red-700";
+        default:
+            return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    }
+}
+
+function getApprovalLabel(status: Workshop["approvalStatus"]) {
+    switch (status) {
+        case "pending":
+            return "Pending Approval";
+        case "rejected":
+            return "Rejected";
+        default:
+            return "Approved";
+    }
+}
 
 export default function AdminWorkshopsPage() {
     const { session } = useAuth();
@@ -16,6 +54,7 @@ export default function AdminWorkshopsPage() {
     const [loadingWorkshops, setLoadingWorkshops] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [processingApprovalId, setProcessingApprovalId] = useState<string | null>(null);
     const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
@@ -71,6 +110,45 @@ export default function AdminWorkshopsPage() {
         }
     };
 
+    const updateWorkshop = (nextWorkshop: Workshop) => {
+        setWorkshops((prev) =>
+            prev.map((item) => (item.id === nextWorkshop.id ? nextWorkshop : item))
+        );
+    };
+
+    const handleApproveWorkshop = async (workshop: Workshop) => {
+        if (!session?.access_token || workshop.approvalStatus === "approved") return;
+
+        setProcessingApprovalId(workshop.id);
+        setError(null);
+        try {
+            const result = await approveAdminWorkshop(session.access_token, workshop.id);
+            updateWorkshop(result.workshop);
+        } catch (approveError) {
+            setError(toApiErrorMessage(approveError, "Unable to approve this workshop right now."));
+        } finally {
+            setProcessingApprovalId(null);
+        }
+    };
+
+    const handleRejectWorkshop = async (workshop: Workshop) => {
+        if (!session?.access_token || workshop.approvalStatus === "rejected") return;
+
+        const confirmed = window.confirm(`Reject "${workshop.title}" for now?`);
+        if (!confirmed) return;
+
+        setProcessingApprovalId(workshop.id);
+        setError(null);
+        try {
+            const result = await rejectAdminWorkshop(session.access_token, workshop.id);
+            updateWorkshop(result.workshop);
+        } catch (rejectError) {
+            setError(toApiErrorMessage(rejectError, "Unable to reject this workshop right now."));
+        } finally {
+            setProcessingApprovalId(null);
+        }
+    };
+
     const handleRetry = () => {
         setError(null);
         setReloadKey((prev) => prev + 1);
@@ -84,6 +162,9 @@ export default function AdminWorkshopsPage() {
                         Admin
                     </p>
                     <h1 className="heading-md">Workshops</h1>
+                    <p className="mt-1 text-body text-dark-muted">
+                        Review host submissions and approve workshops before they go live.
+                    </p>
                 </div>
             </div>
 
@@ -125,9 +206,16 @@ export default function AdminWorkshopsPage() {
                                 />
                             </div>
                             <div className="p-5">
-                                <p className="text-xs font-inter font-semibold uppercase tracking-wider text-terracotta mb-1">
-                                    {workshop.category}
-                                </p>
+                                <div className="mb-2 flex flex-wrap items-center gap-2">
+                                    <p className="text-xs font-inter font-semibold uppercase tracking-wider text-terracotta">
+                                        {workshop.category}
+                                    </p>
+                                    <span
+                                        className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-inter font-semibold uppercase tracking-wide ${getApprovalBadgeClasses(workshop.approvalStatus)}`}
+                                    >
+                                        {getApprovalLabel(workshop.approvalStatus)}
+                                    </span>
+                                </div>
                                 <h2 className="font-playfair text-xl font-semibold text-dark mb-2">
                                     {workshop.title}
                                 </h2>
@@ -145,7 +233,33 @@ export default function AdminWorkshopsPage() {
                                     <p className="font-inter font-semibold text-dark">
                                         {formatCurrency(workshop.price)}
                                     </p>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                        {workshop.approvalStatus !== "approved" && (
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleApproveWorkshop(workshop)}
+                                                disabled={processingApprovalId === workshop.id}
+                                                className="btn-primary !py-2 !px-4 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                                            >
+                                                {processingApprovalId === workshop.id ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : (
+                                                    <CheckCircle2 className="w-4 h-4" />
+                                                )}
+                                                Approve
+                                            </button>
+                                        )}
+                                        {workshop.approvalStatus === "pending" && (
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleRejectWorkshop(workshop)}
+                                                disabled={processingApprovalId === workshop.id}
+                                                className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-inter font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                                            >
+                                                <XCircle className="w-4 h-4" />
+                                                Reject
+                                            </button>
+                                        )}
                                         <Link
                                             href={`/admin/workshops/${workshop.id}/attendees`}
                                             className="btn-secondary !py-2 !px-4 text-sm"

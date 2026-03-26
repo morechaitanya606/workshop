@@ -6,6 +6,10 @@ import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { workshopCreateSchema } from "@/lib/validators";
 import { buildWorkshopInsertPayload, mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
+import {
+    isMissingApprovalStatusColumnError,
+    withoutApprovalStatus,
+} from "@/lib/workshop-approval-compat";
 
 export async function GET(request: NextRequest) {
     const auth = await requireAdminUser(request);
@@ -68,11 +72,19 @@ export async function POST(request: NextRequest) {
 
     try {
         const payload = buildWorkshopInsertPayload(parsed.data, auth.user.id);
-        const { data, error } = await serviceClient
+        let { data, error } = await serviceClient
             .from("workshops")
             .insert(payload)
             .select("*")
             .single();
+
+        if (error && isMissingApprovalStatusColumnError(error)) {
+            ({ data, error } = await serviceClient
+                .from("workshops")
+                .insert(withoutApprovalStatus(payload))
+                .select("*")
+                .single());
+        }
 
         if (error) {
             return jsonError(

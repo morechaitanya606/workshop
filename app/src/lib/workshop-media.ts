@@ -1,5 +1,29 @@
 const DRIVE_FILE_PATH_RE = /\/file\/d\/([a-zA-Z0-9_-]+)/;
 const DRIVE_SHORT_PATH_RE = /\/d\/([a-zA-Z0-9_-]+)/;
+const BARE_DOMAIN_RE = /^(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:[/:?#]|$)/i;
+
+export function normalizeUrlInput(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+
+    if (trimmed.startsWith("//")) {
+        return `https:${trimmed}`;
+    }
+
+    if (trimmed.startsWith("www.")) {
+        return `https://${trimmed}`;
+    }
+
+    if (BARE_DOMAIN_RE.test(trimmed) && !trimmed.startsWith("/")) {
+        return `https://${trimmed}`;
+    }
+
+    if (trimmed.startsWith("uploads/") || trimmed.startsWith("images/")) {
+        return `/${trimmed}`;
+    }
+
+    return trimmed;
+}
 
 function parseUrl(value: string) {
     try {
@@ -63,7 +87,7 @@ function extractYoutubeVideoId(value: string) {
 }
 
 export function normalizeWorkshopImageUrlInput(value: string) {
-    const trimmed = value.trim();
+    const trimmed = normalizeUrlInput(value);
     if (!trimmed) return "";
 
     const driveId = extractGoogleDriveFileId(trimmed);
@@ -75,7 +99,7 @@ export function normalizeWorkshopImageUrlInput(value: string) {
 }
 
 export function normalizeWorkshopVideoUrlInput(value: string) {
-    const trimmed = value.trim();
+    const trimmed = normalizeUrlInput(value);
     if (!trimmed) return "";
 
     const driveId = extractGoogleDriveFileId(trimmed);

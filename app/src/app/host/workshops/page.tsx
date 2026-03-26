@@ -10,6 +10,39 @@ import { getHostWorkshops, toApiErrorMessage } from "@/lib/api-client";
 import type { Workshop } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
+function getApprovalBadgeClasses(status: Workshop["approvalStatus"]) {
+    switch (status) {
+        case "pending":
+            return "border-amber-200 bg-amber-50 text-amber-800";
+        case "rejected":
+            return "border-red-200 bg-red-50 text-red-700";
+        default:
+            return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    }
+}
+
+function getApprovalLabel(status: Workshop["approvalStatus"]) {
+    switch (status) {
+        case "pending":
+            return "Pending Approval";
+        case "rejected":
+            return "Rejected";
+        default:
+            return "Approved";
+    }
+}
+
+function getStatusMessage(status: Workshop["approvalStatus"]) {
+    switch (status) {
+        case "pending":
+            return "This workshop is waiting for admin approval before it appears on the website.";
+        case "rejected":
+            return "This workshop is not live right now. Please contact admin if you want to resubmit it.";
+        default:
+            return "This workshop is approved and visible on the website.";
+    }
+}
+
 export default function HostWorkshopsPage() {
     const { session } = useAuth();
     const [workshops, setWorkshops] = useState<Workshop[]>([]);
@@ -43,6 +76,10 @@ export default function HostWorkshopsPage() {
                         Host
                     </p>
                     <h1 className="heading-md">My Workshops</h1>
+                    <p className="mt-1 text-body text-dark-muted">
+                        Submit new workshops and track whether they are pending, approved, or
+                        rejected.
+                    </p>
                 </div>
                 <Link href="/host/workshops/new" className="btn-primary">
                     <Plus className="w-4 h-4" />
@@ -92,15 +129,20 @@ export default function HostWorkshopsPage() {
                                         className="object-cover"
                                     />
                                 )}
-                                <div className="absolute top-3 left-3">
-                                    <span className="inline-block bg-white/90 backdrop-blur-sm text-xs font-inter font-bold uppercase tracking-wider text-terracotta px-3 py-1 rounded-full">
-                                        {workshop.category}
-                                    </span>
-                                </div>
                             </div>
 
                             {/* Content */}
                             <div className="p-5">
+                                <div className="mb-2 flex flex-wrap items-center gap-2">
+                                    <span className="inline-block bg-white/90 backdrop-blur-sm text-xs font-inter font-bold uppercase tracking-wider text-terracotta px-3 py-1 rounded-full">
+                                        {workshop.category}
+                                    </span>
+                                    <span
+                                        className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-inter font-semibold uppercase tracking-wide ${getApprovalBadgeClasses(workshop.approvalStatus)}`}
+                                    >
+                                        {getApprovalLabel(workshop.approvalStatus)}
+                                    </span>
+                                </div>
                                 <h3 className="font-playfair text-lg font-bold text-dark mb-2 line-clamp-1">
                                     {workshop.title}
                                 </h3>
@@ -144,7 +186,11 @@ export default function HostWorkshopsPage() {
                                 </div>
 
                                 {/* Actions */}
-                                <div className="flex items-center gap-2">
+                                <p className="mb-4 text-sm font-inter text-dark-muted">
+                                    {getStatusMessage(workshop.approvalStatus)}
+                                </p>
+
+                                <div className="flex flex-wrap items-center gap-2">
                                     <Link
                                         href={`/host/workshops/${workshop.id}/attendees`}
                                         className="btn-secondary !py-2 !px-4 text-sm flex-1 justify-center"
@@ -152,12 +198,22 @@ export default function HostWorkshopsPage() {
                                         <Users className="w-4 h-4" />
                                         Attendees
                                     </Link>
-                                    <Link
-                                        href={`/workshops/${workshop.id}`}
-                                        className="btn-secondary !py-2 !px-4 text-sm flex-1 justify-center"
-                                    >
-                                        View Listing
-                                    </Link>
+                                    {workshop.approvalStatus === "approved" ? (
+                                        <Link
+                                            href={`/workshops/${workshop.id}`}
+                                            className="btn-secondary !py-2 !px-4 text-sm flex-1 justify-center"
+                                        >
+                                            View Listing
+                                        </Link>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            disabled
+                                            className="btn-secondary !py-2 !px-4 text-sm flex-1 justify-center opacity-60 cursor-not-allowed"
+                                        >
+                                            Not Live Yet
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>

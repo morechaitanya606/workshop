@@ -92,6 +92,7 @@ export interface Workshop {
     earlyBirdDiscountValue?: number;
     earlyBirdDaysAfterListing?: number;
     createdAt?: string;
+    approvalStatus?: "pending" | "approved" | "rejected";
 }
 
 export const PAST_EVENTS_CATEGORY_ID = "past-events";
@@ -100,12 +101,12 @@ export const PAST_EVENTS_CATEGORY_LABEL = "Past Events";
 type WorkshopCategory = {
     id: string;
     label: string;
-    icon: string;
+    icon?: string;
 };
 
 export const categories: WorkshopCategory[] = [
     { id: "trending", label: "Trending", icon: "🔥" },
-    { id: PAST_EVENTS_CATEGORY_ID, label: PAST_EVENTS_CATEGORY_LABEL, icon: "P" },
+    { id: PAST_EVENTS_CATEGORY_ID, label: PAST_EVENTS_CATEGORY_LABEL },
     { id: "arts-crafts", label: "Arts & Crafts", icon: "✂️" },
     { id: "food-drink", label: "Food & Drink", icon: "🍳" },
     { id: "pottery", label: "Pottery", icon: "🏺" },

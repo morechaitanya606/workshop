@@ -7,6 +7,19 @@ if (!command) {
     process.exit(1);
 }
 
+const nodeMajor = Number.parseInt(process.versions.node.split(".")[0], 10);
+
+if (Number.isFinite(nodeMajor) && nodeMajor >= 24) {
+    console.error(
+        [
+            `Detected Node.js ${process.versions.node}.`,
+            "This repo runs Next.js 14, which is known to hit opaque Web Streams errors on Node 24+.",
+            "Use Node 20 or Node 22 for local dev/build/start in this project.",
+        ].join(" ")
+    );
+    process.exit(1);
+}
+
 const defaultHeapByCommandMb = {
     dev: "3072",
     build: "4096",

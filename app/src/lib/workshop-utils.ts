@@ -41,6 +41,14 @@ function cleanUrlValue(value: unknown) {
     return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function cleanStringList(value: unknown) {
+    if (!Array.isArray(value)) return [];
+
+    return value.filter(
+        (item): item is string => typeof item === "string" && item.trim().length > 0
+    );
+}
+
 type WorkshopLinks = {
     instagram?: string | null;
     youtube?: string | null;
@@ -64,6 +72,12 @@ function cleanLinks(value: Json | null | undefined) {
 export function mapWorkshopRowToWorkshop(row: any): Workshop {
     const socialLinks = cleanLinks(row.social_links);
     const hostSocialLinks = cleanLinks(row.host_social_links);
+    const galleryImages = cleanStringList(row.gallery_images)
+        .map((img) => normalizeWorkshopImageUrl(img))
+        .filter((img) => img.length > 0);
+    const locationImages = cleanStringList((row as any).location_images)
+        .map((img) => normalizeWorkshopImageUrl(img))
+        .filter((img) => img.length > 0);
 
     return {
         id: String(row.id),
@@ -79,9 +93,7 @@ export function mapWorkshopRowToWorkshop(row: any): Workshop {
         maxSeats: Number(row.max_seats),
         seatsRemaining: Number(row.seats_remaining),
         coverImage: normalizeWorkshopImageUrl(row.cover_image),
-        galleryImages: row.gallery_images
-            .map((img: string) => normalizeWorkshopImageUrl(img))
-            .filter((img: string) => img.length > 0),
+        galleryImages,
         videoUrl: cleanUrlValue(row.video_url),
         rating: 4.8,
         reviewCount: 0,
@@ -93,8 +105,8 @@ export function mapWorkshopRowToWorkshop(row: any): Workshop {
         hostExperience: cleanUrlValue(row.host_experience),
         hostSocialLinks,
         socialLinks,
-        whatYouLearn: row.what_you_learn,
-        materialsProvided: row.materials_provided,
+        whatYouLearn: cleanStringList(row.what_you_learn),
+        materialsProvided: cleanStringList(row.materials_provided),
         badgeLabels: Array.isArray(row.badge_labels)
             ? row.badge_labels.filter((label: unknown) => typeof label === "string" && label.trim())
             : [],
@@ -103,22 +115,24 @@ export function mapWorkshopRowToWorkshop(row: any): Workshop {
         eventAddress: (row as any).event_address || undefined,
         latitude: (row as any).latitude !== null ? Number((row as any).latitude) : undefined,
         longitude: (row as any).longitude !== null ? Number((row as any).longitude) : undefined,
-        locationImages: Array.isArray((row as any).location_images)
-            ? (row as any).location_images
-                  .map((img: any) => normalizeWorkshopImageUrl(String(img)))
-                  .filter((img: any) => img.length > 0)
-            : [],
+        locationImages,
         earlyBirdEnabled: Boolean(row.early_bird_enabled),
         earlyBirdDiscountType: row.early_bird_discount_type || "percentage",
         earlyBirdDiscountValue: Number(row.early_bird_discount_value || 0),
         earlyBirdDaysAfterListing: Number(row.early_bird_days_after_listing || 0),
         createdAt: row.created_at || undefined,
+        approvalStatus: row.approval_status || "approved",
     };
 }
 
+type BuildWorkshopInsertOptions = {
+    approvalStatus?: "pending" | "approved" | "rejected";
+};
+
 export function buildWorkshopInsertPayload(
     input: WorkshopCreateInput,
-    createdBy: string
+    createdBy: string,
+    options: BuildWorkshopInsertOptions = {}
 ): TablesInsert<"workshops"> {
     const normalizedTitle = input.title.trim();
     const slug = normalizedTitle
@@ -158,7 +172,7 @@ export function buildWorkshopInsertPayload(
         host_social_links: input.hostSocialLinks,
         what_you_learn: input.whatYouLearn,
         materials_provided: input.materialsProvided,
-        ...(true ? {} : { badge_labels: input.badgeLabels }),
+        badge_labels: input.badgeLabels,
         is_bestseller: false,
         is_new: true,
         created_by: createdBy,
@@ -173,6 +187,7 @@ export function buildWorkshopInsertPayload(
         early_bird_discount_type: input.earlyBirdDiscountType ?? "percentage",
         early_bird_discount_value: input.earlyBirdDiscountValue ?? 0,
         early_bird_days_after_listing: input.earlyBirdDaysAfterListing ?? 0,
+        approval_status: options.approvalStatus ?? "approved",
     };
 
     return payload;

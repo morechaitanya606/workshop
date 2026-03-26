@@ -36,6 +36,17 @@ type WorkshopEditForm = {
     coverImage: string;
     galleryImages: string;
     videoUrl: string;
+    instagramLink: string;
+    youtubeLink: string;
+    websiteLink: string;
+    hostName: string;
+    hostBio: string;
+    hostExperience: string;
+    hostInstagram: string;
+    hostYoutube: string;
+    hostWebsite: string;
+    whatYouLearn: string;
+    materialsProvided: string;
     badgeLabels: string;
     eventAddress: string;
     latitude: string;
@@ -84,6 +95,17 @@ export default function AdminEditWorkshopPage() {
         coverImage: "",
         galleryImages: "",
         videoUrl: "",
+        instagramLink: "",
+        youtubeLink: "",
+        websiteLink: "",
+        hostName: "",
+        hostBio: "",
+        hostExperience: "",
+        hostInstagram: "",
+        hostYoutube: "",
+        hostWebsite: "",
+        whatYouLearn: "",
+        materialsProvided: "",
         badgeLabels: "",
         eventAddress: "",
         latitude: "",
@@ -236,6 +258,21 @@ export default function AdminEditWorkshopPage() {
                             ? workshop.galleryImages.join("\n")
                             : "",
                         videoUrl: workshop.videoUrl || "",
+                        instagramLink: workshop.socialLinks?.instagram || "",
+                        youtubeLink: workshop.socialLinks?.youtube || "",
+                        websiteLink: workshop.socialLinks?.website || "",
+                        hostName: workshop.hostName || "",
+                        hostBio: workshop.hostBio || "",
+                        hostExperience: workshop.hostExperience || "",
+                        hostInstagram: workshop.hostSocialLinks?.instagram || "",
+                        hostYoutube: workshop.hostSocialLinks?.youtube || "",
+                        hostWebsite: workshop.hostSocialLinks?.website || "",
+                        whatYouLearn: Array.isArray(workshop.whatYouLearn)
+                            ? workshop.whatYouLearn.join("\n")
+                            : "",
+                        materialsProvided: Array.isArray(workshop.materialsProvided)
+                            ? workshop.materialsProvided.join("\n")
+                            : "",
                         badgeLabels: Array.isArray(workshop.badgeLabels)
                             ? workshop.badgeLabels.join("\n")
                             : "",
@@ -294,6 +331,21 @@ export default function AdminEditWorkshopPage() {
             coverImage: form.coverImage.trim(),
             galleryImages: toList(form.galleryImages),
             videoUrl: form.videoUrl.trim(),
+            socialLinks: {
+                instagram: form.instagramLink.trim(),
+                youtube: form.youtubeLink.trim(),
+                website: form.websiteLink.trim(),
+            },
+            hostName: form.hostName.trim(),
+            hostBio: form.hostBio.trim(),
+            hostExperience: form.hostExperience.trim(),
+            hostSocialLinks: {
+                instagram: form.hostInstagram.trim(),
+                youtube: form.hostYoutube.trim(),
+                website: form.hostWebsite.trim(),
+            },
+            whatYouLearn: toList(form.whatYouLearn),
+            materialsProvided: toList(form.materialsProvided),
             badgeLabels: toList(form.badgeLabels),
             eventAddress: form.eventAddress.trim(),
             latitude: form.latitude ? Number(form.latitude) : undefined,
@@ -313,13 +365,33 @@ export default function AdminEditWorkshopPage() {
         if (!validation.success) {
             const nextFieldErrors: Partial<Record<keyof WorkshopEditForm, string>> = {};
             for (const issue of validation.error.issues) {
-                const key = issue.path[0];
-                if (
-                    typeof key === "string" &&
-                    key in form &&
-                    !nextFieldErrors[key as keyof WorkshopEditForm]
-                ) {
-                    nextFieldErrors[key as keyof WorkshopEditForm] = issue.message;
+                const [pathRoot, pathNested] = issue.path;
+                let field: keyof WorkshopEditForm | null = null;
+
+                if (pathRoot === "socialLinks") {
+                    field =
+                        pathNested === "instagram"
+                            ? "instagramLink"
+                            : pathNested === "youtube"
+                              ? "youtubeLink"
+                              : pathNested === "website"
+                                ? "websiteLink"
+                                : null;
+                } else if (pathRoot === "hostSocialLinks") {
+                    field =
+                        pathNested === "instagram"
+                            ? "hostInstagram"
+                            : pathNested === "youtube"
+                              ? "hostYoutube"
+                              : pathNested === "website"
+                                ? "hostWebsite"
+                                : null;
+                } else if (typeof pathRoot === "string" && pathRoot in form) {
+                    field = pathRoot as keyof WorkshopEditForm;
+                }
+
+                if (field && !nextFieldErrors[field]) {
+                    nextFieldErrors[field] = issue.message;
                 }
             }
 
@@ -727,6 +799,60 @@ export default function AdminEditWorkshopPage() {
 
                             <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
                                 <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                                    Workshop Links
+                                </h2>
+                                <p className="mt-1 text-xs font-inter text-dark-muted">
+                                    Optional social and website links for the workshop page.
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Instagram Link
+                                </label>
+                                <input
+                                    type="text"
+                                    inputMode="url"
+                                    value={form.instagramLink}
+                                    onChange={(e) => update("instagramLink", e.target.value)}
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    placeholder="https://instagram.com/..."
+                                />
+                                {renderFieldError("instagramLink")}
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    YouTube Link
+                                </label>
+                                <input
+                                    type="text"
+                                    inputMode="url"
+                                    value={form.youtubeLink}
+                                    onChange={(e) => update("youtubeLink", e.target.value)}
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    placeholder="https://youtube.com/..."
+                                />
+                                {renderFieldError("youtubeLink")}
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Website Link
+                                </label>
+                                <input
+                                    type="text"
+                                    inputMode="url"
+                                    value={form.websiteLink}
+                                    onChange={(e) => update("websiteLink", e.target.value)}
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    placeholder="https://yourwebsite.com"
+                                />
+                                {renderFieldError("websiteLink")}
+                            </div>
+
+                            <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
+                                <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
                                     Early Bird Offer
                                 </h2>
                                 <p className="mt-1 text-xs font-inter text-dark-muted">
@@ -752,6 +878,7 @@ export default function AdminEditWorkshopPage() {
                                         Enable Early Bird Offer
                                     </span>
                                 </label>
+                                {renderFieldError("earlyBirdEnabled")}
                             </div>
 
                             {form.earlyBirdEnabled === "true" && (
@@ -805,6 +932,136 @@ export default function AdminEditWorkshopPage() {
                                     </div>
                                 </>
                             )}
+
+                            <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
+                                <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                                    Host & Story
+                                </h2>
+                                <p className="mt-1 text-xs font-inter text-dark-muted">
+                                    Profile copy shown in workshop detail pages.
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Host Name
+                                </label>
+                                <input
+                                    value={form.hostName}
+                                    onChange={(e) => update("hostName", e.target.value)}
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    required
+                                />
+                                {renderFieldError("hostName")}
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Host Experience
+                                </label>
+                                <input
+                                    value={form.hostExperience}
+                                    onChange={(e) => update("hostExperience", e.target.value)}
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                />
+                                {renderFieldError("hostExperience")}
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Host Bio
+                                </label>
+                                <textarea
+                                    value={form.hostBio}
+                                    onChange={(e) => update("hostBio", e.target.value)}
+                                    rows={3}
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    required
+                                />
+                                {renderFieldError("hostBio")}
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Host Instagram
+                                </label>
+                                <input
+                                    type="text"
+                                    inputMode="url"
+                                    value={form.hostInstagram}
+                                    onChange={(e) => update("hostInstagram", e.target.value)}
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    placeholder="https://instagram.com/..."
+                                />
+                                {renderFieldError("hostInstagram")}
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Host YouTube
+                                </label>
+                                <input
+                                    type="text"
+                                    inputMode="url"
+                                    value={form.hostYoutube}
+                                    onChange={(e) => update("hostYoutube", e.target.value)}
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    placeholder="https://youtube.com/..."
+                                />
+                                {renderFieldError("hostYoutube")}
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Host Website
+                                </label>
+                                <input
+                                    type="text"
+                                    inputMode="url"
+                                    value={form.hostWebsite}
+                                    onChange={(e) => update("hostWebsite", e.target.value)}
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    placeholder="https://hostwebsite.com"
+                                />
+                                {renderFieldError("hostWebsite")}
+                            </div>
+
+                            <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
+                                <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                                    Curriculum
+                                </h2>
+                                <p className="mt-1 text-xs font-inter text-dark-muted">
+                                    Teaching outcomes and included materials.
+                                </p>
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    What You Learn (newline or comma separated)
+                                </label>
+                                <textarea
+                                    value={form.whatYouLearn}
+                                    onChange={(e) => update("whatYouLearn", e.target.value)}
+                                    rows={3}
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    required
+                                />
+                                {renderFieldError("whatYouLearn")}
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Materials Provided (newline or comma separated)
+                                </label>
+                                <textarea
+                                    value={form.materialsProvided}
+                                    onChange={(e) => update("materialsProvided", e.target.value)}
+                                    rows={3}
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    required
+                                />
+                                {renderFieldError("materialsProvided")}
+                            </div>
 
                             <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
                                 <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">

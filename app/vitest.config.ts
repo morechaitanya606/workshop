@@ -2,6 +2,12 @@ import path from "path";
 import { defineConfig, configDefaults } from "vitest/config";
 
 export default defineConfig({
+    oxc: {
+        jsx: {
+            runtime: "automatic",
+            importSource: "react",
+        },
+    },
     test: {
         globals: true,
         environment: "jsdom",

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { galleryImages } from "@/lib/data";
 import { Dialog } from "@/components/ui/dialog";
 import {
@@ -94,44 +95,82 @@ export default function CommunityGallerySection({
                         ? `Photo ${activeGalleryIndex + 1} of ${galleryImages.length}`
                         : undefined
                 }
-                className="max-w-4xl"
+                className="max-w-5xl"
             >
                 {activeGalleryIndex !== null && (
                     <div className="space-y-4">
-                        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-cream">
+                        <div className="relative flex h-[min(58vh,560px)] w-full items-center justify-center overflow-hidden rounded-xl bg-cream-100">
                             <Image
                                 src={galleryImages[activeGalleryIndex]}
                                 alt={`Community workshop ${activeGalleryIndex + 1}`}
                                 fill
-                                className="object-cover"
-                                sizes="(max-width: 1024px) 92vw, 1024px"
+                                className="object-contain"
+                                sizes="(max-width: 640px) 92vw, (max-width: 1024px) 88vw, 1100px"
                             />
+
+                            {galleryImages.length > 1 && (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setActiveGalleryIndex((prev) => {
+                                                if (prev === null) return prev;
+                                                return prev === 0 ? galleryImages.length - 1 : prev - 1;
+                                            })
+                                        }
+                                        className="absolute left-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/92 text-dark shadow-lg transition-colors hover:bg-white sm:left-4"
+                                        aria-label="Previous photo"
+                                    >
+                                        <ChevronLeft className="h-5 w-5" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setActiveGalleryIndex((prev) => {
+                                                if (prev === null) return prev;
+                                                return prev === galleryImages.length - 1 ? 0 : prev + 1;
+                                            })
+                                        }
+                                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/92 text-dark shadow-lg transition-colors hover:bg-white sm:right-4"
+                                        aria-label="Next photo"
+                                    >
+                                        <ChevronRight className="h-5 w-5" />
+                                    </button>
+                                </>
+                            )}
                         </div>
-                        <div className="flex items-center justify-between gap-3">
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    setActiveGalleryIndex((prev) => {
-                                        if (prev === null) return prev;
-                                        return prev === 0 ? galleryImages.length - 1 : prev - 1;
-                                    })
-                                }
-                                className="btn-secondary !px-5 !py-2.5 text-sm"
-                            >
-                                Previous
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    setActiveGalleryIndex((prev) => {
-                                        if (prev === null) return prev;
-                                        return prev === galleryImages.length - 1 ? 0 : prev + 1;
-                                    })
-                                }
-                                className="btn-primary !px-5 !py-2.5 text-sm"
-                            >
-                                Next
-                            </button>
+
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <span className="text-center text-xs font-inter font-medium text-dark-muted sm:text-left">
+                                {activeGalleryIndex + 1} / {galleryImages.length}
+                            </span>
+
+                            <div className="flex items-center justify-center gap-2 sm:justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setActiveGalleryIndex((prev) => {
+                                            if (prev === null) return prev;
+                                            return prev === 0 ? galleryImages.length - 1 : prev - 1;
+                                        })
+                                    }
+                                    className="btn-secondary !px-4 !py-2 text-sm"
+                                >
+                                    Previous
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setActiveGalleryIndex((prev) => {
+                                            if (prev === null) return prev;
+                                            return prev === galleryImages.length - 1 ? 0 : prev + 1;
+                                        })
+                                    }
+                                    className="btn-primary !px-4 !py-2 text-sm"
+                                >
+                                    Next
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

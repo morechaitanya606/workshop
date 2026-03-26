@@ -6,6 +6,7 @@ import {
     MessageCircle,
     X,
     Send,
+    ExternalLink,
     HelpCircle,
     CreditCard,
     CalendarX,
@@ -53,6 +54,12 @@ const CHAT_QUICK_ACTIONS = [
     },
 ];
 
+const WHATSAPP_SUPPORT_NUMBER = "917028478109";
+const WHATSAPP_SUPPORT_MESSAGE = encodeURIComponent(
+    "Hi Only Workshops, I have a workshop related query."
+);
+const WHATSAPP_SUPPORT_URL = `https://wa.me/${WHATSAPP_SUPPORT_NUMBER}?text=${WHATSAPP_SUPPORT_MESSAGE}`;
+
 interface ChatMessage {
     id: string;
     type: "user" | "bot" | "system";
@@ -83,6 +90,7 @@ function getUserDisplayName(user: ReturnType<typeof useAuth>["user"]): string {
 
 export default function SupportChatbot() {
     const [isOpen, setIsOpen] = useState(false);
+    const [isLauncherOpen, setIsLauncherOpen] = useState(false);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [showForm, setShowForm] = useState(false);
     const [subject, setSubject] = useState("");
@@ -98,6 +106,7 @@ export default function SupportChatbot() {
         currentPathWorkshopId
     );
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const launcherRef = useRef<HTMLDivElement>(null);
     const prefersReducedMotion = Boolean(useReducedMotion());
     const { user } = useAuth();
     const userDisplayName = getUserDisplayName(user);
@@ -118,6 +127,25 @@ export default function SupportChatbot() {
         }
     }, [currentPathWorkshopId, messages.length]);
 
+    useEffect(() => {
+        if (!isLauncherOpen) {
+            return;
+        }
+
+        const handlePointerDown = (event: PointerEvent) => {
+            if (
+                launcherRef.current &&
+                event.target instanceof Node &&
+                !launcherRef.current.contains(event.target)
+            ) {
+                setIsLauncherOpen(false);
+            }
+        };
+
+        document.addEventListener("pointerdown", handlePointerDown);
+        return () => document.removeEventListener("pointerdown", handlePointerDown);
+    }, [isLauncherOpen]);
+
     const appendMessage = (type: ChatMessage["type"], content: string) => {
         setMessages((prev) => [
             ...prev,
@@ -131,6 +159,7 @@ export default function SupportChatbot() {
     };
 
     const handleOpen = () => {
+        setIsLauncherOpen(false);
         setIsOpen(true);
 
         if (messages.length === 0) {
@@ -267,17 +296,95 @@ export default function SupportChatbot() {
         <>
             <AnimatePresence>
                 {!isOpen && (
-                    <motion.button
-                        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
+                    <motion.div
+                        ref={launcherRef}
+                        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
                         animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-                        exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
+                        exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
                         transition={{ duration: 0.2 }}
-                        onClick={handleOpen}
-                        className="fixed bottom-20 right-4 z-[60] flex h-14 w-14 items-center justify-center rounded-full bg-terracotta text-white shadow-lg shadow-terracotta/30 transition-colors hover:bg-terracotta-600 lg:bottom-6 lg:right-6"
-                        aria-label="Open support chat"
+                        className="fixed bottom-20 right-4 z-[60] flex flex-col items-end gap-3 lg:bottom-6 lg:right-6"
                     >
-                        <MessageCircle className="h-6 w-6" />
-                    </motion.button>
+                        <AnimatePresence>
+                            {isLauncherOpen && (
+                                <motion.div
+                                    initial={
+                                        prefersReducedMotion
+                                            ? { opacity: 0 }
+                                            : { opacity: 0, y: 12 }
+                                    }
+                                    animate={
+                                        prefersReducedMotion
+                                            ? { opacity: 1 }
+                                            : { opacity: 1, y: 0 }
+                                    }
+                                    exit={
+                                        prefersReducedMotion
+                                            ? { opacity: 0 }
+                                            : { opacity: 0, y: 12 }
+                                    }
+                                    transition={{ duration: 0.18 }}
+                                    className="w-[280px] rounded-2xl border border-clay/40 bg-white p-2 shadow-2xl"
+                                >
+                                    <a
+                                        href={WHATSAPP_SUPPORT_URL}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        onClick={() => setIsLauncherOpen(false)}
+                                        className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-cream-100"
+                                    >
+                                        <div className="mt-0.5 rounded-full bg-[#25D366]/12 p-2 text-[#25D366]">
+                                            <ExternalLink className="h-4 w-4" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-inter font-semibold text-dark">
+                                                WhatsApp Business
+                                            </p>
+                                            <p className="mt-1 text-xs font-inter leading-relaxed text-dark-muted">
+                                                Workshop related queries can be asked on{" "}
+                                                <span className="font-semibold text-dark">
+                                                    7028478109
+                                                </span>
+                                                .
+                                            </p>
+                                        </div>
+                                    </a>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleOpen}
+                                        className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-cream-100"
+                                    >
+                                        <div className="mt-0.5 rounded-full bg-terracotta/10 p-2 text-terracotta">
+                                            <MessageCircle className="h-4 w-4" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-inter font-semibold text-dark">
+                                                Website Chatbot
+                                            </p>
+                                            <p className="mt-1 text-xs font-inter leading-relaxed text-dark-muted">
+                                                Open the workshop assistant here on the website for
+                                                booking and support help.
+                                            </p>
+                                        </div>
+                                    </button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        <button
+                            type="button"
+                            onClick={() => setIsLauncherOpen((current) => !current)}
+                            className="flex h-14 w-14 items-center justify-center rounded-full bg-terracotta text-white shadow-lg shadow-terracotta/30 transition-colors hover:bg-terracotta-600"
+                            aria-expanded={isLauncherOpen}
+                            aria-label={isLauncherOpen ? "Close chat options" : "Open chat options"}
+                        >
+                            {isLauncherOpen ? (
+                                <X className="h-6 w-6" />
+                            ) : (
+                                <MessageCircle className="h-6 w-6" />
+                            )}
+                        </button>
+                    </motion.div>
                 )}
             </AnimatePresence>
 
@@ -311,7 +418,7 @@ export default function SupportChatbot() {
                             </button>
                         </div>
 
-                        <div className="max-h-[300px] flex-1 space-y-3 overflow-y-auto p-4">
+                        <div className="scrollbar-subtle max-h-[300px] flex-1 space-y-3 overflow-y-auto p-4 pr-3">
                             {messages.map((msg) => (
                                 <div
                                     key={msg.id}
@@ -435,7 +542,7 @@ export default function SupportChatbot() {
 
                         {!showForm && (
                             <div className="border-t border-clay/20 bg-white">
-                                <div className="flex gap-2 overflow-x-auto px-4 py-2 scrollbar-hide">
+                                <div className="scrollbar-subtle flex gap-2 overflow-x-auto px-4 py-2 pb-3">
                                     {CHAT_QUICK_ACTIONS.map((action) => (
                                         <button
                                             key={action.id}

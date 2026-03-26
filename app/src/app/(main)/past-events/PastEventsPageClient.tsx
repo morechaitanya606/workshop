@@ -335,39 +335,64 @@ export default function PastEventsPageClient({
                         ? `Photo ${lightbox.photoIndex + 1} of ${currentPhotos.length}`
                         : undefined
                 }
-                className="max-w-4xl"
+                className="max-w-5xl"
             >
                 {lightbox !== null && currentPhotos.length > 0 && (
                     <div className="space-y-4">
-                        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-cream">
+                        <div className="relative flex h-[min(58vh,560px)] w-full items-center justify-center overflow-hidden rounded-xl bg-cream-100">
                             <Image
                                 src={currentPhotos[lightbox.photoIndex]}
                                 alt={`${currentWorkshop?.title} photo ${lightbox.photoIndex + 1}`}
                                 fill
-                                className="object-cover"
-                                sizes="(max-width: 1024px) 92vw, 1024px"
+                                className="object-contain"
+                                sizes="(max-width: 640px) 92vw, (max-width: 1024px) 88vw, 1100px"
                             />
+
+                            {currentPhotos.length > 1 && (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => navigatePhoto("prev")}
+                                        className="absolute left-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/92 text-dark shadow-lg transition-colors hover:bg-white sm:left-4"
+                                        aria-label="Previous photo"
+                                    >
+                                        <ChevronLeft className="h-5 w-5" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => navigatePhoto("next")}
+                                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/92 text-dark shadow-lg transition-colors hover:bg-white sm:right-4"
+                                        aria-label="Next photo"
+                                    >
+                                        <ChevronRight className="h-5 w-5" />
+                                    </button>
+                                </>
+                            )}
                         </div>
-                        <div className="flex items-center justify-between gap-3">
-                            <button
-                                type="button"
-                                onClick={() => navigatePhoto("prev")}
-                                className="btn-secondary !px-5 !py-2.5 text-sm inline-flex items-center gap-1.5"
-                            >
-                                <ChevronLeft className="w-4 h-4" />
-                                Previous
-                            </button>
-                            <span className="text-xs font-inter text-dark-muted">
+
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <span className="text-center text-xs font-inter font-medium text-dark-muted sm:text-left">
                                 {lightbox.photoIndex + 1} / {currentPhotos.length}
                             </span>
-                            <button
-                                type="button"
-                                onClick={() => navigatePhoto("next")}
-                                className="btn-primary !px-5 !py-2.5 text-sm inline-flex items-center gap-1.5"
-                            >
-                                Next
-                                <ChevronRight className="w-4 h-4" />
-                            </button>
+
+                            <div className="flex items-center justify-center gap-2 sm:justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => navigatePhoto("prev")}
+                                    className="btn-secondary !px-4 !py-2 text-sm inline-flex items-center gap-1.5"
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                    Previous
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => navigatePhoto("next")}
+                                    className="btn-primary !px-4 !py-2 text-sm inline-flex items-center gap-1.5"
+                                >
+                                    Next
+                                    <ChevronRight className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

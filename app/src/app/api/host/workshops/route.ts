@@ -6,6 +6,10 @@ import { requireHostOrAdmin } from "@/lib/api-auth";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { workshopCreateSchema } from "@/lib/validators";
 import { buildWorkshopInsertPayload, mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
+import {
+    isMissingApprovalStatusColumnError,
+    withoutApprovalStatus,
+} from "@/lib/workshop-approval-compat";
 
 export async function GET(request: NextRequest) {
     const auth = await requireHostOrAdmin(request);
@@ -67,13 +71,25 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const payload = buildWorkshopInsertPayload(parsed.data, auth.user.id);
+        const payload = buildWorkshopInsertPayload(parsed.data, auth.user.id, {
+            approvalStatus: auth.role === "admin" ? "approved" : "pending",
+        });
 
-        const { data, error } = await serviceClient
+        let usedApprovalCompatibilityMode = false;
+        let { data, error } = await serviceClient
             .from("workshops")
             .insert(payload)
             .select("*")
             .single();
+
+        if (error && isMissingApprovalStatusColumnError(error)) {
+            usedApprovalCompatibilityMode = true;
+            ({ data, error } = await serviceClient
+                .from("workshops")
+                .insert(withoutApprovalStatus(payload))
+                .select("*")
+                .single());
+        }
 
         if (error) {
             throw error;
@@ -82,6 +98,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
             {
                 workshop: mapWorkshopRowToWorkshop(data),
+                message:
+                    usedApprovalCompatibilityMode && auth.role !== "admin"
+                        ? "Workshop created for testing. Admin approval will start once the latest database migration is applied."
+                        : auth.role === "admin"
+                        ? "Workshop created successfully."
+                        : "Workshop submitted for admin approval.",
             },
             { status: 201 }
         );

@@ -2,6 +2,9 @@
     "name": "onlyworkshop",
     "version": "0.1.0",
     "private": true,
+    "engines": {
+        "node": ">=18.17 <24"
+    },
     "scripts": {
         "dev": "node scripts/run-next-with-memory.cjs dev",
         "build": "node scripts/run-next-with-memory.cjs build",

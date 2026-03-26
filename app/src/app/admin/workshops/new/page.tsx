@@ -47,6 +47,10 @@ type CreateWorkshopForm = {
     latitude: string;
     longitude: string;
     locationImages: string;
+    earlyBirdEnabled: string;
+    earlyBirdDiscountType: string;
+    earlyBirdDiscountValue: string;
+    earlyBirdDaysAfterListing: string;
 };
 
 export default function AdminCreateWorkshopPage() {
@@ -95,6 +99,10 @@ export default function AdminCreateWorkshopPage() {
         latitude: "",
         longitude: "",
         locationImages: "",
+        earlyBirdEnabled: "false",
+        earlyBirdDiscountType: "percentage",
+        earlyBirdDiscountValue: "",
+        earlyBirdDaysAfterListing: "",
     });
     const [categorySelection, setCategorySelection] = useState("");
     const [customCategory, setCustomCategory] = useState("");
@@ -248,6 +256,14 @@ export default function AdminCreateWorkshopPage() {
             latitude: form.latitude.trim() ? Number(form.latitude) : undefined,
             longitude: form.longitude.trim() ? Number(form.longitude) : undefined,
             locationImages: toList(form.locationImages),
+            earlyBirdEnabled: form.earlyBirdEnabled === "true",
+            earlyBirdDiscountType: form.earlyBirdDiscountType === "fixed" ? "fixed" : "percentage",
+            earlyBirdDiscountValue: form.earlyBirdDiscountValue
+                ? Number(form.earlyBirdDiscountValue)
+                : 0,
+            earlyBirdDaysAfterListing: form.earlyBirdDaysAfterListing
+                ? Number(form.earlyBirdDaysAfterListing)
+                : 0,
         };
 
         const validation = workshopCreateSchema.safeParse(payload);
@@ -683,6 +699,146 @@ export default function AdminCreateWorkshopPage() {
 
                     <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
                         <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                            Workshop Links
+                        </h2>
+                        <p className="mt-1 text-xs font-inter text-dark-muted">
+                            Optional social and website links for the workshop page.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                            Instagram Link
+                        </label>
+                        <input
+                            type="text"
+                            inputMode="url"
+                            value={form.instagramLink}
+                            onChange={(e) => update("instagramLink", e.target.value)}
+                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            placeholder="https://instagram.com/..."
+                        />
+                        {renderFieldError("instagramLink")}
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                            YouTube Link
+                        </label>
+                        <input
+                            type="text"
+                            inputMode="url"
+                            value={form.youtubeLink}
+                            onChange={(e) => update("youtubeLink", e.target.value)}
+                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            placeholder="https://youtube.com/..."
+                        />
+                        {renderFieldError("youtubeLink")}
+                    </div>
+
+                    <div className="md:col-span-2">
+                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                            Website Link
+                        </label>
+                        <input
+                            type="text"
+                            inputMode="url"
+                            value={form.websiteLink}
+                            onChange={(e) => update("websiteLink", e.target.value)}
+                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            placeholder="https://yourwebsite.com"
+                        />
+                        {renderFieldError("websiteLink")}
+                    </div>
+
+                    <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
+                        <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                            Early Bird Offer
+                        </h2>
+                        <p className="mt-1 text-xs font-inter text-dark-muted">
+                            Add a launch offer for bookings made in the first few days after listing.
+                        </p>
+                    </div>
+
+                    <div className="md:col-span-2">
+                        <label className="flex items-center gap-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={form.earlyBirdEnabled === "true"}
+                                onChange={(e) =>
+                                    update(
+                                        "earlyBirdEnabled",
+                                        e.target.checked ? "true" : "false"
+                                    )
+                                }
+                                className="w-4 h-4 rounded border-gray-300 text-terracotta focus:ring-terracotta"
+                            />
+                            <span className="text-sm font-inter font-semibold text-dark">
+                                Enable Early Bird Offer
+                            </span>
+                        </label>
+                        {renderFieldError("earlyBirdEnabled")}
+                    </div>
+
+                    {form.earlyBirdEnabled === "true" && (
+                        <>
+                            <div>
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Discount Type
+                                </label>
+                                <select
+                                    value={form.earlyBirdDiscountType}
+                                    onChange={(e) =>
+                                        update("earlyBirdDiscountType", e.target.value)
+                                    }
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                >
+                                    <option value="percentage">Percentage (%)</option>
+                                    <option value="fixed">Fixed Amount (Rs.)</option>
+                                </select>
+                                {renderFieldError("earlyBirdDiscountType")}
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Discount Value
+                                </label>
+                                <input
+                                    type="number"
+                                    value={form.earlyBirdDiscountValue}
+                                    onChange={(e) =>
+                                        update("earlyBirdDiscountValue", e.target.value)
+                                    }
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    placeholder={
+                                        form.earlyBirdDiscountType === "percentage"
+                                            ? "e.g. 10"
+                                            : "e.g. 200"
+                                    }
+                                />
+                                {renderFieldError("earlyBirdDiscountValue")}
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Valid For (Days After Listing)
+                                </label>
+                                <input
+                                    type="number"
+                                    value={form.earlyBirdDaysAfterListing}
+                                    onChange={(e) =>
+                                        update("earlyBirdDaysAfterListing", e.target.value)
+                                    }
+                                    className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                                    placeholder="e.g. 2"
+                                />
+                                {renderFieldError("earlyBirdDaysAfterListing")}
+                            </div>
+                        </>
+                    )}
+
+                    <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">
+                        <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
                             Host & Story
                         </h2>
                         <p className="mt-1 text-xs font-inter text-dark-muted">
@@ -727,6 +883,51 @@ export default function AdminCreateWorkshopPage() {
                             required
                         />
                         {renderFieldError("hostBio")}
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                            Host Instagram
+                        </label>
+                        <input
+                            type="text"
+                            inputMode="url"
+                            value={form.hostInstagram}
+                            onChange={(e) => update("hostInstagram", e.target.value)}
+                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            placeholder="https://instagram.com/..."
+                        />
+                        {renderFieldError("hostInstagram")}
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                            Host YouTube
+                        </label>
+                        <input
+                            type="text"
+                            inputMode="url"
+                            value={form.hostYoutube}
+                            onChange={(e) => update("hostYoutube", e.target.value)}
+                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            placeholder="https://youtube.com/..."
+                        />
+                        {renderFieldError("hostYoutube")}
+                    </div>
+
+                    <div className="md:col-span-2">
+                        <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                            Host Website
+                        </label>
+                        <input
+                            type="text"
+                            inputMode="url"
+                            value={form.hostWebsite}
+                            onChange={(e) => update("hostWebsite", e.target.value)}
+                            className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
+                            placeholder="https://hostwebsite.com"
+                        />
+                        {renderFieldError("hostWebsite")}
                     </div>
 
                     <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3">

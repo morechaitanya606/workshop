@@ -10,10 +10,12 @@ export function AnimatedCounter({
     value,
     suffix = "",
     reduceMotion = false,
+    className = "",
 }: {
     value: number;
     suffix?: string;
     reduceMotion?: boolean;
+    className?: string;
 }) {
     const [count, setCount] = useState(0);
     const ref = useRef<HTMLDivElement>(null);
@@ -45,7 +47,7 @@ export function AnimatedCounter({
     return (
         <div
             ref={ref}
-            className="font-playfair text-4xl sm:text-5xl lg:text-6xl font-bold text-dark"
+            className={`font-playfair text-4xl sm:text-5xl lg:text-6xl font-bold leading-none text-dark ${className}`}
         >
             {count.toLocaleString()}
             {suffix}

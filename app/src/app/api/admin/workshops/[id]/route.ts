@@ -109,7 +109,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         if (typeof input.date === "string") patch.date = input.date;
         if (typeof input.time === "string") patch.time = input.time;
         if (typeof input.coverImage === "string") {
-            patch.cover_image = normalizeWorkshopImageUrlInput(input.coverImage);
+            const normalizedCoverImage = normalizeWorkshopImageUrlInput(input.coverImage);
+            patch.cover_image = normalizedCoverImage;
+            patch.host_avatar = normalizedCoverImage;
         }
         if (Array.isArray(input.galleryImages)) {
             patch.gallery_images = input.galleryImages.map((item) =>
@@ -120,6 +122,27 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             patch.video_url = input.videoUrl
                 ? normalizeWorkshopVideoUrlInput(input.videoUrl)
                 : null;
+        }
+        if (input.socialLinks) {
+            patch.social_links = input.socialLinks;
+        }
+        if (typeof input.hostName === "string") {
+            patch.host_name = input.hostName;
+        }
+        if (typeof input.hostBio === "string") {
+            patch.host_bio = input.hostBio;
+        }
+        if ("hostExperience" in input) {
+            patch.host_experience = input.hostExperience || null;
+        }
+        if (input.hostSocialLinks) {
+            patch.host_social_links = input.hostSocialLinks;
+        }
+        if (Array.isArray(input.whatYouLearn)) {
+            patch.what_you_learn = input.whatYouLearn;
+        }
+        if (Array.isArray(input.materialsProvided)) {
+            patch.materials_provided = input.materialsProvided;
         }
         if (Array.isArray(input.badgeLabels)) {
             patch.badge_labels = input.badgeLabels;

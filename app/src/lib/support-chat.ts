@@ -11,6 +11,7 @@ import {
 import { warnDevFallback } from "@/lib/dev-warnings";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
+import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
 
 export type SupportChatReply = {
     reply: string;
@@ -137,6 +138,19 @@ const STOPWORDS = new Set([
 ]);
 
 let workshopCache: WorkshopCacheEntry | null = null;
+
+async function loadLiveSupportChatWorkshopRows(
+    serviceClient: ReturnType<typeof createSupabaseServiceClient>,
+    includeApprovalFilter = true
+) {
+    let query = serviceClient.from("workshops").select("*");
+
+    if (includeApprovalFilter) {
+        query = query.eq("approval_status", "approved");
+    }
+
+    return await query.order("date", { ascending: true }).limit(64);
+}
 
 function normalizeText(value: string) {
     return value
@@ -538,7 +552,7 @@ function buildBookingReply(workshop?: Workshop) {
 }
 
 function buildCancellationReply() {
-    return `${SUPPORT_CHAT_POLICY.cancellation.generalSummary} Workshops usually go live ${SUPPORT_CHAT_POLICY.cancellation.listingLeadTimeDays} days before the session, and the Early Bird booking window lasts for the first ${SUPPORT_CHAT_POLICY.cancellation.earlyBirdWindowDaysAfterListing} days after listing. If an Early Bird booking is cancelled at least ${SUPPORT_CHAT_POLICY.cancellation.noRefundCutoffHoursBeforeWorkshop} hours before the workshop, up to ${SUPPORT_CHAT_POLICY.cancellation.earlyBirdRefundPercent}% of the booking amount may be refunded. ${SUPPORT_CHAT_POLICY.cancellation.manualReviewSummary} Within ${SUPPORT_CHAT_POLICY.cancellation.noRefundCutoffHoursBeforeWorkshop} hours of the workshop, bookings are not cancellable or refundable. ${SUPPORT_CHAT_POLICY.cancellation.hostCancellationSummary} Approved refunds usually take ${SUPPORT_CHAT_POLICY.cancellation.refundProcessingWindow}.`;
+    return `${SUPPORT_CHAT_POLICY.cancellation.generalSummary} Workshops usually go live ${SUPPORT_CHAT_POLICY.cancellation.listingLeadTimeDays} days before the session, and the Early Bird booking window lasts for the first ${SUPPORT_CHAT_POLICY.cancellation.earlyBirdWindowDaysAfterListing} days after listing. If an Early Bird booking is cancelled at least ${SUPPORT_CHAT_POLICY.cancellation.noRefundCutoffHoursBeforeWorkshop} hours before the workshop, up to ${SUPPORT_CHAT_POLICY.cancellation.earlyBirdRefundPercent}% of the booking amount may be refunded. ${SUPPORT_CHAT_POLICY.cancellation.manualReviewSummary} ${SUPPORT_CHAT_POLICY.cancellation.noCancellationSummary} ${SUPPORT_CHAT_POLICY.cancellation.hostCancellationSummary} Approved refunds usually take ${SUPPORT_CHAT_POLICY.cancellation.refundProcessingWindow}.`;
 }
 
 function buildPaymentReply() {
@@ -893,11 +907,11 @@ export async function loadSupportChatWorkshops(now = Date.now()) {
     if (isSupabaseServiceConfigured) {
         try {
             const serviceClient = createSupabaseServiceClient({ requestTimeoutMs: 5000 });
-            const { data, error } = await serviceClient
-                .from("workshops")
-                .select("*")
-                .order("date", { ascending: true })
-                .limit(64);
+            let { data, error } = await loadLiveSupportChatWorkshopRows(serviceClient);
+
+            if (error && isMissingApprovalStatusColumnError(error)) {
+                ({ data, error } = await loadLiveSupportChatWorkshopRows(serviceClient, false));
+            }
 
             if (!error && data) {
                 const mapped = data.map((row) => mapWorkshopRowToWorkshop(row));
