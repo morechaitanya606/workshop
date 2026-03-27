@@ -88,7 +88,18 @@ describe("generateChatbotReply", () => {
         });
 
         expect(result.askName).toBe(true);
-        expect(result.reply).toContain("name");
+        expect(result.reply).toBe("To start the booking, please share your name.");
+    });
+
+    it("mirrors Hinglish for booking prompts when the user asks in Hinglish", async () => {
+        const result = await generateChatbotReply({
+            message: "Mujhe ye workshop join karni hai",
+            stage: "idle",
+            faqs: [],
+        });
+
+        expect(result.askName).toBe(true);
+        expect(result.reply).toBe("Booking start karne ke liye please apna name batao.");
     });
 
     it("responds to greetings with a guided welcome", async () => {
@@ -132,7 +143,7 @@ describe("generateChatbotReply", () => {
         });
 
         expect(result.askPhone).toBe(true);
-        expect(result.reply).toContain("phone");
+        expect(result.reply).toBe("Perfect. Now please share your 10-digit phone number.");
     });
 
     it("captures a valid lead and enables booking", async () => {

@@ -8,17 +8,26 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { RevealGroup, RevealItem } from "@/components/ui";
 import { fadeUp, standardTransition, revealViewport } from "@/lib/motion-presets";
+import { cn } from "@/lib/utils";
 
 interface StaticPageProps {
     title: string;
     description: string;
     icon?: ReactNode;
     children?: ReactNode;
+    alignment?: "left" | "center";
 }
 
-export default function StaticPage({ title, description, icon, children }: StaticPageProps) {
+export default function StaticPage({
+    title,
+    description,
+    icon,
+    children,
+    alignment = "left",
+}: StaticPageProps) {
     const prefersReducedMotion = useReducedMotion();
     const childSections = Children.toArray(children);
+    const isCentered = alignment === "center";
 
     return (
         <main className="min-h-screen bg-cream">
@@ -26,6 +35,7 @@ export default function StaticPage({ title, description, icon, children }: Stati
             <section className="pt-28 pb-16 section-padding">
                 <div className="max-w-3xl mx-auto">
                     <motion.div
+                        className={cn(isCentered && "text-center")}
                         variants={prefersReducedMotion ? undefined : fadeUp}
                         initial={prefersReducedMotion ? undefined : "hidden"}
                         whileInView={prefersReducedMotion ? undefined : "visible"}
@@ -33,7 +43,12 @@ export default function StaticPage({ title, description, icon, children }: Stati
                         transition={prefersReducedMotion ? { duration: 0 } : standardTransition}
                     >
                         {icon ? (
-                            <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-terracotta shadow-soft">
+                            <div
+                                className={cn(
+                                    "mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-terracotta shadow-soft",
+                                    isCentered && "mx-auto"
+                                )}
+                            >
                                 {icon}
                             </div>
                         ) : null}
@@ -43,7 +58,10 @@ export default function StaticPage({ title, description, icon, children }: Stati
 
                     {childSections.length > 0 ? (
                         <RevealGroup
-                            className="space-y-5 text-body text-dark-secondary"
+                            className={cn(
+                                "space-y-5 text-body text-dark-secondary",
+                                isCentered && "text-center"
+                            )}
                             stagger={0.1}
                         >
                             {childSections.map((child, index) => (
@@ -57,13 +75,18 @@ export default function StaticPage({ title, description, icon, children }: Stati
                             ))}
                         </RevealGroup>
                     ) : (
-                        <div className="interactive-surface bg-white rounded-2xl border border-gray-100 shadow-soft p-6">
+                        <div
+                            className={cn(
+                                "interactive-surface bg-white rounded-2xl border border-gray-100 shadow-soft p-6",
+                                isCentered && "text-center"
+                            )}
+                        >
                             <p className="text-body text-dark-muted">
                                 This page is being prepared for launch.
                             </p>
                         </div>
                     )}
-                    <div className="mt-10">
+                    <div className={cn("mt-10", isCentered && "flex justify-center")}>
                         <Link href="/explore" className="btn-primary">
                             Explore Workshops
                         </Link>

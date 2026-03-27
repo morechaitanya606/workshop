@@ -1,13 +1,22 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { handleApiError, parseBody } from "@/lib/api-route";
-import { requireSupabaseService } from "@/lib/api-helpers";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import {
     buildCommunityInsertPayload,
     generateUniqueCommunitySlug,
     mapCommunityRowToCommunity,
 } from "@/lib/communities";
+import {
+    getCommunitiesSetupIncompleteMessage,
+    isMissingCommunitiesSchemaError,
+} from "@/lib/community-api-errors";
+import {
+    createLocalCommunity,
+    generateUniqueLocalCommunitySlug,
+} from "@/lib/community-local-store";
+import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { communityCreateSchema } from "@/lib/validators";
 
 export async function POST(request: NextRequest) {
@@ -31,13 +40,32 @@ export async function POST(request: NextRequest) {
         return parsed.response;
     }
 
-    const service = requireSupabaseService();
-    if (!service.ok) return service.response;
+    const localSlug = await generateUniqueLocalCommunitySlug(parsed.data.title);
+
+    const revalidateCommunityPages = (slug: string) => {
+        revalidatePath("/communities");
+        revalidatePath(`/communities/${slug}`);
+    };
+
+    if (!isSupabaseServiceConfigured) {
+        const community = await createLocalCommunity(parsed.data, localSlug);
+        revalidateCommunityPages(community.slug);
+
+        return NextResponse.json(
+            {
+                community,
+                message: "Community page created successfully.",
+            },
+            { status: 201 }
+        );
+    }
+
+    const serviceClient = createSupabaseServiceClient();
 
     try {
-        const slug = await generateUniqueCommunitySlug(service.client, parsed.data.title);
+        const slug = await generateUniqueCommunitySlug(serviceClient, parsed.data.title);
         const payload = buildCommunityInsertPayload(parsed.data, slug);
-        const { data, error } = await service.client
+        const { data, error } = await serviceClient
             .from("communities")
             .insert(payload)
             .select("*")
@@ -47,6 +75,8 @@ export async function POST(request: NextRequest) {
             throw error;
         }
 
+        revalidateCommunityPages(slug);
+
         return NextResponse.json(
             {
                 community: mapCommunityRowToCommunity(data),
@@ -55,6 +85,19 @@ export async function POST(request: NextRequest) {
             { status: 201 }
         );
     } catch (error) {
+        if (isMissingCommunitiesSchemaError(error)) {
+            const community = await createLocalCommunity(parsed.data, localSlug);
+            revalidateCommunityPages(community.slug);
+
+            return NextResponse.json(
+                {
+                    community,
+                    message: getCommunitiesSetupIncompleteMessage(),
+                },
+                { status: 201 }
+            );
+        }
+
         return handleApiError("Failed to create community page.", error);
     }
 }

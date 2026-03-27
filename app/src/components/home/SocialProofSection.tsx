@@ -27,10 +27,10 @@ export default function SocialProofSection({
     );
 
     return (
-        <section className="section-padding mt-24 sm:mt-20">
+        <section className="section-padding mt-16 sm:mt-20">
             <motion.div
                 {...socialSectionMotionProps}
-                className="relative overflow-hidden rounded-3xl bg-dark px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-14"
+                className="relative overflow-hidden rounded-[2rem] bg-dark px-4 py-6 sm:rounded-3xl sm:px-8 sm:py-10 lg:px-12 lg:py-14"
             >
                 <div className="absolute inset-0 opacity-[0.03] pointer-events-none">
                     <div
@@ -45,10 +45,12 @@ export default function SocialProofSection({
 
                 <motion.div
                     {...socialHeaderMotionProps}
-                    className="relative z-10 mb-8 text-center sm:mb-10 lg:mb-12"
+                    className="relative z-10 mb-6 text-center sm:mb-10 lg:mb-12"
                 >
-                    <h2 className="heading-lg text-white mb-4">Join Creative Community</h2>
-                    <p className="mx-auto mb-8 max-w-2xl text-body leading-relaxed text-white/80">
+                    <h2 className="heading-lg mb-3 px-2 text-white sm:mb-4">
+                        Join Creative Community
+                    </h2>
+                    <p className="mx-auto mb-6 max-w-xl text-sm leading-7 text-white/80 sm:mb-8 sm:text-base sm:leading-relaxed">
                         Friends, couples and teams across the city are discovering new hobbies and
                         meeting people through our workshops.
                     </p>
@@ -57,7 +59,7 @@ export default function SocialProofSection({
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Join WhatsApp Community"
-                        className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] motion-safe:hover:scale-[1.02] text-white font-inter font-semibold px-6 py-3 rounded-full transition-all duration-300 shadow-lg shadow-[#25D366]/20"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-[0.95rem] font-inter font-semibold text-white shadow-lg shadow-[#25D366]/20 transition-all duration-300 hover:bg-[#20bd5a] motion-safe:hover:scale-[1.02] sm:w-auto sm:px-6"
                     >
                         <svg
                             className="w-5 h-5"
@@ -71,28 +73,28 @@ export default function SocialProofSection({
                     </a>
                 </motion.div>
 
-                <div className="relative z-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:gap-5 xl:grid-cols-4">
+                <div className="relative z-10 grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:gap-5 xl:grid-cols-4">
                     {socialMetrics.map((metric, index) => (
                         <motion.div
                             key={metric.label}
                             {...getMotionProps(shouldReduceMotion, fadeInUp, standardTransition, {
                                 delay: index * 0.08,
                             })}
-                            className="flex min-h-[208px] flex-col items-center justify-center rounded-[1.75rem] border border-white/20 bg-white/[0.04] px-5 py-6 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm sm:min-h-[220px]"
+                            className="flex min-h-[150px] flex-col items-center justify-center rounded-[1.4rem] border border-white/20 bg-white/[0.04] px-3.5 py-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm sm:min-h-[220px] sm:rounded-[1.75rem] sm:px-5 sm:py-6"
                         >
-                            <div className="mb-4 flex items-center justify-center rounded-full border border-white/15 bg-white/[0.05] p-3 text-[#f3b8a3]">
+                            <div className="mb-3 flex items-center justify-center rounded-full border border-white/15 bg-white/[0.05] p-2.5 text-[#f3b8a3] sm:mb-4 sm:p-3">
                                 {(() => {
                                     const Icon = METRIC_ICONS[index];
-                                    return Icon ? <Icon className="w-7 h-7" /> : null;
+                                    return Icon ? <Icon className="h-5 w-5 sm:h-7 sm:w-7" /> : null;
                                 })()}
                             </div>
                             <AnimatedCounter
                                 value={metric.value}
                                 suffix={metric.suffix}
                                 reduceMotion={shouldReduceMotion}
-                                className="text-white drop-shadow-[0_1px_8px_rgba(255,255,255,0.08)]"
+                                className="!text-[2rem] text-white drop-shadow-[0_1px_8px_rgba(255,255,255,0.08)] sm:!text-5xl lg:!text-6xl"
                             />
-                            <p className="mt-3 text-sm font-inter font-medium leading-snug text-white/80 sm:text-base">
+                            <p className="mt-2 text-[12px] font-inter font-medium leading-5 text-white/80 sm:mt-3 sm:text-base sm:leading-snug">
                                 {metric.label}
                             </p>
                         </motion.div>

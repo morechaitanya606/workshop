@@ -14,21 +14,24 @@ import {
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
 import Navbar from "@/components/Navbar";
+import { getLocalCommunityBySlug } from "@/lib/community-local-store";
 import { getCommunityBySlug, getMockCommunityBySlug } from "@/lib/communities";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 
 export const revalidate = 60;
 
 async function loadCommunity(slug: string) {
+    const localCommunity = await getLocalCommunityBySlug(slug);
+
     if (!isSupabaseServiceConfigured) {
-        return getMockCommunityBySlug(slug);
+        return localCommunity || getMockCommunityBySlug(slug);
     }
 
     try {
         const liveCommunity = await getCommunityBySlug(createSupabaseServiceClient(), slug);
-        return liveCommunity || getMockCommunityBySlug(slug);
+        return liveCommunity || localCommunity || getMockCommunityBySlug(slug);
     } catch {
-        return getMockCommunityBySlug(slug);
+        return localCommunity || getMockCommunityBySlug(slug);
     }
 }
 

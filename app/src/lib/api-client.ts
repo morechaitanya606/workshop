@@ -5,6 +5,7 @@ import type {
     WorkshopCreateInput,
     WorkshopUpdateInput,
 } from "@/lib/validators";
+import { isCommunitiesSetupIncompleteMessage } from "@/lib/community-api-errors";
 
 type Primitive = string | number | boolean | null | undefined;
 
@@ -434,6 +435,9 @@ export function confirmCheckoutPayment(
 
 export function toApiErrorMessage(error: unknown, fallbackMessage: string) {
     if (isApiClientError(error)) {
+        if (isCommunitiesSetupIncompleteMessage(error.message)) {
+            return error.message;
+        }
         if (error.status >= 500) {
             return fallbackMessage;
         }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/lib/auth-context";
@@ -34,6 +34,7 @@ export function useBookingWorkflow() {
     const workshopId = searchParams.get("workshop") || "";
     const holdId = searchParams.get("hold") || "";
     const holdExpiresAtParam = searchParams.get("holdExpiresAt") || "";
+    const prefilledCouponCode = searchParams.get("coupon")?.trim().toUpperCase() || "";
     const guestsParam = Number.parseInt(searchParams.get("guests") || "1", 10);
     const guests = Number.isFinite(guestsParam) ? Math.max(1, guestsParam) : 1;
     const holdExpiresAtMs = parseTimestamp(holdExpiresAtParam);
@@ -56,12 +57,13 @@ export function useBookingWorkflow() {
         phone: "",
         notes: "",
     });
-    const [couponCode, setCouponCode] = useState("");
+    const [couponCode, setCouponCode] = useState(prefilledCouponCode);
     const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
     const [couponError, setCouponError] = useState("");
     const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
-    const [showCouponInput, setShowCouponInput] = useState(false);
+    const [showCouponInput, setShowCouponInput] = useState(Boolean(prefilledCouponCode));
     const [serviceFee, setServiceFee] = useState(99);
+    const hasTriedPrefilledCouponRef = useRef(false);
 
     useEffect(() => {
         fetch("/api/settings")
@@ -180,49 +182,65 @@ export function useBookingWorkflow() {
 
     const total = Math.max(0, subtotal - discountAmount) + serviceFee;
 
-    const handleApplyCoupon = async () => {
-        if (!couponCode.trim()) return;
-        setIsApplyingCoupon(true);
-        setCouponError("");
+    const handleApplyCoupon = useCallback(
+        async (overrideCode?: string) => {
+            const nextCode = (overrideCode ?? couponCode).trim().toUpperCase();
+            if (!nextCode) return;
+            setIsApplyingCoupon(true);
+            setCouponError("");
 
-        try {
-            const res = await fetch("/api/coupons/validate", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    ...(session?.access_token
-                        ? { Authorization: `Bearer ${session.access_token}` }
-                        : {}),
-                },
-                body: JSON.stringify({
-                    code: couponCode,
-                    workshopId,
-                    subtotal,
-                }),
-            });
-            const data = await res.json();
-
-            if (res.ok && data.valid) {
-                setAppliedCoupon({
-                    code: couponCode.toUpperCase(),
-                    discount: data.discount,
-                    type: data.type,
+            try {
+                const res = await fetch("/api/coupons/validate", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        ...(session?.access_token
+                            ? { Authorization: `Bearer ${session.access_token}` }
+                            : {}),
+                    },
+                    body: JSON.stringify({
+                        code: nextCode,
+                        workshopId,
+                        subtotal,
+                    }),
                 });
-                setCouponCode("");
-            } else {
-                setCouponError(data.message || "Invalid or expired coupon code");
+                const data = await res.json();
+
+                if (res.ok && data.valid) {
+                    setAppliedCoupon({
+                        code: nextCode,
+                        discount: data.discount,
+                        type: data.type,
+                    });
+                    setCouponCode("");
+                    setShowCouponInput(false);
+                } else {
+                    setCouponError(data.message || "Invalid or expired coupon code");
+                    setShowCouponInput(true);
+                }
+            } catch {
+                setCouponError("Failed to apply coupon");
+                setShowCouponInput(true);
+            } finally {
+                setIsApplyingCoupon(false);
             }
-        } catch {
-            setCouponError("Failed to apply coupon");
-        } finally {
-            setIsApplyingCoupon(false);
-        }
-    };
+        },
+        [couponCode, session?.access_token, subtotal, workshopId]
+    );
 
     const removeCoupon = () => {
         setAppliedCoupon(null);
         setCouponError("");
     };
+
+    useEffect(() => {
+        if (!prefilledCouponCode || hasTriedPrefilledCouponRef.current || !workshop) {
+            return;
+        }
+
+        hasTriedPrefilledCouponRef.current = true;
+        void handleApplyCoupon(prefilledCouponCode);
+    }, [handleApplyCoupon, prefilledCouponCode, workshop]);
 
     const holdRemainingMs = holdExpiresAtMs ? holdExpiresAtMs - nowMs : null;
     const holdExpired = typeof holdRemainingMs === "number" && holdRemainingMs <= 0;

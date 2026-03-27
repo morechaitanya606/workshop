@@ -1,10 +1,18 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError, parseBody } from "@/lib/api-route";
-import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError } from "@/lib/api-auth";
+import {
+    getCommunitiesSetupIncompleteMessage,
+    isMissingCommunitiesSchemaError,
+} from "@/lib/community-api-errors";
 import { getMockCommunityBySlug } from "@/lib/communities";
+import {
+    createLocalCommunityJoinRequest,
+    getLocalCommunityBySlug,
+} from "@/lib/community-local-store";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
+import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { communityJoinSchema } from "@/lib/validators";
 
 type Params = {
@@ -40,11 +48,23 @@ export async function POST(request: NextRequest, { params }: Params) {
         });
     }
 
-    const service = requireSupabaseService();
-    if (!service.ok) return service.response;
+    if (!isSupabaseServiceConfigured) {
+        const localCommunity = await getLocalCommunityBySlug(params.slug);
+        if (localCommunity) {
+            await createLocalCommunityJoinRequest(localCommunity, parsed.data);
+            return NextResponse.json({
+                success: true,
+                message: "Your join request has been submitted.",
+            });
+        }
+
+        return jsonError("Community not found.", 404);
+    }
+
+    const serviceClient = createSupabaseServiceClient();
 
     try {
-        const { data: community, error: communityError } = await service.client
+        const { data: community, error: communityError } = await serviceClient
             .from("communities")
             .select("id")
             .eq("slug", params.slug)
@@ -54,10 +74,19 @@ export async function POST(request: NextRequest, { params }: Params) {
             throw communityError;
         }
         if (!community) {
+            const localCommunity = await getLocalCommunityBySlug(params.slug);
+            if (localCommunity) {
+                await createLocalCommunityJoinRequest(localCommunity, parsed.data);
+                return NextResponse.json({
+                    success: true,
+                    message: "Your join request has been submitted.",
+                });
+            }
+
             return jsonError("Community not found.", 404);
         }
 
-        const { error } = await service.client.from("community_join_requests").insert({
+        const { error } = await serviceClient.from("community_join_requests").insert({
             community_id: community.id,
             full_name: parsed.data.fullName,
             email: parsed.data.email,
@@ -75,6 +104,24 @@ export async function POST(request: NextRequest, { params }: Params) {
             message: "Your join request has been submitted.",
         });
     } catch (error) {
+        if (isMissingCommunitiesSchemaError(error)) {
+            const fallbackCommunity = await getLocalCommunityBySlug(params.slug);
+            if (fallbackCommunity) {
+                await createLocalCommunityJoinRequest(fallbackCommunity, parsed.data);
+                return NextResponse.json({
+                    success: true,
+                    message: "Your join request has been submitted.",
+                });
+            }
+
+            return NextResponse.json(
+                {
+                    error: getCommunitiesSetupIncompleteMessage(),
+                },
+                { status: 503 }
+            );
+        }
+
         return handleApiError("Failed to submit join request.", error);
     }
 }

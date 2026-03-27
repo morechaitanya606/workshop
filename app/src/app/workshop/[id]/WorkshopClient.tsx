@@ -33,6 +33,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
 import { useToast } from "@/components/ToastProvider";
+import type { AppliedCoupon } from "@/app/booking/types";
 import type { Workshop } from "@/lib/data";
 import {
     addFavorite,
@@ -158,6 +159,12 @@ export default function WorkshopClient({
     const [showVideo, setShowVideo] = useState(false);
     const [bookingLoading, setBookingLoading] = useState(false);
     const [holdError, setHoldError] = useState<string | null>(null);
+    const [couponCode, setCouponCode] = useState("");
+    const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
+    const [couponError, setCouponError] = useState<string | null>(null);
+    const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+    const [showCouponInput, setShowCouponInput] = useState(false);
+    const [couponSubtotalSnapshot, setCouponSubtotalSnapshot] = useState<number | null>(null);
     const [liveAvailableSeatCount, setLiveAvailableSeatCount] = useState<number | null>(null);
     const [notifyState, setNotifyState] = useState({
         similar: false,
@@ -240,8 +247,13 @@ export default function WorkshopClient({
 
     const currentPricePerGuest = workshop.price - earlyBirdDiscountPerGuest;
     const subtotal = currentPricePerGuest * guests;
+    const couponDiscountAmount = appliedCoupon
+        ? appliedCoupon.type === "percentage"
+            ? subtotal * (appliedCoupon.discount / 100)
+            : appliedCoupon.discount
+        : 0;
     const serviceFee = platformSettings?.service_fee ?? 99;
-    const total = subtotal + serviceFee;
+    const total = Math.max(0, subtotal - couponDiscountAmount) + serviceFee;
 
     const seatAvailabilityLabel = isPastWorkshop
         ? "Event completed"
@@ -360,6 +372,18 @@ export default function WorkshopClient({
         setWaitlistSuccess(false);
         setShowWaitlistModal(false);
     }, [workshop.id]);
+
+    useEffect(() => {
+        if (!appliedCoupon || couponSubtotalSnapshot === subtotal) {
+            return;
+        }
+
+        setCouponCode(appliedCoupon.code);
+        setAppliedCoupon(null);
+        setCouponSubtotalSnapshot(null);
+        setShowCouponInput(true);
+        setCouponError("Guest count changed. Please reapply your coupon.");
+    }, [appliedCoupon, couponSubtotalSnapshot, subtotal]);
 
     useEffect(() => {
         setFeedbackDraft("");
@@ -519,6 +543,63 @@ export default function WorkshopClient({
         }
     };
 
+    const handleApplyCoupon = async () => {
+        const nextCode = couponCode.trim();
+        if (!nextCode) {
+            return;
+        }
+
+        setIsApplyingCoupon(true);
+        setCouponError(null);
+
+        try {
+            const response = await fetch("/api/coupons/validate", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+                },
+                body: JSON.stringify({
+                    code: nextCode,
+                    workshopId: workshop.id,
+                    subtotal,
+                }),
+            });
+            const data = await response.json();
+
+            if (response.ok && data.valid) {
+                setAppliedCoupon({
+                    code: nextCode.toUpperCase(),
+                    discount: data.discount,
+                    type: data.type,
+                });
+                setCouponSubtotalSnapshot(subtotal);
+                setCouponCode("");
+                setCouponError(null);
+                setShowCouponInput(false);
+                return;
+            }
+
+            setAppliedCoupon(null);
+            setCouponSubtotalSnapshot(null);
+            setCouponError(data.message || "Invalid or expired coupon code.");
+        } catch {
+            setAppliedCoupon(null);
+            setCouponSubtotalSnapshot(null);
+            setCouponError("Failed to apply coupon. Please try again.");
+        } finally {
+            setIsApplyingCoupon(false);
+        }
+    };
+
+    const handleRemoveCoupon = () => {
+        setAppliedCoupon(null);
+        setCouponSubtotalSnapshot(null);
+        setCouponCode("");
+        setCouponError(null);
+        setShowCouponInput(false);
+    };
+
     const handleBooking = async () => {
         setHoldError(null);
         if (isBookingClosed) {
@@ -573,6 +654,9 @@ export default function WorkshopClient({
                 guests: String(guests),
                 hold: holdId,
             });
+            if (appliedCoupon?.code) {
+                bookingParams.set("coupon", appliedCoupon.code);
+            }
             if (holdExpiresAt) {
                 bookingParams.set("holdExpiresAt", holdExpiresAt);
             }
@@ -1829,12 +1913,86 @@ export default function WorkshopClient({
                                                     {formatCurrency(serviceFee)}
                                                 </span>
                                             </div>
+                                            {appliedCoupon && (
+                                                <div className="flex justify-between text-sm font-inter text-emerald-700">
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        <Tag className="h-3.5 w-3.5" />
+                                                        {appliedCoupon.code}
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleRemoveCoupon}
+                                                            className="rounded-full p-0.5 transition-colors hover:text-emerald-900"
+                                                            aria-label="Remove coupon"
+                                                        >
+                                                            <X className="h-3 w-3" />
+                                                        </button>
+                                                    </span>
+                                                    <span className="font-medium">
+                                                        -{formatCurrency(couponDiscountAmount)}
+                                                    </span>
+                                                </div>
+                                            )}
                                             <div className="flex justify-between border-t border-dashed border-clay/50 pt-3 text-base font-inter font-bold">
                                                 <span className="text-dark">Total</span>
                                                 <span className="text-dark">
                                                     {formatCurrency(total)}
                                                 </span>
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {!isSoldOut && !appliedCoupon && (
+                                        <div className="mb-6 border-t border-dashed border-clay/50 pt-4">
+                                            {!showCouponInput ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setShowCouponInput(true);
+                                                        setCouponError(null);
+                                                    }}
+                                                    className="inline-flex items-center gap-1.5 text-sm font-inter font-medium text-terracotta transition-colors hover:text-terracotta/80"
+                                                >
+                                                    <Tag className="h-4 w-4" />
+                                                    Have a coupon code?
+                                                </button>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Discount code"
+                                                            value={couponCode}
+                                                            onChange={(event) => {
+                                                                setCouponCode(
+                                                                    event.target.value.toUpperCase()
+                                                                );
+                                                                setCouponError(null);
+                                                            }}
+                                                            className="flex-1 rounded-xl border border-clay/50 bg-white px-3 py-2 text-sm font-inter text-dark transition-all focus:border-terracotta focus:outline-none focus:ring-1 focus:ring-terracotta/30"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void handleApplyCoupon()}
+                                                            disabled={
+                                                                !couponCode.trim() ||
+                                                                isApplyingCoupon
+                                                            }
+                                                            className="inline-flex min-w-[88px] items-center justify-center rounded-xl bg-dark px-4 py-2 text-sm font-inter font-medium text-white transition-colors hover:bg-dark-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                                        >
+                                                            {isApplyingCoupon ? (
+                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                                "Apply"
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                    {couponError && (
+                                                        <p className="text-xs font-inter text-red-600">
+                                                            {couponError}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 

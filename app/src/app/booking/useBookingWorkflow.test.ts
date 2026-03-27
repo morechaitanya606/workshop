@@ -5,9 +5,11 @@ import * as apiClient from "@/lib/api-client";
 import { mockWorkshops } from "@/lib/data";
 
 // Mock dependencies
+let mockSearchParams = "?workshop=w1&hold=h1&guests=2";
+
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
-    useSearchParams: () => new URLSearchParams("?workshop=w1&hold=h1&guests=2"),
+    useSearchParams: () => new URLSearchParams(mockSearchParams),
 }));
 
 vi.mock("@/components/ToastProvider", () => ({
@@ -60,6 +62,7 @@ describe("useBookingWorkflow", () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        mockSearchParams = "?workshop=w1&hold=h1&guests=2";
         originalFetch = global.fetch;
 
         // Mock window.Razorpay
@@ -198,5 +201,34 @@ describe("useBookingWorkflow", () => {
             type: "fixed",
         });
         expect(result.current.discountAmount).toBe(500);
+    });
+
+    it("auto-applies a coupon passed from the workshop page", async () => {
+        mockSearchParams = "?workshop=w1&hold=h1&guests=2&coupon=SAVE10";
+
+        global.fetch = vi.fn().mockImplementation(async (url: string) => {
+            if (url.includes("/api/settings")) {
+                return { ok: true, json: async () => ({ settings: { service_fee: 99 } }) };
+            }
+            if (url.includes("/api/coupons/validate")) {
+                return {
+                    ok: true,
+                    json: async () => ({ valid: true, discount: 10, type: "percentage" }),
+                };
+            }
+            return { ok: false };
+        });
+
+        const { result } = renderHook(() => useBookingWorkflow());
+        await waitForReady(result);
+
+        await waitFor(() => {
+            expect(result.current.appliedCoupon).toEqual({
+                code: "SAVE10",
+                discount: 10,
+                type: "percentage",
+            });
+        });
+        expect(result.current.showCouponInput).toBe(false);
     });
 });

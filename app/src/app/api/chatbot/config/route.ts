@@ -4,16 +4,20 @@ import { jsonError } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { resolveChatbotBookingUrl, resolveChatbotClient } from "@/lib/chatbot-clients";
 
+function buildDefaultChatbotConfig(request: NextRequest) {
+    const contextWorkshopId = request.nextUrl.searchParams.get("contextWorkshopId");
+
+    return {
+        clientId: null,
+        bookingUrl: resolveChatbotBookingUrl(null, contextWorkshopId),
+        clientName: "OnlyWorkshop Platform",
+    };
+}
+
 export async function GET(request: NextRequest) {
     const service = requireSupabaseService();
     if (!service.ok) {
-        const contextWorkshopId = request.nextUrl.searchParams.get("contextWorkshopId");
-
-        return NextResponse.json({
-            clientId: null,
-            bookingUrl: resolveChatbotBookingUrl(null, contextWorkshopId),
-            clientName: "OnlyWorkshop Platform",
-        });
+        return NextResponse.json(buildDefaultChatbotConfig(request));
     }
 
     try {
@@ -35,7 +39,11 @@ export async function GET(request: NextRequest) {
                 request.nextUrl.searchParams.get("contextWorkshopId")
             ),
         });
-    } catch (error) {
-        return jsonError("Failed to load chatbot config.", 500, error);
+    } catch {
+        return NextResponse.json(buildDefaultChatbotConfig(request), {
+            headers: {
+                "Cache-Control": "no-store",
+            },
+        });
     }
 }

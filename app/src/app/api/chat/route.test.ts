@@ -168,11 +168,29 @@ describe("POST /api/chat", () => {
 
         expect(response.status).toBe(200);
         expect(body).toEqual({
-            reply: "Booking start karne ke liye please apna name batao.",
+            reply: "To start the booking, please share your name.",
             showBookingButton: false,
             askName: true,
             askPhone: false,
         });
+    });
+
+    it("falls back to built-in FAQs when tenant resolution fails", async () => {
+        vi.mocked(resolveChatbotClient).mockRejectedValue(new Error("clients table missing"));
+
+        const request = new NextRequest("http://localhost/api/chat", {
+            method: "POST",
+            body: JSON.stringify({
+                message: "What should I bring?",
+                stage: "idle",
+            }),
+        });
+
+        const response = await POST(request);
+        const body = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(body.reply).toContain("Core materials are provided");
     });
 
     it("returns a welcome reply for greetings", async () => {

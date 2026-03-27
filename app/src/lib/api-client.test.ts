@@ -33,6 +33,19 @@ describe("toApiErrorMessage", () => {
         expect(message).toBe("Server said no.");
     });
 
+    it("preserves safe setup guidance for community schema errors", () => {
+        const message = toApiErrorMessage(
+            new ApiClientError(
+                "Communities setup is incomplete for this environment. Apply app/supabase/migrations/20260325_community_pages.sql to the connected Supabase database, then retry.",
+                503
+            ),
+            "Fallback error"
+        );
+        expect(message).toBe(
+            "Communities setup is incomplete for this environment. Apply app/supabase/migrations/20260325_community_pages.sql to the connected Supabase database, then retry."
+        );
+    });
+
     it("returns fallback message for unknown errors", () => {
         const message = toApiErrorMessage(new Error("random"), "Fallback error");
         expect(message).toBe("Fallback error");

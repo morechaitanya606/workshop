@@ -5,6 +5,7 @@ import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
 import Navbar from "@/components/Navbar";
 import CommunitySpotlightCard from "@/components/communities/CommunitySpotlightCard";
+import { listLocalCommunities } from "@/lib/community-local-store";
 import {
     listCommunities,
     mergeCommunities,
@@ -22,15 +23,20 @@ export const metadata: Metadata = {
 export const revalidate = 60;
 
 async function loadPublicCommunities() {
+    const localCommunities = await listLocalCommunities(24);
+
     if (!isSupabaseServiceConfigured) {
-        return mockCommunities;
+        return mergeCommunities(localCommunities, mockCommunities);
     }
 
     try {
         const liveCommunities = await listCommunities(createSupabaseServiceClient(), 24);
-        return mergeCommunities(liveCommunities, mockCommunities);
+        return mergeCommunities(
+            mergeCommunities(liveCommunities, localCommunities),
+            mockCommunities
+        );
     } catch {
-        return mockCommunities;
+        return mergeCommunities(localCommunities, mockCommunities);
     }
 }
 

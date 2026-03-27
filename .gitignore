@@ -41,6 +41,7 @@ yarn-error.log*
 
 # temp files
 *.tmp
+app/.local-data/
 
 # test artifacts
 test-results/
