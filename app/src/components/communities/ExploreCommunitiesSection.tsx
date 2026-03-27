@@ -47,13 +47,11 @@ export default function ExploreCommunitiesSection({ communities }: { communities
                     </div>
                 </div>
 
-                <div className="mt-7 grid gap-4 lg:grid-cols-3">
+                <div className="mt-7 flex gap-3 overflow-x-auto pb-1 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:pb-0 lg:grid-cols-3">
                     {featuredCommunities.map((community) => (
-                        <CommunitySpotlightCard
-                            key={community.slug}
-                            community={community}
-                            compact
-                        />
+                        <div key={community.slug} className="min-w-[15.5rem] flex-none sm:min-w-0">
+                            <CommunitySpotlightCard community={community} compact />
+                        </div>
                     ))}
                 </div>
             </div>

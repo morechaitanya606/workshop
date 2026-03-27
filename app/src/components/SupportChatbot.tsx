@@ -1,390 +1,473 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import {
-    MessageCircle,
-    X,
-    Send,
-    ExternalLink,
-    HelpCircle,
-    CreditCard,
-    CalendarX,
-    AlertTriangle,
-    CheckCircle,
-    Loader2,
-} from "lucide-react";
-import { useParams } from "next/navigation";
-import { askSupportChatbot } from "@/lib/api-client";
-import { trackEvent } from "@/lib/analytics";
-import { useAuth } from "@/lib/auth-context";
-import { SUPPORT_CHAT_ANALYTICS_EVENTS, SUPPORT_CHAT_MESSAGES } from "@/lib/support-chat-config";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Bot, MessageCircle, PhoneCall, Send, X } from "lucide-react";
+import { useParams, usePathname } from "next/navigation";
+import { askChatbot, getChatbotConfig } from "@/lib/api-client";
+import { normalizePhoneNumber, type ChatbotStage } from "@/lib/chatbot";
+import { CONTACT_PHONE_NUMBERS } from "@/lib/contact";
 
-const CHAT_QUICK_ACTIONS = [
-    {
-        id: "browse",
-        label: "Find workshops",
-        icon: HelpCircle,
-        prompt: "What workshops are available this week?",
-    },
-    {
-        id: "booking",
-        label: "How do I book?",
-        icon: HelpCircle,
-        prompt: "How do I book a workshop?",
-    },
-    {
-        id: "cancel",
-        label: "Cancellation policy",
-        icon: CalendarX,
-        prompt: "What is the cancellation policy?",
-    },
-    {
-        id: "payment",
-        label: "Payment help",
-        icon: CreditCard,
-        prompt: "I need help with a payment.",
-    },
-    {
-        id: "other",
-        label: "Report an issue",
-        icon: AlertTriangle,
-        prompt: "",
-        opensForm: true,
-    },
-];
+type SupportChatbotProps = {
+    mode?: "floating" | "embedded";
+    clientApiKey?: string | null;
+};
 
-const WHATSAPP_SUPPORT_NUMBER = "917028478109";
-const WHATSAPP_SUPPORT_MESSAGE = encodeURIComponent(
-    "Hi Only Workshops, I have a workshop related query."
-);
-const WHATSAPP_SUPPORT_URL = `https://wa.me/${WHATSAPP_SUPPORT_NUMBER}?text=${WHATSAPP_SUPPORT_MESSAGE}`;
-
-interface ChatMessage {
+type ChatMessage = {
     id: string;
-    type: "user" | "bot" | "system";
+    role: "user" | "bot";
     content: string;
-    time: string;
+    showBookingButton?: boolean;
+};
+
+type LeadDraft = {
+    name: string;
+    phone: string;
+    query: string;
+};
+
+type ChatbotConfigState = {
+    bookingUrl: string;
+    clientId: string | null;
+    clientName: string;
+};
+
+function createMessageId() {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function getTimeString(): string {
-    return new Date().toLocaleTimeString("en-IN", {
-        hour: "2-digit",
-        minute: "2-digit",
+function buildWelcomeMessage(clientName?: string) {
+    return {
+        id: "welcome-message",
+        role: "bot" as const,
+        content: clientName
+            ? `Hi! Main ${clientName} ka AI assistant hoon. Aap mujhse fee, booking, materials, parking, ya cancellation ke baare mein pooch sakte ho.`
+            : "Hi! Aap mujhse workshop FAQs, booking, fee, materials, parking, ya cancellation ke baare mein pooch sakte ho.",
+    };
+}
+
+function buildWhatsAppHref(pathname: string, contextWorkshopId: string | null) {
+    const primarySupportNumber = CONTACT_PHONE_NUMBERS[0]?.value ?? "+917028478109";
+    const supportMessage = [
+        "Hi! I need help with a workshop booking.",
+        contextWorkshopId ? `Workshop page: /workshop/${contextWorkshopId}` : `Page: ${pathname}`,
+    ]
+        .filter(Boolean)
+        .join("\n");
+
+    return `https://wa.me/${normalizePhoneNumber(primarySupportNumber)}?text=${encodeURIComponent(
+        supportMessage
+    )}`;
+}
+
+function renderMessageContent(content: string) {
+    return content.split(/(\[.*?\]\(.*?\))/g).map((part, index) => {
+        const linkMatch = part.match(/\[(.*?)\]\((.*?)\)/);
+        if (linkMatch) {
+            return (
+                <a
+                    key={`${linkMatch[2]}-${index}`}
+                    href={linkMatch[2]}
+                    className="font-medium text-[#0b6b5f] underline decoration-[#0b6b5f]/35 underline-offset-2 transition-colors hover:text-[#075E54]"
+                >
+                    {linkMatch[1]}
+                </a>
+            );
+        }
+
+        return <span key={`text-${index}`}>{part}</span>;
     });
 }
 
-function getUserDisplayName(user: ReturnType<typeof useAuth>["user"]): string {
-    const metadataName = user?.user_metadata?.full_name;
-    if (typeof metadataName === "string" && metadataName.trim()) {
-        return metadataName.trim();
-    }
+export default function SupportChatbot({
+    mode = "floating",
+    clientApiKey = null,
+}: SupportChatbotProps) {
+    const prefersReducedMotion = Boolean(useReducedMotion());
+    const pathname = usePathname();
+    const params = useParams<{ id?: string }>();
+    const shouldHideFloatingWidget = mode === "floating" && pathname.startsWith("/chatbot/embed");
 
-    const email = user?.email?.trim();
-    if (!email) {
-        return "";
-    }
+    const isWorkshopPage = pathname.startsWith("/workshop/");
+    const contextWorkshopId = isWorkshopPage && typeof params?.id === "string" ? params.id : null;
+    const whatsappHref = buildWhatsAppHref(pathname, contextWorkshopId);
 
-    return email.split("@")[0] || "";
-}
-
-export default function SupportChatbot() {
-    const [isOpen, setIsOpen] = useState(false);
+    const [isOpen, setIsOpen] = useState(mode === "embedded");
     const [isLauncherOpen, setIsLauncherOpen] = useState(false);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
-    const [showForm, setShowForm] = useState(false);
-    const [subject, setSubject] = useState("");
-    const [description, setDescription] = useState("");
-    const [email, setEmail] = useState("");
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [customQuery, setCustomQuery] = useState("");
-    const [isThinking, setIsThinking] = useState(false);
-    const [isAwaitingClarification, setIsAwaitingClarification] = useState(false);
-    const params = useParams<{ id?: string }>();
-    const currentPathWorkshopId = params?.id && typeof params.id === "string" ? params.id : null;
-    const [contextWorkshopId, setContextWorkshopId] = useState<string | null>(
-        currentPathWorkshopId
-    );
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-    const launcherRef = useRef<HTMLDivElement>(null);
-    const prefersReducedMotion = Boolean(useReducedMotion());
-    const { user } = useAuth();
-    const userDisplayName = getUserDisplayName(user);
+    const [input, setInput] = useState("");
+    const [stage, setStage] = useState<ChatbotStage>("idle");
+    const [leadDraft, setLeadDraft] = useState<LeadDraft>({
+        name: "",
+        phone: "",
+        query: "",
+    });
+    const [isTyping, setIsTyping] = useState(false);
+    const [chatbotConfig, setChatbotConfig] = useState<ChatbotConfigState | null>(null);
+    const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
         messagesEndRef.current?.scrollIntoView({
             behavior: prefersReducedMotion ? "auto" : "smooth",
         });
-    }, [messages, isThinking, prefersReducedMotion]);
+    }, [isOpen, isTyping, messages, prefersReducedMotion]);
 
     useEffect(() => {
-        if (user?.email) setEmail(user.email);
-    }, [user]);
-
-    useEffect(() => {
-        if (currentPathWorkshopId && messages.length <= 1) {
-            setContextWorkshopId(currentPathWorkshopId);
+        if (mode === "embedded" && messages.length === 0) {
+            setMessages([buildWelcomeMessage()]);
         }
-    }, [currentPathWorkshopId, messages.length]);
+    }, [messages.length, mode]);
 
     useEffect(() => {
-        if (!isLauncherOpen) {
+        if (shouldHideFloatingWidget) {
             return;
         }
 
-        const handlePointerDown = (event: PointerEvent) => {
-            if (
-                launcherRef.current &&
-                event.target instanceof Node &&
-                !launcherRef.current.contains(event.target)
-            ) {
-                setIsLauncherOpen(false);
+        let cancelled = false;
+
+        const loadChatbotConfig = async () => {
+            try {
+                const result = await getChatbotConfig({
+                    clientApiKey,
+                    contextWorkshopId,
+                });
+
+                if (!cancelled) {
+                    setChatbotConfig({
+                        bookingUrl: result.bookingUrl,
+                        clientId: result.clientId,
+                        clientName: result.clientName,
+                    });
+
+                    setMessages((current) => {
+                        if (current.length === 0) {
+                            return [buildWelcomeMessage(result.clientName)];
+                        }
+
+                        if (current[0]?.id !== "welcome-message") {
+                            return current;
+                        }
+
+                        return [buildWelcomeMessage(result.clientName), ...current.slice(1)];
+                    });
+                }
+            } catch {
+                if (!cancelled) {
+                    setChatbotConfig({
+                        bookingUrl: contextWorkshopId
+                            ? `/workshop/${contextWorkshopId}`
+                            : "/explore",
+                        clientId: null,
+                        clientName: "Workshop Assistant",
+                    });
+                }
             }
         };
 
-        document.addEventListener("pointerdown", handlePointerDown);
-        return () => document.removeEventListener("pointerdown", handlePointerDown);
-    }, [isLauncherOpen]);
+        void loadChatbotConfig();
 
-    const appendMessage = (type: ChatMessage["type"], content: string) => {
-        setMessages((prev) => [
-            ...prev,
-            {
-                id: `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                type,
-                content,
-                time: getTimeString(),
-            },
-        ]);
-    };
+        return () => {
+            cancelled = true;
+        };
+    }, [clientApiKey, contextWorkshopId, shouldHideFloatingWidget]);
 
-    const handleOpen = () => {
+    const bookingHref =
+        chatbotConfig?.bookingUrl ||
+        (contextWorkshopId ? `/workshop/${contextWorkshopId}` : "/explore");
+
+    const openChat = () => {
         setIsLauncherOpen(false);
         setIsOpen(true);
-
-        if (messages.length === 0) {
-            const welcomeMessage = userDisplayName
-                ? `Hi ${userDisplayName.split(/\s+/)[0]}! ${SUPPORT_CHAT_MESSAGES.greeting.replace(/^Hi!\s*/, "")}`
-                : SUPPORT_CHAT_MESSAGES.greeting;
-
-            setMessages([
-                {
-                    id: "welcome",
-                    type: "bot",
-                    content: welcomeMessage,
-                    time: getTimeString(),
-                },
-            ]);
-        }
+        setMessages((current) =>
+            current.length > 0
+                ? current
+                : [buildWelcomeMessage(chatbotConfig?.clientName || "Workshop Assistant")]
+        );
     };
 
-    const handleQuickAction = async (action: (typeof CHAT_QUICK_ACTIONS)[0]) => {
-        if (action.opensForm) {
-            setShowForm(true);
-            setIsAwaitingClarification(false);
-            appendMessage("user", action.label);
-            appendMessage("bot", SUPPORT_CHAT_MESSAGES.issueFormIntro);
-            trackEvent(SUPPORT_CHAT_ANALYTICS_EVENTS.issueFormOpened, {
-                source: "quick_action",
-            });
+    const closeChat = () => {
+        if (mode === "embedded") {
             return;
         }
 
-        await sendChatMessage(action.prompt);
+        setIsOpen(false);
     };
 
-    const sendChatMessage = async (rawMessage?: string) => {
-        const message = (rawMessage ?? customQuery).trim();
-        if (!message || isThinking) {
+    const appendMessage = (message: ChatMessage) => {
+        setMessages((current) => [...current, message]);
+    };
+
+    const handleSubmit = async () => {
+        const trimmed = input.trim();
+        if (!trimmed || isTyping) {
             return;
         }
 
-        appendMessage("user", message);
-        setCustomQuery("");
-        setIsThinking(true);
-        const wasAwaitingClarification = isAwaitingClarification;
+        const previousStage = stage;
+        appendMessage({
+            id: createMessageId(),
+            role: "user",
+            content: trimmed,
+        });
+        setInput("");
+        setIsTyping(true);
 
         try {
-            const result = await askSupportChatbot({
-                message,
+            const response = await askChatbot({
+                message: trimmed,
+                stage: previousStage,
+                lead: leadDraft,
+                clientId: chatbotConfig?.clientId ?? undefined,
+                clientApiKey: clientApiKey ?? undefined,
                 contextWorkshopId,
-                userDisplayName,
             });
 
-            if (wasAwaitingClarification && result.outcome === "clarification_needed") {
-                appendMessage("system", SUPPORT_CHAT_MESSAGES.clarificationEscalation);
-                setShowForm(true);
-                setContextWorkshopId(null);
-                setIsAwaitingClarification(false);
-                trackEvent(SUPPORT_CHAT_ANALYTICS_EVENTS.noMatch, {
-                    source: "repeat_low_confidence",
-                    intent: result.intent ?? "unknown",
-                });
-                trackEvent(SUPPORT_CHAT_ANALYTICS_EVENTS.issueFormOpened, {
-                    source: "repeat_low_confidence",
-                });
-                return;
+            if (previousStage === "idle" && response.askName) {
+                setLeadDraft((current) => ({
+                    ...current,
+                    query: trimmed,
+                }));
             }
 
-            appendMessage("bot", result.reply);
-            setContextWorkshopId(result.contextWorkshopId);
-            setIsAwaitingClarification(result.outcome === "clarification_needed");
+            if (previousStage === "asking_name" && response.askPhone) {
+                setLeadDraft((current) => ({
+                    ...current,
+                    name: trimmed,
+                }));
+            }
 
-            if (result.outcome === "clarification_needed") {
-                trackEvent(SUPPORT_CHAT_ANALYTICS_EVENTS.clarificationNeeded, {
-                    intent: result.intent ?? "unknown",
-                });
-            } else if (result.outcome === "issue_form") {
-                trackEvent(SUPPORT_CHAT_ANALYTICS_EVENTS.issueFormOpened, {
-                    source: result.outcome,
-                    intent: result.intent ?? "unknown",
-                });
+            if (previousStage === "asking_phone" && response.showBookingButton) {
+                setLeadDraft((current) => ({
+                    ...current,
+                    phone: normalizePhoneNumber(trimmed),
+                }));
+            }
+
+            if (response.askName) {
+                setStage("asking_name");
+            } else if (response.askPhone) {
+                setStage("asking_phone");
+            } else if (response.showBookingButton) {
+                setStage("completed");
             } else {
-                trackEvent(SUPPORT_CHAT_ANALYTICS_EVENTS.answered, {
-                    intent: result.intent ?? "unknown",
-                    confidence: result.confidence,
-                });
+                setStage("idle");
             }
 
-            if (result.showIssueForm) {
-                setShowForm(true);
-                setIsAwaitingClarification(false);
-            }
+            appendMessage({
+                id: createMessageId(),
+                role: "bot",
+                content: response.reply,
+                showBookingButton: response.showBookingButton,
+            });
         } catch {
-            appendMessage(
-                "system",
-                "Sorry, I could not answer that right now. Please try again, or use the issue form if you need support."
-            );
+            appendMessage({
+                id: createMessageId(),
+                role: "bot",
+                content:
+                    "Sorry, main abhi reply nahi kar pa raha hoon. Please thodi der baad try karo.",
+            });
         } finally {
-            setIsThinking(false);
+            setIsTyping(false);
         }
     };
 
-    const handleSubmitIssue = async () => {
-        if (!subject.trim() || !description.trim() || !email.trim()) return;
-        setIsSubmitting(true);
+    const inputPlaceholder =
+        stage === "asking_name"
+            ? "Apna name enter karo"
+            : stage === "asking_phone"
+              ? "Apna phone number enter karo"
+              : "Apna message type karo";
 
-        try {
-            const res = await fetch("/api/support", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    subject: subject.trim(),
-                    description: description.trim(),
-                    email: email.trim(),
-                    userId: user?.id ?? null,
-                    workshopId: contextWorkshopId || currentPathWorkshopId || null,
-                }),
-            });
+    const panelContent = (
+        <div
+            className={`flex flex-col overflow-hidden rounded-[28px] border border-black/5 bg-[#EFEAE2] shadow-[0_24px_60px_rgba(7,94,84,0.28)] ${
+                mode === "embedded"
+                    ? "h-[min(100vh,720px)] w-full"
+                    : "fixed bottom-20 right-3 z-[70] w-[calc(100vw-1.5rem)] max-w-sm sm:right-4 sm:max-w-md lg:bottom-6 lg:right-6"
+            }`}
+        >
+            <div className="flex items-center justify-between bg-[#075E54] px-4 py-3 text-white">
+                <div className="min-w-0">
+                    <p className="truncate text-sm font-inter font-semibold">
+                        {chatbotConfig?.clientName || "Workshop Assistant"}
+                    </p>
+                    <p className="text-[11px] font-inter text-white/75">
+                        FAQ, booking, and lead support
+                    </p>
+                </div>
+                {mode === "floating" && (
+                    <button
+                        type="button"
+                        onClick={closeChat}
+                        className="rounded-full p-2 transition-colors hover:bg-white/10"
+                        aria-label="Close chat"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                )}
+            </div>
 
-            if (res.ok) {
-                setShowForm(false);
-                setSubject("");
-                setDescription("");
-                appendMessage("system", SUPPORT_CHAT_MESSAGES.issueSubmitted);
-            } else {
-                appendMessage("system", SUPPORT_CHAT_MESSAGES.issueSubmissionFailed);
-            }
-        } catch {
-            appendMessage("system", SUPPORT_CHAT_MESSAGES.issueSubmissionNetworkError);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+            <div className="flex-1 space-y-3 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.34),rgba(255,255,255,0.1))] px-3 py-4">
+                {messages.map((message) => (
+                    <div
+                        key={message.id}
+                        className={`flex ${
+                            message.role === "user" ? "justify-end" : "justify-start"
+                        }`}
+                    >
+                        <div
+                            className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm font-inter leading-relaxed shadow-sm ${
+                                message.role === "user"
+                                    ? "rounded-br-md bg-[#DCF8C6] text-slate-900"
+                                    : "rounded-bl-md bg-[#F1F0F0] text-slate-800"
+                            }`}
+                        >
+                            <div className="whitespace-pre-wrap">
+                                {renderMessageContent(message.content)}
+                            </div>
+                            {message.showBookingButton && (
+                                <a
+                                    href={bookingHref}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="mt-3 inline-flex items-center justify-center rounded-full bg-[#25D366] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#1fa855]"
+                                >
+                                    Complete Booking
+                                </a>
+                            )}
+                        </div>
+                    </div>
+                ))}
+
+                {isTyping && (
+                    <div className="flex justify-start">
+                        <div className="rounded-2xl rounded-bl-md bg-[#F1F0F0] px-4 py-2.5 text-sm font-inter text-slate-700 shadow-sm">
+                            Assistant is typing...
+                        </div>
+                    </div>
+                )}
+
+                <div ref={messagesEndRef} />
+            </div>
+
+            <div className="border-t border-black/5 bg-white px-3 py-3">
+                <div className="flex items-center gap-2">
+                    <input
+                        type="text"
+                        value={input}
+                        onChange={(event) => setInput(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                                event.preventDefault();
+                                void handleSubmit();
+                            }
+                        }}
+                        placeholder={inputPlaceholder}
+                        className="h-11 flex-1 rounded-full border border-slate-200 bg-slate-50 px-4 text-sm font-inter text-slate-900 outline-none transition-colors focus:border-[#25D366]"
+                    />
+                    <button
+                        type="button"
+                        onClick={() => void handleSubmit()}
+                        disabled={!input.trim() || isTyping}
+                        className="flex h-11 w-11 items-center justify-center rounded-full bg-[#25D366] text-white transition-colors hover:bg-[#1fa855] disabled:cursor-not-allowed disabled:bg-slate-300"
+                        aria-label="Send message"
+                    >
+                        <Send className="h-4 w-4" />
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+
+    if (mode === "embedded") {
+        return panelContent;
+    }
+
+    if (shouldHideFloatingWidget) {
+        return null;
+    }
 
     return (
         <>
             <AnimatePresence>
-                {!isOpen && (
+                {!isOpen && isLauncherOpen && (
                     <motion.div
-                        ref={launcherRef}
-                        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
-                        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-                        exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
+                        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
+                        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                        exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
                         transition={{ duration: 0.2 }}
-                        className="fixed bottom-20 right-4 z-[60] flex flex-col items-end gap-3 lg:bottom-6 lg:right-6"
+                        className="fixed bottom-36 right-4 z-[70] w-[min(calc(100vw-2rem),22rem)] rounded-[28px] border border-black/5 bg-white p-3 shadow-[0_24px_60px_rgba(15,23,42,0.18)] lg:bottom-24 lg:right-6"
                     >
-                        <AnimatePresence>
-                            {isLauncherOpen && (
-                                <motion.div
-                                    initial={
-                                        prefersReducedMotion
-                                            ? { opacity: 0 }
-                                            : { opacity: 0, y: 12 }
-                                    }
-                                    animate={
-                                        prefersReducedMotion
-                                            ? { opacity: 1 }
-                                            : { opacity: 1, y: 0 }
-                                    }
-                                    exit={
-                                        prefersReducedMotion
-                                            ? { opacity: 0 }
-                                            : { opacity: 0, y: 12 }
-                                    }
-                                    transition={{ duration: 0.18 }}
-                                    className="w-[280px] rounded-2xl border border-clay/40 bg-white p-2 shadow-2xl"
-                                >
-                                    <a
-                                        href={WHATSAPP_SUPPORT_URL}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        onClick={() => setIsLauncherOpen(false)}
-                                        className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-cream-100"
-                                    >
-                                        <div className="mt-0.5 rounded-full bg-[#25D366]/12 p-2 text-[#25D366]">
-                                            <ExternalLink className="h-4 w-4" />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <p className="text-sm font-inter font-semibold text-dark">
-                                                WhatsApp Business
-                                            </p>
-                                            <p className="mt-1 text-xs font-inter leading-relaxed text-dark-muted">
-                                                Workshop related queries can be asked on{" "}
-                                                <span className="font-semibold text-dark">
-                                                    7028478109
-                                                </span>
-                                                .
-                                            </p>
-                                        </div>
-                                    </a>
+                        <p className="px-1 pb-2 text-xs font-inter font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Choose Support
+                        </p>
 
-                                    <button
-                                        type="button"
-                                        onClick={handleOpen}
-                                        className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-cream-100"
-                                    >
-                                        <div className="mt-0.5 rounded-full bg-terracotta/10 p-2 text-terracotta">
-                                            <MessageCircle className="h-4 w-4" />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <p className="text-sm font-inter font-semibold text-dark">
-                                                Website Chatbot
-                                            </p>
-                                            <p className="mt-1 text-xs font-inter leading-relaxed text-dark-muted">
-                                                Open the workshop assistant here on the website for
-                                                booking and support help.
-                                            </p>
-                                        </div>
-                                    </button>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                        <div className="space-y-2">
+                            <button
+                                type="button"
+                                onClick={openChat}
+                                className="flex w-full items-center gap-3 rounded-[22px] border border-[#25D366]/20 bg-[#ecfff4] px-3 py-3 text-left transition-colors hover:bg-[#dff9ea]"
+                            >
+                                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#25D366] text-white shadow-sm">
+                                    <Bot className="h-5 w-5" />
+                                </span>
+                                <span className="min-w-0">
+                                    <span className="block text-sm font-semibold text-slate-900">
+                                        AI Chatbot
+                                    </span>
+                                    <span className="block text-xs leading-relaxed text-slate-600">
+                                        FAQ answers, booking help, and lead capture
+                                    </span>
+                                </span>
+                            </button>
 
-                        <button
-                            type="button"
-                            onClick={() => setIsLauncherOpen((current) => !current)}
-                            className="flex h-14 w-14 items-center justify-center rounded-full bg-terracotta text-white shadow-lg shadow-terracotta/30 transition-colors hover:bg-terracotta-600"
-                            aria-expanded={isLauncherOpen}
-                            aria-label={isLauncherOpen ? "Close chat options" : "Open chat options"}
-                        >
-                            {isLauncherOpen ? (
-                                <X className="h-6 w-6" />
-                            ) : (
-                                <MessageCircle className="h-6 w-6" />
-                            )}
-                        </button>
+                            <a
+                                href={whatsappHref}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={() => setIsLauncherOpen(false)}
+                                className="flex w-full items-center gap-3 rounded-[22px] border border-[#075E54]/10 bg-[#f5fbfa] px-3 py-3 text-left transition-colors hover:bg-[#ebf6f4]"
+                            >
+                                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#075E54] text-white shadow-sm">
+                                    <PhoneCall className="h-5 w-5" />
+                                </span>
+                                <span className="min-w-0">
+                                    <span className="block text-sm font-semibold text-slate-900">
+                                        WhatsApp Help
+                                    </span>
+                                    <span className="block text-xs leading-relaxed text-slate-600">
+                                        Chat with a person for direct support
+                                    </span>
+                                </span>
+                            </a>
+                        </div>
                     </motion.div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {!isOpen && (
+                    <motion.button
+                        type="button"
+                        onClick={() => setIsLauncherOpen((current) => !current)}
+                        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+                        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+                        exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+                        transition={{ duration: 0.2 }}
+                        className="fixed bottom-20 right-4 z-[70] flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_16px_40px_rgba(37,211,102,0.35)] transition-transform hover:scale-[1.02] lg:bottom-6 lg:right-6"
+                        aria-expanded={isLauncherOpen}
+                        aria-label="Open support options"
+                    >
+                        {isLauncherOpen ? (
+                            <X className="h-6 w-6" />
+                        ) : (
+                            <MessageCircle className="h-6 w-6" />
+                        )}
+                    </motion.button>
                 )}
             </AnimatePresence>
 
@@ -394,192 +477,9 @@ export default function SupportChatbot() {
                         initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
                         animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
                         exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
-                        transition={{ duration: 0.25 }}
-                        className="fixed bottom-20 right-4 z-[60] flex max-h-[500px] w-[340px] flex-col overflow-hidden rounded-2xl border border-clay/40 bg-white shadow-2xl sm:w-[380px] lg:bottom-6 lg:right-6"
+                        transition={{ duration: 0.2 }}
                     >
-                        <div className="flex items-center justify-between rounded-t-2xl bg-terracotta px-4 py-3 text-white">
-                            <div className="flex items-center gap-2">
-                                <MessageCircle className="h-5 w-5" />
-                                <div>
-                                    <p className="text-sm font-inter font-semibold">
-                                        Workshop Assistant
-                                    </p>
-                                    <p className="text-[10px] font-inter text-white/70">
-                                        Ask about workshops, booking, or support
-                                    </p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setIsOpen(false)}
-                                className="rounded-lg p-1 transition-colors hover:bg-white/20"
-                                aria-label="Close chat"
-                            >
-                                <X className="h-4 w-4" />
-                            </button>
-                        </div>
-
-                        <div className="scrollbar-subtle max-h-[300px] flex-1 space-y-3 overflow-y-auto p-4 pr-3">
-                            {messages.map((msg) => (
-                                <div
-                                    key={msg.id}
-                                    className={`flex ${msg.type === "user" ? "justify-end" : "justify-start"}`}
-                                >
-                                    <div
-                                        className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm font-inter leading-relaxed ${
-                                            msg.type === "user"
-                                                ? "rounded-br-md bg-terracotta text-white"
-                                                : msg.type === "system"
-                                                  ? msg.content.toLowerCase().includes("sorry") ||
-                                                    msg.content.toLowerCase().includes("error") ||
-                                                    msg.content.toLowerCase().includes("failed") ||
-                                                    msg.content.toLowerCase().includes("could not")
-                                                      ? "border border-amber-200 bg-amber-50 text-amber-900"
-                                                      : "border border-emerald-100 bg-emerald-50 text-emerald-800"
-                                                  : "rounded-bl-md bg-cream-100 text-dark-secondary"
-                                        }`}
-                                    >
-                                        {msg.content.split(/(\[.*?\]\(.*?\))/g).map((part, i) => {
-                                            const linkMatch = part.match(/\[(.*?)\]\((.*?)\)/);
-                                            if (linkMatch) {
-                                                return (
-                                                    <a
-                                                        key={i}
-                                                        href={linkMatch[2]}
-                                                        className="underline font-medium underline-offset-2 transition-colors hover:opacity-80 decoration-terracotta/40 text-terracotta"
-                                                    >
-                                                        {linkMatch[1]}
-                                                    </a>
-                                                );
-                                            }
-                                            return <span key={i}>{part}</span>;
-                                        })}
-                                        <p
-                                            className={`mt-1 text-[10px] ${
-                                                msg.type === "user"
-                                                    ? "text-white/60"
-                                                    : "text-dark-muted"
-                                            }`}
-                                        >
-                                            {msg.time}
-                                        </p>
-                                    </div>
-                                </div>
-                            ))}
-
-                            {isThinking && (
-                                <div className="flex justify-start">
-                                    <div className="rounded-2xl rounded-bl-md bg-cream-100 px-3.5 py-2.5 text-sm font-inter text-dark-secondary">
-                                        <div className="flex items-center gap-2">
-                                            <Loader2 className="h-4 w-4 animate-spin text-terracotta" />
-                                            <span>{SUPPORT_CHAT_MESSAGES.thinking}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div ref={messagesEndRef} />
-                        </div>
-
-                        {showForm && (
-                            <div className="space-y-2.5 border-t border-clay/20 px-4 pb-3 pt-3">
-                                <div className="flex items-center justify-between">
-                                    <p className="text-xs font-inter font-medium text-dark-muted">
-                                        Share the issue details
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowForm(false)}
-                                        className="text-xs font-inter font-medium text-terracotta transition-colors hover:text-terracotta-600"
-                                    >
-                                        Back to chat
-                                    </button>
-                                </div>
-                                <input
-                                    type="text"
-                                    placeholder="Subject"
-                                    value={subject}
-                                    onChange={(e) => setSubject(e.target.value)}
-                                    className="w-full rounded-xl border border-gray-200 bg-cream-100 px-3 py-2 text-sm font-inter focus:border-terracotta/50 focus:outline-none focus:ring-1 focus:ring-terracotta/30"
-                                />
-                                <textarea
-                                    placeholder="Describe your issue..."
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
-                                    rows={3}
-                                    className="w-full resize-none rounded-xl border border-gray-200 bg-cream-100 px-3 py-2 text-sm font-inter focus:border-terracotta/50 focus:outline-none focus:ring-1 focus:ring-terracotta/30"
-                                />
-                                <input
-                                    type="email"
-                                    placeholder="Your email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full rounded-xl border border-gray-200 bg-cream-100 px-3 py-2 text-sm font-inter focus:border-terracotta/50 focus:outline-none focus:ring-1 focus:ring-terracotta/30"
-                                />
-                                <button
-                                    onClick={handleSubmitIssue}
-                                    disabled={
-                                        isSubmitting ||
-                                        !subject.trim() ||
-                                        !description.trim() ||
-                                        !email.trim()
-                                    }
-                                    className="flex w-full items-center justify-center gap-2 text-sm !py-2.5 btn-primary disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                    {isSubmitting ? (
-                                        <>
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                            Submitting...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <CheckCircle className="h-4 w-4" />
-                                            Submit Issue
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        )}
-
-                        {!showForm && (
-                            <div className="border-t border-clay/20 bg-white">
-                                <div className="scrollbar-subtle flex gap-2 overflow-x-auto px-4 py-2 pb-3">
-                                    {CHAT_QUICK_ACTIONS.map((action) => (
-                                        <button
-                                            key={action.id}
-                                            onClick={() => void handleQuickAction(action)}
-                                            className="flex flex-shrink-0 items-center gap-1.5 rounded-full border border-terracotta/20 bg-terracotta/5 px-3 py-1.5 transition-colors hover:bg-terracotta/10"
-                                        >
-                                            <action.icon className="h-3.5 w-3.5 text-terracotta" />
-                                            <span className="text-xs font-inter font-medium text-terracotta-800">
-                                                {action.label}
-                                            </span>
-                                        </button>
-                                    ))}
-                                </div>
-                                <div className="px-4 pb-3 pt-1">
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="text"
-                                            placeholder="Ask about any workshop..."
-                                            value={customQuery}
-                                            onChange={(e) => setCustomQuery(e.target.value)}
-                                            onKeyDown={(e) =>
-                                                e.key === "Enter" && void sendChatMessage()
-                                            }
-                                            className="flex-1 rounded-xl border border-gray-200 bg-cream-100 px-3 py-2 text-sm font-inter focus:border-terracotta/50 focus:outline-none focus:ring-1 focus:ring-terracotta/30"
-                                        />
-                                        <button
-                                            onClick={() => void sendChatMessage()}
-                                            disabled={!customQuery.trim() || isThinking}
-                                            className="rounded-xl bg-terracotta p-2 text-white transition-colors hover:bg-terracotta-600 disabled:opacity-40"
-                                            aria-label="Send"
-                                        >
-                                            <Send className="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        {panelContent}
                     </motion.div>
                 )}
             </AnimatePresence>

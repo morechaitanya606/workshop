@@ -64,8 +64,82 @@ export type GetWorkshopResponse = {
     source: "supabase" | "mock";
 };
 
+export type FaqItem = {
+    id: string;
+    question: string;
+    answer: string;
+    created_at?: string;
+    updated_at?: string;
+};
+
 export function getWorkshopById(workshopId: string) {
     return apiRequest<GetWorkshopResponse>(`/api/workshops/${workshopId}`, {
+        cache: "no-store",
+    });
+}
+
+export type ChatbotResponse = {
+    reply: string;
+    showBookingButton: boolean;
+    askName: boolean;
+    askPhone: boolean;
+};
+
+export function askChatbot(payload: {
+    message: string;
+    stage: "idle" | "asking_name" | "asking_phone" | "completed";
+    lead?: {
+        name?: string;
+        phone?: string;
+        query?: string;
+    };
+    clientId?: string;
+    clientApiKey?: string;
+    contextWorkshopId?: string | null;
+}) {
+    return apiRequest<ChatbotResponse>("/api/chat", {
+        method: "POST",
+        body: payload,
+    });
+}
+
+export type ChatbotConfigResponse = {
+    clientId: string | null;
+    clientName: string;
+    bookingUrl: string;
+};
+
+export function getChatbotConfig(params?: {
+    clientApiKey?: string | null;
+    clientId?: string | null;
+    contextWorkshopId?: string | null;
+}) {
+    const searchParams = new URLSearchParams();
+
+    if (params?.clientApiKey) {
+        searchParams.set("client", params.clientApiKey);
+    }
+
+    if (params?.clientId) {
+        searchParams.set("clientId", params.clientId);
+    }
+
+    if (params?.contextWorkshopId) {
+        searchParams.set("contextWorkshopId", params.contextWorkshopId);
+    }
+
+    const query = searchParams.toString();
+    return apiRequest<ChatbotConfigResponse>(`/api/chatbot/config${query ? `?${query}` : ""}`, {
+        cache: "no-store",
+    });
+}
+
+export type FaqsResponse = {
+    faqs: FaqItem[];
+};
+
+export function getFaqs() {
+    return apiRequest<FaqsResponse>("/api/faqs", {
         cache: "no-store",
     });
 }
@@ -699,6 +773,53 @@ export function getAdminWorkshops(accessToken: string) {
     });
 }
 
+export type AdminFaqsResponse = {
+    faqs: FaqItem[];
+};
+
+export function getAdminFaqs(accessToken: string) {
+    return apiRequest<AdminFaqsResponse>("/api/admin/faqs", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function createAdminFaq(
+    accessToken: string,
+    payload: {
+        question: string;
+        answer: string;
+    }
+) {
+    return apiRequest<{ faq: FaqItem }>("/api/admin/faqs", {
+        method: "POST",
+        accessToken,
+        body: payload,
+    });
+}
+
+export function updateAdminFaq(
+    accessToken: string,
+    faqId: string,
+    payload: {
+        question?: string;
+        answer?: string;
+    }
+) {
+    return apiRequest<{ faq: FaqItem }>(`/api/admin/faqs/${faqId}`, {
+        method: "PATCH",
+        accessToken,
+        body: payload,
+    });
+}
+
+export function deleteAdminFaq(accessToken: string, faqId: string) {
+    return apiRequest<{ success: boolean }>(`/api/admin/faqs/${faqId}`, {
+        method: "DELETE",
+        accessToken,
+    });
+}
+
 export type AdminWorkshopResponse = {
     workshop: Workshop;
 };
@@ -1026,6 +1147,122 @@ export function getHostWorkshops(accessToken: string) {
         accessToken,
         cache: "no-store",
     });
+}
+
+export type HostChatbotClient = {
+    id: string;
+    name: string;
+    apiKey: string;
+    bookingUrl: string | null;
+    embedScriptUrl: string;
+    embedIframeUrl: string;
+    embedSnippet: string;
+};
+
+export type HostChatbotClientResponse = {
+    client: HostChatbotClient;
+};
+
+export type HostChatbotFaq = FaqItem & {
+    client_id: string;
+};
+
+export type HostChatbotLead = {
+    id: string;
+    client_id: string;
+    name: string;
+    phone: string;
+    query: string;
+    created_at: string;
+};
+
+export type HostChatbotUnansweredQuestion = {
+    id: string;
+    client_id: string;
+    question: string;
+    created_at: string;
+};
+
+export function getHostChatbotClient(accessToken: string) {
+    return apiRequest<HostChatbotClientResponse>("/api/host/chatbot/client", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function updateHostChatbotClient(
+    accessToken: string,
+    payload: {
+        name?: string;
+        bookingUrl?: string;
+        rotateApiKey?: boolean;
+    }
+) {
+    return apiRequest<HostChatbotClientResponse>("/api/host/chatbot/client", {
+        method: "PATCH",
+        accessToken,
+        body: payload,
+    });
+}
+
+export function getHostChatbotFaqs(accessToken: string) {
+    return apiRequest<{ faqs: HostChatbotFaq[] }>("/api/host/chatbot/faqs", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function createHostChatbotFaq(
+    accessToken: string,
+    payload: {
+        question: string;
+        answer: string;
+    }
+) {
+    return apiRequest<{ faq: HostChatbotFaq }>("/api/host/chatbot/faqs", {
+        method: "POST",
+        accessToken,
+        body: payload,
+    });
+}
+
+export function updateHostChatbotFaq(
+    accessToken: string,
+    faqId: string,
+    payload: {
+        question?: string;
+        answer?: string;
+    }
+) {
+    return apiRequest<{ faq: HostChatbotFaq }>(`/api/host/chatbot/faqs/${faqId}`, {
+        method: "PATCH",
+        accessToken,
+        body: payload,
+    });
+}
+
+export function deleteHostChatbotFaq(accessToken: string, faqId: string) {
+    return apiRequest<{ success: boolean }>(`/api/host/chatbot/faqs/${faqId}`, {
+        method: "DELETE",
+        accessToken,
+    });
+}
+
+export function getHostChatbotLeads(accessToken: string) {
+    return apiRequest<{ leads: HostChatbotLead[] }>("/api/host/chatbot/leads", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function getHostChatbotUnansweredQuestions(accessToken: string) {
+    return apiRequest<{ unansweredQuestions: HostChatbotUnansweredQuestion[] }>(
+        "/api/host/chatbot/unanswered",
+        {
+            accessToken,
+            cache: "no-store",
+        }
+    );
 }
 
 export type CommunityResponse = {

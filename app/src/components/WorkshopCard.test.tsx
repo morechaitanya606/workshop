@@ -1,8 +1,28 @@
 import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import WorkshopCard from "@/components/WorkshopCard";
 import { mockWorkshops } from "@/lib/data";
+
+beforeAll(() => {
+    class IntersectionObserverMock {
+        readonly root = null;
+        readonly rootMargin = "";
+        readonly thresholds = [];
+
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+        takeRecords() {
+            return [];
+        }
+    }
+
+    vi.stubGlobal(
+        "IntersectionObserver",
+        IntersectionObserverMock as unknown as typeof IntersectionObserver
+    );
+});
 
 describe("WorkshopCard", () => {
     it("renders workshop summary details", () => {

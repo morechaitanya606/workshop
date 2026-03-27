@@ -13,6 +13,7 @@ import {
     Plus,
     Loader2,
     Headphones,
+    Bot,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import MobileNav from "@/components/MobileNav";
@@ -26,6 +27,7 @@ type HostShellProps = {
 const navItems = [
     { href: "/host/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/host/workshops", label: "My Workshops", icon: Calendar },
+    { href: "/host/chatbot", label: "AI Chatbot", icon: Bot },
     { href: "/host/earnings", label: "Earnings", icon: Wallet },
     { href: "/host/support", label: "Support", icon: Headphones },
     { href: "/host/settings", label: "Settings", icon: Settings },

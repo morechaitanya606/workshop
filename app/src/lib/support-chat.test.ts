@@ -48,6 +48,18 @@ describe("resolveSupportChatReply", () => {
         expect(result.outcome).toBe("answered");
     });
 
+    it("treats category-only workshop asks as a list, not a single workshop detail", () => {
+        const result = resolveSupportChatReply("Any pottery workshop?", mockWorkshops, {
+            today: FIXED_TODAY,
+        });
+
+        expect(result.intent).toBe("workshop_list");
+        expect(result.reply).toContain("Intro to Wheel Throwing");
+        expect(result.reply).toContain(
+            "[Explore Pottery](/explore?category=Pottery&page=1&pageSize=8)"
+        );
+    });
+
     it("returns workshop-specific details when a workshop can be matched", () => {
         const result = resolveSupportChatReply(
             "Tell me about the wheel throwing workshop",

@@ -371,8 +371,49 @@ function getBudgetLimit(normalizedQuery: string) {
     return Number.isNaN(amount) ? null : amount;
 }
 
+function getRequestedWorkshopCategories(
+    workshops: Workshop[],
+    normalizedQuery: string,
+    queryTokens: string[]
+) {
+    return new Set(
+        workshops
+            .map((workshop) => workshop.category.trim())
+            .filter((category) => {
+                const normalizedCategory = normalizeText(category);
+                const categoryTokens = tokenize(category);
+
+                return (
+                    normalizedQuery.includes(normalizedCategory) ||
+                    categoryTokens.some((token) => queryTokens.includes(token))
+                );
+            })
+    );
+}
+
+function getRequestedWorkshopCities(
+    workshops: Workshop[],
+    normalizedQuery: string,
+    queryTokens: string[]
+) {
+    return new Set(
+        workshops
+            .map((workshop) => workshop.city.trim())
+            .filter((city) => {
+                const normalizedCity = normalizeText(city);
+                const cityTokens = tokenize(city);
+
+                return (
+                    normalizedQuery.includes(normalizedCity) ||
+                    cityTokens.some((token) => queryTokens.includes(token))
+                );
+            })
+    );
+}
+
 function filterWorkshopList(workshops: Workshop[], query: string, today: Date) {
     const normalizedQuery = normalizeText(query);
+    const queryTokens = tokenize(query);
     const todayIso = toIsoDate(today);
     const includePast =
         normalizedQuery.includes("past") ||
@@ -403,6 +444,16 @@ function filterWorkshopList(workshops: Workshop[], query: string, today: Date) {
         items = items.filter((workshop) => workshop.price <= budgetLimit);
     }
 
+    const requestedCategories = getRequestedWorkshopCategories(items, normalizedQuery, queryTokens);
+    if (requestedCategories.size > 0) {
+        items = items.filter((workshop) => requestedCategories.has(workshop.category.trim()));
+    }
+
+    const requestedCities = getRequestedWorkshopCities(items, normalizedQuery, queryTokens);
+    if (requestedCities.size > 0) {
+        items = items.filter((workshop) => requestedCities.has(workshop.city.trim()));
+    }
+
     const matched = findWorkshopMatches(items, query);
     if (matched.length > 0) {
         return matched.map((match) => match.workshop);
@@ -413,6 +464,10 @@ function filterWorkshopList(workshops: Workshop[], query: string, today: Date) {
 
 function buildWorkshopSummary(workshop: Workshop) {
     return `${workshop.title} is a ${workshop.duration} ${workshop.category.toLowerCase()} workshop at ${workshop.location} on ${formatDate(workshop.date)} at ${formatTime(workshop.time)}.`;
+}
+
+function buildWorkshopLink(workshop: Workshop, label = "View workshop") {
+    return `[${label}](/workshop/${encodeURIComponent(workshop.id)})`;
 }
 
 function buildWorkshopDetailReply(query: string, workshop: Workshop) {
@@ -448,6 +503,7 @@ function buildWorkshopDetailReply(query: string, workshop: Workshop) {
         );
         parts.push(`You will learn ${humanJoin(workshop.whatYouLearn)}.`);
         parts.push(`Materials included: ${humanJoin(workshop.materialsProvided)}.`);
+        parts.push(`Open it here: ${buildWorkshopLink(workshop)}.`);
         return parts.join(" ");
     }
 
@@ -498,7 +554,17 @@ function buildWorkshopDetailReply(query: string, workshop: Workshop) {
         );
     }
 
+    parts.push(`Open it here: ${buildWorkshopLink(workshop)}.`);
     return parts.join(" ");
+}
+
+function buildCategoryExploreLink(category: string) {
+    return `/explore?category=${encodeURIComponent(category)}&page=1&pageSize=8`;
+}
+
+function getDominantWorkshopCategory(workshops: Workshop[]) {
+    const categories = Array.from(new Set(workshops.map((workshop) => workshop.category.trim())));
+    return categories.length === 1 ? categories[0] : null;
 }
 
 function buildWorkshopListReply(
@@ -518,14 +584,19 @@ function buildWorkshopListReply(
         : `Here are ${isPastQuery ? "some past workshops" : "the best workshop matches I found right now"}:`;
 
     const lines = workshops.slice(0, SUPPORT_CHAT_LIST_LIMIT).map((workshop, index) => {
-        return `${index + 1}. ${workshop.title} - ${formatDate(workshop.date)} at ${formatTime(workshop.time)} - ${formatPrice(workshop.price)} - ${workshop.location} - ${getWorkshopAvailabilityText(workshop)}.`;
+        return `${index + 1}. ${workshop.title} - ${formatDate(workshop.date)} at ${formatTime(workshop.time)} - ${formatPrice(workshop.price)} - ${workshop.location} - ${getWorkshopAvailabilityText(workshop)}. ${buildWorkshopLink(workshop)}.`;
     });
 
+    const dominantCategory = getDominantWorkshopCategory(workshops);
+    const categoryLink =
+        dominantCategory && !isPastQuery
+            ? ` You can browse more here: [Explore ${dominantCategory}](${buildCategoryExploreLink(dominantCategory)}).`
+            : "";
     const closing = isPastQuery
         ? "You can view photos and details of these and other previous experiences on our [Past Events](/past-events) page."
         : workshops.length > SUPPORT_CHAT_LIST_LIMIT
-          ? "If you want, I can narrow this down further by category, date, budget, or workshop name."
-          : "Ask me about any one of these and I can explain the schedule, price, host, materials, or what you will learn.";
+          ? `If you want, I can narrow this down further by category, date, budget, or workshop name.${categoryLink}`
+          : `Ask me about any one of these and I can explain the schedule, price, host, materials, or what you will learn.${categoryLink}`;
 
     return [intro, ...lines, closing].join("\n");
 }
@@ -590,14 +661,18 @@ function findContextWorkshop(workshops: Workshop[], contextWorkshopId?: string |
     return workshops.find((workshop) => workshop.id === contextWorkshopId) || null;
 }
 
-function hasExplicitWorkshopReference(queryTokens: string[], topMatch: WorkshopMatch | null) {
+function hasExplicitWorkshopReference(
+    queryTokens: string[],
+    topMatch: WorkshopMatch | null,
+    sharedFilterTokens: Set<string>
+) {
     if (!topMatch) {
         return false;
     }
 
     const workshopTokens = tokenize(
         `${topMatch.workshop.title} ${topMatch.workshop.category} ${topMatch.workshop.location} ${topMatch.workshop.hostName}`
-    ).filter((token) => token.length > 3);
+    ).filter((token) => token.length > 3 && !sharedFilterTokens.has(token));
 
     return workshopTokens.some((token) => queryTokens.includes(token));
 }
@@ -639,9 +714,13 @@ function classifyIntent(input: {
     workshops: Workshop[];
 }) {
     const { normalizedQuery, queryTokens, contextWorkshop, topMatch, workshops } = input;
-    const explicitWorkshopReference = hasExplicitWorkshopReference(queryTokens, topMatch);
     const categoryTokens = new Set(
         workshops.flatMap((workshop) => tokenize(`${workshop.category} ${workshop.city}`))
+    );
+    const explicitWorkshopReference = hasExplicitWorkshopReference(
+        queryTokens,
+        topMatch,
+        categoryTokens
     );
     const isExplicitList =
         includesAny(normalizedQuery, WORKSHOP_LIST_KEYWORDS) ||
@@ -706,7 +785,11 @@ function resolveWorkshopDetail(
     if (
         contextWorkshop &&
         shouldUseWorkshopContext(normalizeText(message)) &&
-        !hasExplicitWorkshopReference(tokenize(message), topMatch)
+        !hasExplicitWorkshopReference(
+            tokenize(message),
+            topMatch,
+            new Set(tokenize(`${contextWorkshop.category} ${contextWorkshop.city}`))
+        )
     ) {
         return {
             reply: buildWorkshopDetailReply(message, contextWorkshop),

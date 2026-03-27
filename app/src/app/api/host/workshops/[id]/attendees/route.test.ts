@@ -56,7 +56,7 @@ describe("GET /api/host/workshops/[id]/attendees", () => {
     it("allows admins to load attendees for workshops they do not personally host", async () => {
         const workshopBuilder = createWorkshopBuilder({
             data: {
-                id: "past-1",
+                id: "admin-owned-workshop",
                 host_user_id: "host-123",
             },
             error: null,
@@ -100,9 +100,9 @@ describe("GET /api/host/workshops/[id]/attendees", () => {
         });
 
         const response = await GET(
-            new NextRequest("http://localhost/api/host/workshops/past-1/attendees"),
+            new NextRequest("http://localhost/api/host/workshops/admin-owned-workshop/attendees"),
             {
-                params: { id: "past-1" },
+                params: { id: "admin-owned-workshop" },
             }
         );
         const body = await response.json();

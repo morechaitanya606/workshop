@@ -1,45 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { CANCELLATION_POLICY } from "@/lib/cancellation-policy";
+import { getFaqs, type FaqItem } from "@/lib/api-client";
+import { DEFAULT_CHATBOT_FAQS } from "@/lib/chatbot";
 
-const DEFAULT_FAQS = [
-    {
-        question: "Do I need any prior experience?",
-        answer: "Not at all! Our workshops are designed for complete beginners as well as hobbyists. The host will guide you step-by-step.",
-    },
-    {
-        question: "What should I bring?",
-        answer: "Just bring yourself and your enthusiasm! All core materials are provided at the venue. You might want to wear comfortable clothes that you don't mind getting a little messy.",
-    },
-    {
-        question: "Is parking available at the venue?",
-        answer: "Parking availability varies by venue. We recommend checking the location details on the workshop page or contacting the host directly for specific parking information.",
-    },
-    {
-        question: "What if I need to cancel or reschedule?",
-        answer: `${CANCELLATION_POLICY.generalSummary} ${CANCELLATION_POLICY.earlyBirdSummary} ${CANCELLATION_POLICY.manualReviewSummary} ${CANCELLATION_POLICY.noCancellationSummary} ${CANCELLATION_POLICY.hostCancellationSummary}`,
-    },
-    {
-        question: "Can I bring a friend who hasn't booked?",
-        answer: "Each attendee needs their own booking to participate. You can easily book multiple spots when reserving. Just increase the guest count.",
-    },
-];
+const FALLBACK_FAQS: FaqItem[] = DEFAULT_CHATBOT_FAQS.map((faq, index) => ({
+    id: `fallback-faq-${index + 1}`,
+    question: faq.question,
+    answer: faq.answer,
+}));
 
 export default function WorkshopFAQ() {
     const [openIndex, setOpenIndex] = useState<number | null>(null);
+    const [faqs, setFaqs] = useState<FaqItem[]>(FALLBACK_FAQS);
     const prefersReducedMotion = Boolean(useReducedMotion());
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadFaqData = async () => {
+            try {
+                const result = await getFaqs();
+                if (!cancelled && Array.isArray(result.faqs) && result.faqs.length > 0) {
+                    setFaqs(result.faqs);
+                }
+            } catch {
+                if (!cancelled) {
+                    setFaqs(FALLBACK_FAQS);
+                }
+            }
+        };
+
+        void loadFaqData();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     return (
         <div className="card-section">
             <span className="eyebrow-label">FAQ</span>
             <h2 className="heading-sm font-inter mb-4">Frequently asked questions</h2>
             <div className="space-y-2">
-                {DEFAULT_FAQS.map((faq, i) => (
+                {faqs.map((faq, i) => (
                     <div
-                        key={i}
+                        key={faq.id}
                         className="rounded-xl border border-clay/30 bg-cream-100/50 overflow-hidden"
                     >
                         <button

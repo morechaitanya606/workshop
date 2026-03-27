@@ -14,6 +14,10 @@ const publicEnvSchema = z.object({
 });
 
 const serverEnvSchema = z.object({
+    GROQ_API_KEY: nonEmpty.optional(),
+    HUGGINGFACE_API_KEY: nonEmpty.optional(),
+    HUGGINGFACE_EMBEDDING_MODEL: nonEmpty.optional(),
+    HUGGINGFACE_EMBEDDING_ENDPOINT: z.string().url().optional(),
     SUPABASE_SERVICE_ROLE_KEY: nonEmpty.optional(),
     MAPPLS_CLIENT_ID: nonEmpty.optional(),
     MAPPLS_CLIENT_SECRET: nonEmpty.optional(),
@@ -55,6 +59,10 @@ export const env = parseOrThrow(
     serverEnvSchema.extend(publicEnvSchema.shape),
     {
         ...publicEnv,
+        GROQ_API_KEY: process.env.GROQ_API_KEY,
+        HUGGINGFACE_API_KEY: process.env.HUGGINGFACE_API_KEY,
+        HUGGINGFACE_EMBEDDING_MODEL: process.env.HUGGINGFACE_EMBEDDING_MODEL,
+        HUGGINGFACE_EMBEDDING_ENDPOINT: process.env.HUGGINGFACE_EMBEDDING_ENDPOINT,
         SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
         MAPPLS_CLIENT_ID: process.env.MAPPLS_CLIENT_ID,
         MAPPLS_CLIENT_SECRET: process.env.MAPPLS_CLIENT_SECRET,
@@ -111,6 +119,43 @@ export function getServiceRoleKey() {
     return required("SUPABASE_SERVICE_ROLE_KEY");
 }
 
+export function getGroqApiKey() {
+    return required("GROQ_API_KEY");
+}
+
+export function getGroqConfig() {
+    const apiKey = env.GROQ_API_KEY;
+    if (!apiKey) {
+        return null;
+    }
+
+    return {
+        apiKey,
+        endpoint: "https://api.groq.com/openai/v1/chat/completions",
+        model: "llama3-8b-8192",
+    };
+}
+
+export function getHuggingFaceEmbeddingConfig() {
+    const apiKey = env.HUGGINGFACE_API_KEY;
+    if (!apiKey) {
+        return null;
+    }
+
+    const model = env.HUGGINGFACE_EMBEDDING_MODEL || "intfloat/multilingual-e5-base";
+    const endpoint =
+        env.HUGGINGFACE_EMBEDDING_ENDPOINT ||
+        `https://api-inference.huggingface.co/pipeline/feature-extraction/${encodeURIComponent(
+            model
+        )}`;
+
+    return {
+        apiKey,
+        model,
+        endpoint,
+    };
+}
+
 export function getRazorpayConfig() {
     const keyId = env.RAZORPAY_KEY_ID;
     const keySecret = env.RAZORPAY_KEY_SECRET;
@@ -137,6 +182,12 @@ export function getMissingProductionEnvVars() {
     }
     if (!env.SUPABASE_SERVICE_ROLE_KEY) {
         missing.push("SUPABASE_SERVICE_ROLE_KEY");
+    }
+    if (!env.GROQ_API_KEY) {
+        missing.push("GROQ_API_KEY");
+    }
+    if (!env.HUGGINGFACE_API_KEY) {
+        missing.push("HUGGINGFACE_API_KEY");
     }
     if (!env.RAZORPAY_KEY_ID) {
         missing.push("RAZORPAY_KEY_ID");

@@ -17,6 +17,7 @@
         "test:e2e:ui": "playwright test --ui",
         "storybook": "storybook dev -p 6006",
         "build-storybook": "storybook build",
+        "chatbot:backfill-embeddings": "node scripts/backfill-chatbot-embeddings.mjs",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "lint-staged": "lint-staged",

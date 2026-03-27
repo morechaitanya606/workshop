@@ -279,6 +279,71 @@ export const supportChatRequestSchema = z.object({
 
 export type SupportChatRequestInput = z.infer<typeof supportChatRequestSchema>;
 
+export const chatbotStageSchema = z.enum(["idle", "asking_name", "asking_phone", "completed"]);
+
+export const chatbotLeadDraftSchema = z.object({
+    name: z.string().trim().max(120).optional().default(""),
+    phone: z.string().trim().max(32).optional().default(""),
+    query: z.string().trim().max(1000).optional().default(""),
+});
+
+export const chatbotRequestSchema = z.object({
+    message: z.string().trim().min(1).max(1000),
+    stage: chatbotStageSchema.optional().default("idle"),
+    lead: chatbotLeadDraftSchema.optional().default({
+        name: "",
+        phone: "",
+        query: "",
+    }),
+    clientId: z.string().uuid().optional(),
+    clientApiKey: z.string().trim().min(8).max(120).optional(),
+    contextWorkshopId: z
+        .string()
+        .trim()
+        .max(120)
+        .nullable()
+        .optional()
+        .transform((val) => val || ""),
+});
+
+export type ChatbotRequestInput = z.infer<typeof chatbotRequestSchema>;
+
+export const chatbotClientUpdateSchema = z
+    .object({
+        name: z.string().trim().min(2).max(120).optional(),
+        bookingUrl: urlOrEmpty.optional(),
+        rotateApiKey: z.boolean().optional().default(false),
+    })
+    .refine(
+        (value) =>
+            value.rotateApiKey === true ||
+            typeof value.name !== "undefined" ||
+            typeof value.bookingUrl !== "undefined",
+        {
+            message: "Provide at least one chatbot client field to update.",
+        }
+    );
+
+export type ChatbotClientUpdateInput = z.infer<typeof chatbotClientUpdateSchema>;
+
+export const faqEntrySchema = z.object({
+    question: z.string().trim().min(3).max(240),
+    answer: z.string().trim().min(3).max(4000),
+});
+
+export type FaqEntryInput = z.infer<typeof faqEntrySchema>;
+
+export const faqEntryUpdateSchema = z
+    .object({
+        question: z.string().trim().min(3).max(240).optional(),
+        answer: z.string().trim().min(3).max(4000).optional(),
+    })
+    .refine((value) => Object.keys(value).length > 0, {
+        message: "Provide at least one FAQ field to update.",
+    });
+
+export type FaqEntryUpdateInput = z.infer<typeof faqEntryUpdateSchema>;
+
 export const careersApplicationSchema = z.object({
     fullName: z.string().trim().min(2).max(120),
     email: z.string().trim().email().max(320),

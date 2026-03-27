@@ -587,6 +587,112 @@ export type Database = {
                 };
                 Relationships: [];
             };
+            clients: {
+                Row: {
+                    api_key: string;
+                    booking_url: string | null;
+                    created_at: string;
+                    host_user_id: string | null;
+                    id: string;
+                    is_platform_default: boolean;
+                    name: string;
+                    updated_at: string;
+                };
+                Insert: {
+                    api_key: string;
+                    booking_url?: string | null;
+                    created_at?: string;
+                    host_user_id?: string | null;
+                    id?: string;
+                    is_platform_default?: boolean;
+                    name: string;
+                    updated_at?: string;
+                };
+                Update: {
+                    api_key?: string;
+                    booking_url?: string | null;
+                    created_at?: string;
+                    host_user_id?: string | null;
+                    id?: string;
+                    is_platform_default?: boolean;
+                    name?: string;
+                    updated_at?: string;
+                };
+                Relationships: [];
+            };
+            faq: {
+                Row: {
+                    answer: string;
+                    client_id: string;
+                    created_at: string;
+                    embedding: string | null;
+                    id: string;
+                    question: string;
+                    updated_at: string;
+                };
+                Insert: {
+                    answer: string;
+                    client_id: string;
+                    created_at?: string;
+                    embedding?: string | null;
+                    id?: string;
+                    question: string;
+                    updated_at?: string;
+                };
+                Update: {
+                    answer?: string;
+                    client_id?: string;
+                    created_at?: string;
+                    embedding?: string | null;
+                    id?: string;
+                    question?: string;
+                    updated_at?: string;
+                };
+                Relationships: [
+                    {
+                        foreignKeyName: "faq_client_id_fkey";
+                        columns: ["client_id"];
+                        isOneToOne: false;
+                        referencedRelation: "clients";
+                        referencedColumns: ["id"];
+                    },
+                ];
+            };
+            leads: {
+                Row: {
+                    client_id: string;
+                    created_at: string;
+                    id: string;
+                    name: string;
+                    phone: string;
+                    query: string;
+                };
+                Insert: {
+                    client_id: string;
+                    created_at?: string;
+                    id?: string;
+                    name: string;
+                    phone: string;
+                    query: string;
+                };
+                Update: {
+                    client_id?: string;
+                    created_at?: string;
+                    id?: string;
+                    name?: string;
+                    phone?: string;
+                    query?: string;
+                };
+                Relationships: [
+                    {
+                        foreignKeyName: "leads_client_id_fkey";
+                        columns: ["client_id"];
+                        isOneToOne: false;
+                        referencedRelation: "clients";
+                        referencedColumns: ["id"];
+                    },
+                ];
+            };
             profiles: {
                 Row: {
                     avatar_url: string | null;
@@ -660,6 +766,35 @@ export type Database = {
                         columns: ["workshop_id"];
                         isOneToOne: false;
                         referencedRelation: "workshops";
+                        referencedColumns: ["id"];
+                    },
+                ];
+            };
+            unanswered_questions: {
+                Row: {
+                    client_id: string;
+                    created_at: string;
+                    id: string;
+                    question: string;
+                };
+                Insert: {
+                    client_id: string;
+                    created_at?: string;
+                    id?: string;
+                    question: string;
+                };
+                Update: {
+                    client_id?: string;
+                    created_at?: string;
+                    id?: string;
+                    question?: string;
+                };
+                Relationships: [
+                    {
+                        foreignKeyName: "unanswered_questions_client_id_fkey";
+                        columns: ["client_id"];
+                        isOneToOne: false;
+                        referencedRelation: "clients";
                         referencedColumns: ["id"];
                     },
                 ];
@@ -986,8 +1121,26 @@ export type Database = {
                 };
                 Returns: string;
             };
+            match_faqs: {
+                Args: {
+                    p_client_id: string;
+                    p_match_count?: number;
+                    p_query_embedding: string;
+                };
+                Returns: {
+                    answer: string;
+                    client_id: string;
+                    id: string;
+                    question: string;
+                    similarity: number;
+                }[];
+            };
             user_has_any_role: {
                 Args: { required_roles: string[] };
+                Returns: boolean;
+            };
+            client_owned_by_current_user: {
+                Args: { p_client_id: string };
                 Returns: boolean;
             };
             user_has_role: { Args: { required_role: string }; Returns: boolean };

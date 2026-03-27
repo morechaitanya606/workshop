@@ -23,23 +23,29 @@ describe("env module", () => {
         delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
         delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
         delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+        delete process.env.GROQ_API_KEY;
+        delete process.env.HUGGINGFACE_API_KEY;
         delete process.env.RAZORPAY_KEY_ID;
         delete process.env.RAZORPAY_KEY_SECRET;
 
         await expect(importEnvModule()).resolves.toMatchObject({
             getAppUrl: expect.any(Function),
             getPublicSupabaseConfig: expect.any(Function),
+            getGroqConfig: expect.any(Function),
             getRazorpayConfig: expect.any(Function),
             assertProductionEnv: expect.any(Function),
         });
 
         const envModule = await importEnvModule();
         expect(envModule.getPublicSupabaseConfig()).toBeNull();
+        expect(envModule.getGroqConfig()).toBeNull();
         expect(envModule.getRazorpayConfig()).toBeNull();
         expect(envModule.getMissingProductionEnvVars()).toEqual([
             "NEXT_PUBLIC_SUPABASE_URL",
             "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY)",
             "SUPABASE_SERVICE_ROLE_KEY",
+            "GROQ_API_KEY",
+            "HUGGINGFACE_API_KEY",
             "RAZORPAY_KEY_ID",
             "RAZORPAY_KEY_SECRET",
         ]);

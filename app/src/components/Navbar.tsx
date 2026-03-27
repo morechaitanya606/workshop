@@ -33,18 +33,23 @@ export default function Navbar() {
 
     const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => {
         const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
+        const isHomeHeroNav = isHomePage && !isScrolled;
         return (
             <Link
                 href={href}
-                className={`relative text-sm font-inter font-medium transition-colors duration-300 py-1 ${
-                    isActive ? "text-terracotta" : "text-dark-secondary hover:text-terracotta"
+                className={`relative inline-flex items-center rounded-full px-3 py-2 text-sm font-inter font-medium transition-all duration-300 ease-out ${
+                    isActive
+                        ? "bg-white text-terracotta shadow-[0_12px_24px_-18px_rgba(0,0,0,0.45)]"
+                        : isHomeHeroNav
+                          ? "text-dark hover:-translate-y-0.5 hover:scale-[1.08] hover:bg-terracotta hover:text-white hover:shadow-[0_16px_32px_-18px_rgba(193,104,74,0.75)]"
+                          : "text-dark-secondary hover:bg-terracotta/10 hover:text-terracotta hover:scale-[1.04]"
                 }`}
             >
                 {children}
                 {isActive && (
                     <motion.div
                         layoutId="navbar-indicator"
-                        className="absolute -bottom-1 left-0 right-0 h-0.5 bg-terracotta rounded-full"
+                        className="absolute bottom-1.5 left-3 right-3 h-0.5 rounded-full bg-terracotta"
                         transition={{ type: "spring", stiffness: 380, damping: 30 }}
                     />
                 )}
