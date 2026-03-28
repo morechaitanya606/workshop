@@ -4,6 +4,7 @@ import { requireHostOrAdmin } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import type { Database } from "@/lib/database.types";
 import { createSupabaseAnonServerClient } from "@/lib/supabase-server";
+import * as Sentry from "@sentry/core";
 
 type SupportTicketRow = Database["public"]["Tables"]["support_tickets"]["Row"];
 
@@ -146,7 +147,9 @@ export async function GET(request: NextRequest) {
         if (isMissingSupportTableError(error)) {
             return NextResponse.json({ tickets: [] }, { status: 200 });
         }
-        console.error("Support ticket GET API error:", error);
+        Sentry.captureException(error, {
+            tags: { layer: "api", route: "support_tickets_get" },
+        });
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }
@@ -177,10 +180,11 @@ export async function POST(request: Request) {
         ]);
 
         if (error) {
-            console.error(
-                "Failed to insert support ticket (table might not exist):",
-                error.message
-            );
+            Sentry.captureException(error, {
+                level: "warning",
+                tags: { layer: "api", route: "support_tickets_post" },
+                extra: { message: error.message },
+            });
             // In a real production app, we would throw or return error.
             // For now, we return 200 so the UI can show success, assuming
             // the user will create the table later.
@@ -188,7 +192,9 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ success: true }, { status: 200 });
     } catch (error) {
-        console.error("Support ticket API error:", error);
+        Sentry.captureException(error, {
+            tags: { layer: "api", route: "support_tickets_post" },
+        });
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }

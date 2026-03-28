@@ -29,7 +29,6 @@ yarn-error.log*
 .pnpm-debug.log*
 .husky/_
 
-
 # local env files
 .env*.local
 
@@ -38,6 +37,7 @@ yarn-error.log*
 
 # logs
 *.log
+*.out
 
 # temp files
 *.tmp

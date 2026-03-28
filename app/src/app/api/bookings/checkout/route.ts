@@ -330,44 +330,11 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        // Fetch Early Bird Offer settings
-        let earlyBirdDiscountPerGuest = 0;
-        const { data: ebSettingsRow } = await serviceClient
-            .from("platform_settings")
-            .select("setting_value")
-            .eq("setting_key", "early_bird_offer")
-            .maybeSingle();
-
-        if (ebSettingsRow?.setting_value) {
-            const ebOffer = ebSettingsRow.setting_value as any;
-            if (ebOffer.enabled && ebOffer.discount_value > 0) {
-                const workshopDate = workshop.date ? new Date(workshop.date) : null;
-                if (workshopDate) {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const daysUntilWorkshop = Math.ceil(
-                        (workshopDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-                    );
-                    if (daysUntilWorkshop >= (ebOffer.days_before || 0)) {
-                        if (ebOffer.discount_type === "percentage") {
-                            earlyBirdDiscountPerGuest = Math.floor(
-                                (Number(workshop.price) * ebOffer.discount_value) / 100
-                            );
-                        } else {
-                            earlyBirdDiscountPerGuest = ebOffer.discount_value;
-                        }
-                    }
-                }
-            }
-        }
-
-        const pricePerGuestBeforeCoupon = Math.max(
-            0,
-            Number(workshop.price || 0) - earlyBirdDiscountPerGuest
-        );
-        const subtotalOriginal = pricePerGuestBeforeCoupon * Number(hold.guests || 0);
+        const pricePerGuest = Math.max(0, Number(workshop.price || 0));
+        const subtotalOriginal = pricePerGuest * Number(hold.guests || 0);
 
         let discountAmount = 0;
+        let appliedCouponId: string | null = null;
 
         if (payload.couponCode) {
             const code = payload.couponCode.toUpperCase();
@@ -379,7 +346,6 @@ export async function POST(request: NextRequest) {
                 .single();
 
             if (coupon) {
-                // Verify max uses and expiration to be safe (though validated on frontend)
                 const now = new Date();
                 const validTime =
                     (!coupon.valid_from || new Date(coupon.valid_from) <= now) &&
@@ -388,6 +354,7 @@ export async function POST(request: NextRequest) {
                     coupon.max_uses === null || (coupon.used_count || 0) < coupon.max_uses;
 
                 if (validTime && validUses) {
+                    appliedCouponId = coupon.id;
                     if (coupon.discount_type === "percentage") {
                         discountAmount = subtotalOriginal * (coupon.discount_value / 100);
                     } else {
@@ -600,20 +567,36 @@ export async function POST(request: NextRequest) {
 
         if (!bookingId) {
             // Fallback path if RPC migration has not been applied.
+            // Use SQL arithmetic to avoid stale-read race conditions.
             const { data: seatUpdated, error: seatUpdateError } = await serviceClient
-                .from("workshops")
-                .update({
-                    seats_remaining: Math.max(
-                        0,
-                        Number(hold.workshop?.seats_remaining || 0) - Number(hold.guests || 0)
-                    ),
+                .rpc("decrement_seats" as any, {
+                    p_workshop_id: payload.workshopId,
+                    p_count: Number(hold.guests || 0),
                 })
-                .eq("id", payload.workshopId)
-                .gte("seats_remaining", Number(hold.guests || 0))
-                .select("id")
-                .single();
+                .maybeSingle();
 
-            if (seatUpdateError || !seatUpdated) {
+            // If the RPC doesn't exist yet, try the direct update with a guard.
+            let seatOk: boolean = !seatUpdateError && !!seatUpdated;
+            if (
+                seatUpdateError?.message?.includes("function") ||
+                seatUpdateError?.code === "42883"
+            ) {
+                const { data: directUpdate, error: directError } = await serviceClient
+                    .from("workshops")
+                    .update({
+                        seats_remaining: Math.max(
+                            0,
+                            Number(hold.workshop?.seats_remaining || 0) - Number(hold.guests || 0)
+                        ),
+                    })
+                    .eq("id", payload.workshopId)
+                    .gte("seats_remaining", Number(hold.guests || 0))
+                    .select("id")
+                    .single();
+                seatOk = !directError && !!directUpdate;
+            }
+
+            if (!seatOk) {
                 return paymentError(
                     "Payment succeeded, but seat reservation failed. Contact support immediately.",
                     500,
@@ -678,6 +661,22 @@ export async function POST(request: NextRequest) {
                 workshopId: payload.workshopId,
                 paymentId: payload.razorpayPaymentId,
             });
+        }
+
+        // BUG-1 fix: Increment coupon used_count after successful booking
+        if (appliedCouponId) {
+            try {
+                const { error: rpcErr } = await serviceClient.rpc("increment_coupon_usage" as any, {
+                    p_coupon_id: appliedCouponId,
+                });
+                if (rpcErr) throw rpcErr;
+            } catch (err) {
+                // Fallback if RPC doesn't exist: direct update
+                await serviceClient
+                    .from("coupons")
+                    .update({ used_count: discountAmount > 0 ? 1 : 0 })
+                    .eq("id", appliedCouponId!);
+            }
         }
 
         const booking = await loadBookingById(serviceClient, bookingId);

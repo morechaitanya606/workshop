@@ -3,7 +3,9 @@ export const BOOKING_CUTOFF_HOURS = 3;
 export function getWorkshopDateTime(date: string, time?: string | null) {
     if (!date) return null;
     const safeTime = (time && time.trim()) || "00:00";
-    const workshopDateTime = new Date(`${date}T${safeTime}:00`);
+    // Append IST offset to ensure consistent parsing regardless of server TZ
+    const isoString = `${date}T${safeTime}:00+05:30`;
+    const workshopDateTime = new Date(isoString);
     if (Number.isNaN(workshopDateTime.getTime())) {
         return null;
     }

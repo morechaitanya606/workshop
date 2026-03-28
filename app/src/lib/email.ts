@@ -3,6 +3,7 @@ import { BookingConfirmationEmail } from "@/emails/BookingConfirmation";
 import { WorkshopReminderEmail } from "@/emails/WorkshopReminder";
 import { FeedbackRequestEmail } from "@/emails/FeedbackRequest";
 import { createSupabaseServiceClient } from "./supabase-server";
+import * as Sentry from "@sentry/core";
 
 const resend = new Resend(process.env.RESEND_API_KEY || "re_dummy");
 const FROM_EMAIL = "Only Workshops <no-reply@updates.onlyworkshop.com>"; // Replace with verified domain
@@ -35,7 +36,10 @@ async function sendEmailAndLog({ to, subject, templateName, react, referenceId }
         .single();
 
     if (logError) {
-        console.error("Failed to insert email log:", logError);
+        Sentry.captureException(logError, {
+            tags: { layer: "email", action: "insert_log" },
+            extra: { to, subject, templateName },
+        });
         // We still attempt to send the email even if logging fails
     }
 
@@ -65,7 +69,10 @@ async function sendEmailAndLog({ to, subject, templateName, react, referenceId }
 
         return { success: true, data: resendData };
     } catch (error: unknown) {
-        console.error("Failed to send email:", error);
+        Sentry.captureException(error, {
+            tags: { layer: "email", action: "send" },
+            extra: { to, subject, templateName },
+        });
 
         const errorMessage =
             error instanceof Error
@@ -113,7 +120,11 @@ export async function sendBookingConfirmation(bookingId: string) {
         .single();
 
     if (error || !booking || !booking.workshops) {
-        console.error(`Could not fetch booking details for ${bookingId}`, error);
+        Sentry.captureMessage(`Could not fetch booking details for ${bookingId}`, {
+            level: "error",
+            tags: { layer: "email", action: "booking_confirmation" },
+            extra: { bookingId, error },
+        });
         return { success: false, error: "Booking not found" };
     }
 
@@ -160,7 +171,11 @@ export async function sendWorkshopReminder(bookingId: string) {
         .single();
 
     if (error || !booking || !booking.workshops) {
-        console.error(`Could not fetch booking details for ${bookingId}`, error);
+        Sentry.captureMessage(`Could not fetch booking details for ${bookingId}`, {
+            level: "error",
+            tags: { layer: "email", action: "workshop_reminder" },
+            extra: { bookingId, error },
+        });
         return { success: false, error: "Booking not found" };
     }
 
@@ -202,7 +217,11 @@ export async function sendFeedbackRequest(bookingId: string) {
         .single();
 
     if (error || !booking || !booking.workshops) {
-        console.error(`Could not fetch booking details for ${bookingId}`, error);
+        Sentry.captureMessage(`Could not fetch booking details for ${bookingId}`, {
+            level: "error",
+            tags: { layer: "email", action: "feedback_request" },
+            extra: { bookingId, error },
+        });
         return { success: false, error: "Booking not found" };
     }
 

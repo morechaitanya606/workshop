@@ -13,7 +13,9 @@ const DEFAULT_SIGNED_URL_TTL_SECONDS = 60 * 10;
 function buildObjectPath(userId: string, ext: string) {
     const uniqueId = crypto.randomBytes(16).toString("hex");
     const safeExt = ext.replace(/[^a-zA-Z0-9]/g, "").slice(0, 10) || "bin";
-    return `${userId}/${uniqueId}.${safeExt}`;
+    // BUG-9 fix: Sanitize userId to prevent directory traversal
+    const safeUserId = userId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) || "unknown";
+    return `${safeUserId}/${uniqueId}.${safeExt}`;
 }
 
 function buildLocalUploadPath(bucket: string, objectPath: string) {

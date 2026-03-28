@@ -6,12 +6,22 @@ import { getUserRole } from "@/lib/api-auth";
 import type { Database } from "@/lib/database.types";
 import { getPublicSupabaseConfig } from "@/lib/env";
 
+/** BUG-2 fix: Validate redirect target to prevent open redirect attacks. */
+function sanitizeRedirect(raw: string | null): string {
+    const fallback = "/";
+    if (!raw) return fallback;
+    // Must start with "/" and must NOT start with "//" (protocol-relative URL)
+    if (!raw.startsWith("/") || raw.startsWith("//")) return fallback;
+    // Block any URL-encoded protocol-relative patterns
+    if (raw.includes("\\")) return fallback;
+    return raw;
+}
+
 export async function GET(request: Request) {
     const requestUrl = new URL(request.url);
     const code = requestUrl.searchParams.get("code");
 
-    // The redirect path they originally intended to go to
-    const next = requestUrl.searchParams.get("next") ?? "/";
+    const next = sanitizeRedirect(requestUrl.searchParams.get("next"));
 
     if (code) {
         const cookieStore = cookies();
@@ -50,11 +60,9 @@ export async function GET(request: Request) {
             const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
             if (!error && data?.user) {
-                // Determine if this user is an admin
                 const role = await getUserRole(data.user.id);
 
                 if (role === "admin") {
-                    // Force admin redirect
                     return NextResponse.redirect(new URL("/admin/dashboard", request.url));
                 }
             }
@@ -72,6 +80,5 @@ export async function GET(request: Request) {
         }
     }
 
-    // Default redirect to the intended `next` path or home
     return NextResponse.redirect(new URL(next, request.url));
 }

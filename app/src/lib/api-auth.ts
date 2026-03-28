@@ -128,11 +128,12 @@ export async function requireAuthenticatedUser(request: NextRequest): Promise<Au
     }
 
     const isDev = process.env.NODE_ENV !== "production";
+    const isDevFallbackEnabled = isDev && process.env.ENABLE_DEV_AUTH_FALLBACK === "true";
     const fallbackUser = buildFallbackUserFromToken(token);
 
     // When auth network is unstable in development, avoid repeating slow retries
     // for every API call and use JWT claims temporarily.
-    if (isDev && fallbackUser && Date.now() < skipRemoteAuthUntil) {
+    if (isDevFallbackEnabled && fallbackUser && Date.now() < skipRemoteAuthUntil) {
         return {
             ok: true,
             user: fallbackUser,
@@ -156,7 +157,7 @@ export async function requireAuthenticatedUser(request: NextRequest): Promise<Au
 
         // Dev fallback: accept bearer tokens when Supabase auth endpoint is temporarily unreachable.
         // This avoids hard failures for local development workflows.
-        if (isDev && isTransientSupabaseAuthError(error)) {
+        if (isDevFallbackEnabled && isTransientSupabaseAuthError(error)) {
             skipRemoteAuthUntil = Date.now() + 60_000;
             if (fallbackUser) {
                 return {
@@ -174,7 +175,7 @@ export async function requireAuthenticatedUser(request: NextRequest): Promise<Au
             };
         }
     } catch (error) {
-        if (isDev && isTransientSupabaseAuthError(error)) {
+        if (isDevFallbackEnabled && isTransientSupabaseAuthError(error)) {
             skipRemoteAuthUntil = Date.now() + 60_000;
             if (fallbackUser) {
                 return {

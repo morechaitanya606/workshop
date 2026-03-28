@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseAnonServerClient } from "@/lib/supabase-server";
 import { requireAuthenticatedUser } from "@/lib/api-auth";
+import * as Sentry from "@sentry/core";
 
 export async function POST(request: NextRequest) {
     const auth = await requireAuthenticatedUser(request);
@@ -95,7 +96,9 @@ export async function POST(request: NextRequest) {
             { status: 200 }
         );
     } catch (error) {
-        console.error("Coupon validation error:", error);
+        Sentry.captureException(error, {
+            tags: { layer: "api", route: "coupons_validate" },
+        });
         return NextResponse.json(
             { valid: false, message: "Internal server error." },
             { status: 500 }

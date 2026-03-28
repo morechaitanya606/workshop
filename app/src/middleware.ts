@@ -15,6 +15,13 @@ export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
     if (!supabasePublicConfig) {
+        // BUG-10 fix: Block admin routes when auth is misconfigured instead of passing all traffic
+        if (isAdminRoute(pathname)) {
+            return NextResponse.json(
+                { error: "Authentication service is not configured." },
+                { status: 503 }
+            );
+        }
         return NextResponse.next();
     }
 

@@ -259,7 +259,11 @@ export async function POST(request: Request) {
     const webhookEventId = request.headers.get("x-razorpay-event-id");
     const idempotencyKey = buildWebhookIdempotencyKey(event, rawBody, webhookEventId);
 
-    const claimed = claimIdempotencyKey("razorpay-webhook", idempotencyKey, 24 * 60 * 60 * 1000);
+    const claimed = await claimIdempotencyKey(
+        "razorpay-webhook",
+        idempotencyKey,
+        24 * 60 * 60 * 1000
+    );
     if (!claimed) {
         return NextResponse.json({ received: true, duplicate: true });
     }
