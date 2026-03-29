@@ -121,7 +121,7 @@ export default function ExploreResultsSection({
                         key={gridKey}
                         {...gridMotionProps}
                         exit={prefersReducedMotion ? undefined : { opacity: 0 }}
-                        className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6"
+                        className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4 sm:gap-6"
                     >
                         {workshops.map((workshop, index) => (
                             <motion.div

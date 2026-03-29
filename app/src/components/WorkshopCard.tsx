@@ -57,6 +57,8 @@ export default function WorkshopCard({
     const [favoriteLoading, setFavoriteLoading] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
     const [imageIndex, setImageIndex] = useState(0);
+    const [imageLoaded, setImageLoaded] = useState(false);
+    const [heartPopping, setHeartPopping] = useState(false);
 
     const today = new Date().toISOString().slice(0, 10);
     const workshopDateTime = getWorkshopDateTime(workshop.date, workshop.time);
@@ -187,6 +189,10 @@ export default function WorkshopCard({
             favoritesCache.set(accessToken, result.favorites);
             const saved = result.favorites.includes(workshop.id);
             setIsSaved(saved);
+            if (saved) {
+                setHeartPopping(true);
+                setTimeout(() => setHeartPopping(false), 400);
+            }
         } catch {
             // Keep card interaction non-blocking even if wishlist update fails.
         } finally {
@@ -229,12 +235,14 @@ export default function WorkshopCard({
                 onBlur={() => setIsHovered(false)}
             >
                 <div
-                    className={`card-workshop light-sweep hover-lift${isPastWorkshop ? " card-workshop-past" : ""}`}
+                    className={`card-workshop light-sweep hover-lift active:scale-[0.97]${isPastWorkshop ? " card-workshop-past" : ""}`}
                     onMouseEnter={() => setIsHovered(true)}
                     onMouseLeave={() => setIsHovered(false)}
                 >
                     {/* Image */}
-                    <div className="relative overflow-hidden aspect-[4/3] bg-cream-100">
+                    <div
+                        className={`relative overflow-hidden aspect-[4/3] bg-cream-100 ${!imageLoaded ? "animate-pulse" : ""}`}
+                    >
                         {imagePool.map((src, idx) => {
                             const isActive = (isHovered ? imageIndex : 0) === idx;
                             return (
@@ -244,10 +252,11 @@ export default function WorkshopCard({
                                     alt={`${workshop.category} workshop: ${workshop.title}`}
                                     fill
                                     sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                                    className={`object-cover transition-opacity duration-500 ease-in-out image-hover-pan ${
+                                    className={`object-cover transition-all duration-500 ease-in-out image-hover-pan ${
                                         isActive ? "opacity-100" : "opacity-0"
-                                    }`}
+                                    } ${!imageLoaded ? "blur-sm scale-105" : "blur-0 scale-100"}`}
                                     loading={isHovered ? "eager" : "lazy"}
+                                    onLoad={() => setImageLoaded(true)}
                                 />
                             );
                         })}
@@ -295,7 +304,7 @@ export default function WorkshopCard({
                                 }`}
                             >
                                 <Heart
-                                    className={`w-4 h-4 transition-colors ${
+                                    className={`w-4 h-4 transition-colors ${heartPopping ? "heart-pop" : ""} ${
                                         isSaved
                                             ? "text-terracotta fill-terracotta"
                                             : "text-dark-muted hover:text-terracotta"

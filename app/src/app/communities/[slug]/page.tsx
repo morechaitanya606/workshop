@@ -3,19 +3,30 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
     ArrowLeft,
+    ArrowRight,
     Globe,
     Instagram,
     Mail,
     MapPin,
     MessageCircle,
     Phone,
+    Sparkles,
     Users,
 } from "lucide-react";
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
 import Navbar from "@/components/Navbar";
-import { getLocalCommunityBySlug } from "@/lib/community-local-store";
-import { getCommunityBySlug, getMockCommunityBySlug } from "@/lib/communities";
+import CommunityListCard from "@/components/communities/CommunityListCard";
+import CommunitySpotlightCard from "@/components/communities/CommunitySpotlightCard";
+import { getLocalCommunityBySlug, listLocalCommunities } from "@/lib/community-local-store";
+import {
+    getCommunityBySlug,
+    getMockCommunityBySlug,
+    listCommunities,
+    mergeCommunities,
+    mockCommunities,
+    type Community,
+} from "@/lib/communities";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 
 export const revalidate = 60;
@@ -33,6 +44,43 @@ async function loadCommunity(slug: string) {
     } catch {
         return localCommunity || getMockCommunityBySlug(slug);
     }
+}
+
+async function loadSimilarCommunities(current: Community, limit = 4): Promise<Community[]> {
+    const localCommunities = await listLocalCommunities(24);
+
+    let allCommunities: Community[];
+    if (!isSupabaseServiceConfigured) {
+        allCommunities = mergeCommunities(localCommunities, mockCommunities);
+    } else {
+        try {
+            const liveCommunities = await listCommunities(createSupabaseServiceClient(), 24);
+            allCommunities = mergeCommunities(
+                mergeCommunities(liveCommunities, localCommunities),
+                mockCommunities
+            );
+        } catch {
+            allCommunities = mergeCommunities(localCommunities, mockCommunities);
+        }
+    }
+
+    const others = allCommunities.filter((c) => c.slug !== current.slug);
+
+    const sameCategory = others.filter(
+        (c) => c.category.toLowerCase() === current.category.toLowerCase()
+    );
+    const sameCity = others.filter(
+        (c) =>
+            c.city.toLowerCase() === current.city.toLowerCase() &&
+            !sameCategory.some((sc) => sc.slug === c.slug)
+    );
+    const rest = others.filter(
+        (c) =>
+            !sameCategory.some((sc) => sc.slug === c.slug) &&
+            !sameCity.some((sc) => sc.slug === c.slug)
+    );
+
+    return [...sameCategory, ...sameCity, ...rest].slice(0, limit);
 }
 
 export async function generateMetadata({
@@ -63,6 +111,8 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
     if (!community) {
         notFound();
     }
+
+    const similarCommunities = await loadSimilarCommunities(community);
 
     const socialLinks = [
         community.instagramUrl
@@ -244,6 +294,53 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                     </div>
                 </div>
             </section>
+
+            {/* Similar Communities */}
+            {similarCommunities.length > 0 && (
+                <section className="section-padding pb-16">
+                    <div className="mx-auto max-w-6xl">
+                        <div className="mb-5 flex items-end justify-between">
+                            <div>
+                                <p className="mb-2 inline-flex items-center gap-2 rounded-full border border-terracotta/20 bg-terracotta/5 px-3 py-1 text-[10px] font-inter font-bold uppercase tracking-[0.26em] text-terracotta">
+                                    <Sparkles className="h-3 w-3" />
+                                    Similar Communities
+                                </p>
+                                <h2 className="font-playfair text-2xl font-bold text-dark sm:text-3xl">
+                                    More communities you might like
+                                </h2>
+                            </div>
+                            <Link
+                                href="/communities"
+                                className="hidden items-center gap-1.5 text-sm font-inter font-semibold text-terracotta hover:underline sm:inline-flex"
+                            >
+                                View All
+                                <ArrowRight className="h-4 w-4" />
+                            </Link>
+                        </div>
+
+                        {/* Mobile: List cards */}
+                        <div className="flex flex-col gap-3 md:hidden">
+                            {similarCommunities.map((c) => (
+                                <CommunityListCard key={c.slug} community={c} />
+                            ))}
+                        </div>
+
+                        {/* Desktop: Grid cards */}
+                        <div className="hidden gap-5 md:grid md:grid-cols-2 xl:grid-cols-3">
+                            {similarCommunities.map((c) => (
+                                <CommunitySpotlightCard key={c.slug} community={c} />
+                            ))}
+                        </div>
+
+                        <div className="mt-5 flex justify-center md:hidden">
+                            <Link href="/communities" className="btn-primary !px-5 !py-2.5 text-sm">
+                                Explore All Communities
+                                <ArrowRight className="h-4 w-4" />
+                            </Link>
+                        </div>
+                    </div>
+                </section>
+            )}
 
             <Footer />
             <MobileNav />

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Menu, X, LogOut } from "lucide-react";
+import { Search, Menu, X, LogOut, Command } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { CONTACT_PAGE_HREF } from "@/lib/contact";
@@ -167,7 +167,7 @@ export default function Navbar() {
                             )}
                         </div>
 
-                        <nav className="hidden md:flex items-center gap-6">
+                        <nav className="hidden md:flex items-center gap-4">
                             <NavLink href="/explore">Explore</NavLink>
                             <NavLink href="/past-events">Past Events</NavLink>
                             {user && !roleLoading && role === "admin" && (

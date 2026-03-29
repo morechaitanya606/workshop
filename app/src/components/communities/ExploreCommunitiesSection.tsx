@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 import type { Community } from "@/lib/communities";
+import CommunityListCard from "./CommunityListCard";
 import CommunitySpotlightCard from "./CommunitySpotlightCard";
 
 export default function ExploreCommunitiesSection({ communities }: { communities: Community[] }) {
@@ -47,11 +48,21 @@ export default function ExploreCommunitiesSection({ communities }: { communities
                     </div>
                 </div>
 
-                <div className="mt-7 flex gap-3 overflow-x-auto pb-1 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:pb-0 lg:grid-cols-3">
+                {/* Mobile: List cards */}
+                <div className="mt-7 flex flex-col gap-3 md:hidden">
                     {featuredCommunities.map((community) => (
-                        <div key={community.slug} className="min-w-[15.5rem] flex-none sm:min-w-0">
-                            <CommunitySpotlightCard community={community} compact />
-                        </div>
+                        <CommunityListCard key={community.slug} community={community} />
+                    ))}
+                </div>
+
+                {/* Desktop: Grid spotlight cards */}
+                <div className="mt-7 hidden gap-4 md:grid md:grid-cols-2 lg:grid-cols-3">
+                    {featuredCommunities.map((community) => (
+                        <CommunitySpotlightCard
+                            key={community.slug}
+                            community={community}
+                            compact
+                        />
                     ))}
                 </div>
             </div>

@@ -4,6 +4,7 @@ import { ArrowRight, Compass, Sparkles, Users } from "lucide-react";
 import Footer from "@/components/Footer";
 import MobileNav from "@/components/MobileNav";
 import Navbar from "@/components/Navbar";
+import CommunityListCard from "@/components/communities/CommunityListCard";
 import CommunitySpotlightCard from "@/components/communities/CommunitySpotlightCard";
 import { listLocalCommunities } from "@/lib/community-local-store";
 import {
@@ -61,6 +62,7 @@ export default async function CommunitiesPage() {
 
             <section className="section-padding pb-10 pt-28">
                 <div className="mx-auto max-w-6xl">
+                    {/* Hero header */}
                     <div className="overflow-hidden rounded-[2.2rem] border border-clay/20 bg-white shadow-soft">
                         <div className="relative bg-[radial-gradient(circle_at_top_left,_rgba(206,121,83,0.20),_transparent_42%),linear-gradient(135deg,#fffaf5_0%,#fff3ee_100%)] px-6 py-10 sm:px-10 sm:py-12">
                             <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-clay/20 bg-white/80 px-3 py-1 text-[11px] font-inter font-bold uppercase tracking-[0.28em] text-terracotta">
@@ -113,6 +115,7 @@ export default async function CommunitiesPage() {
                             </div>
                         </div>
 
+                        {/* Community list */}
                         <div className="px-6 py-8 sm:px-10 sm:py-10">
                             <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                                 <div>
@@ -129,7 +132,15 @@ export default async function CommunitiesPage() {
                                 </p>
                             </div>
 
-                            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                            {/* Mobile: List layout */}
+                            <div className="flex flex-col gap-3 md:hidden">
+                                {communities.map((community) => (
+                                    <CommunityListCard key={community.slug} community={community} />
+                                ))}
+                            </div>
+
+                            {/* Desktop: Grid layout */}
+                            <div className="hidden gap-5 md:grid md:grid-cols-2 xl:grid-cols-3">
                                 {communities.map((community) => (
                                     <CommunitySpotlightCard
                                         key={community.slug}
@@ -138,6 +149,7 @@ export default async function CommunitiesPage() {
                                 ))}
                             </div>
 
+                            {/* CTA Banner */}
                             <div className="mt-8 rounded-[1.75rem] border border-clay/20 bg-cream-50 px-5 py-6 sm:px-6">
                                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                                     <div className="max-w-2xl">
