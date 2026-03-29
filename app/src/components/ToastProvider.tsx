@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Info, X, XCircle } from "lucide-react";
 
-type ToastVariant = "success" | "error" | "info";
+type ToastVariant = "success" | "error" | "info" | "warning";
 
 type ToastInput = {
     title: string;
@@ -23,6 +23,7 @@ type ToastContextValue = {
     success: (title: string, description?: string) => void;
     error: (title: string, description?: string) => void;
     info: (title: string, description?: string) => void;
+    warning: (title: string, description?: string) => void;
 };
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -36,7 +37,17 @@ function toastVariantClassName(variant: ToastVariant) {
     if (variant === "error") {
         return "border-red-200 bg-red-50 text-red-900";
     }
+    if (variant === "warning") {
+        return "border-amber-200 bg-amber-50 text-amber-900";
+    }
     return "border-gray-200 bg-white text-dark";
+}
+
+function toastProgressColor(variant: ToastVariant) {
+    if (variant === "success") return "bg-emerald-500";
+    if (variant === "error") return "bg-red-500";
+    if (variant === "warning") return "bg-amber-500";
+    return "bg-terracotta";
 }
 
 function toastIcon(variant: ToastVariant) {
@@ -45,6 +56,9 @@ function toastIcon(variant: ToastVariant) {
     }
     if (variant === "error") {
         return <XCircle className="h-4 w-4 text-red-700" />;
+    }
+    if (variant === "warning") {
+        return <Info className="h-4 w-4 text-amber-700" />;
     }
     return <Info className="h-4 w-4 text-dark-muted" />;
 }
@@ -84,6 +98,7 @@ export default function ToastProvider({ children }: { children: React.ReactNode 
             success: (title, description) => showToast({ title, description, variant: "success" }),
             error: (title, description) => showToast({ title, description, variant: "error" }),
             info: (title, description) => showToast({ title, description, variant: "info" }),
+            warning: (title, description) => showToast({ title, description, variant: "warning" }),
         }),
         [showToast]
     );
@@ -100,7 +115,7 @@ export default function ToastProvider({ children }: { children: React.ReactNode 
                     {toasts.map((toast) => (
                         <div
                             key={toast.id}
-                            className={`pointer-events-auto rounded-xl border px-4 py-3 shadow-soft backdrop-blur-sm ${toastVariantClassName(
+                            className={`pointer-events-auto rounded-xl border px-4 py-3 shadow-soft backdrop-blur-sm toast-enter overflow-hidden ${toastVariantClassName(
                                 toast.variant
                             )}`}
                             role="status"
@@ -124,6 +139,12 @@ export default function ToastProvider({ children }: { children: React.ReactNode 
                                 >
                                     <X className="h-3.5 w-3.5" />
                                 </button>
+                            </div>
+                            <div className="mt-2 h-0.5 w-full rounded-full bg-black/5 overflow-hidden">
+                                <div
+                                    className={`h-full rounded-full toast-progress ${toastProgressColor(toast.variant)}`}
+                                    style={{ animationDuration: `${toast.durationMs}ms` }}
+                                />
                             </div>
                         </div>
                     ))}

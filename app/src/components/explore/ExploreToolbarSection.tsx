@@ -90,14 +90,20 @@ export default function ExploreToolbarSection({
                 </div>
             </motion.div>
 
-            <motion.div {...filterBarMotionProps} className="mt-8 relative z-20">
+            <motion.div
+                {...filterBarMotionProps}
+                className="mt-8 relative z-20 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0"
+            >
                 <CategoryFilter
                     activeCategory={categorySelection}
                     onCategoryChange={onCategoryChange}
                 />
             </motion.div>
 
-            <motion.div {...filterBarMotionProps} className="mt-6 flex flex-col lg:flex-row gap-3">
+            <motion.div
+                {...filterBarMotionProps}
+                className="sticky top-[72px] z-30 mt-6 flex flex-col lg:flex-row gap-3 bg-cream/95 backdrop-blur-xl py-3 -mx-4 px-4 sm:-mx-6 sm:px-6 border-b border-clay/20"
+            >
                 <div className="flex-1 flex items-center gap-3 bg-white rounded-xl px-4 py-3 shadow-soft border border-gray-100">
                     <Search className="w-5 h-5 text-dark-muted flex-shrink-0" />
                     <input

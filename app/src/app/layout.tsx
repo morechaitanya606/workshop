@@ -7,7 +7,14 @@ import ToastProvider from "@/components/ToastProvider";
 import { AuthProvider } from "@/lib/auth-context";
 import SupportChatbot from "@/components/SupportChatbot";
 import CookieConsentBanner from "@/components/CookieConsentBanner";
+import Navbar from "@/components/Navbar";
+import MobileNav from "@/components/MobileNav";
 import { getAppUrl } from "@/lib/env";
+import dynamic from "next/dynamic";
+
+const BackToTop = dynamic(() => import("@/components/ui/BackToTop"), { ssr: false });
+const ScrollProgress = dynamic(() => import("@/components/ui/ScrollProgress"), { ssr: false });
+const CommandPalette = dynamic(() => import("@/components/ui/CommandPalette"), { ssr: false });
 
 const playfair = Playfair_Display({
     subsets: ["latin"],
@@ -75,9 +82,14 @@ export default function RootLayout({
                     <AnalyticsProvider>
                         <ToastProvider>
                             <AuthProvider>
-                                {children}
+                                <Navbar />
+                                <main className="flex-1 pb-40 lg:pb-8">{children}</main>
+                                <MobileNav />
                                 <SupportChatbot />
                                 <CookieConsentBanner />
+                                <BackToTop />
+                                <ScrollProgress />
+                                <CommandPalette />
                             </AuthProvider>
                         </ToastProvider>
                     </AnalyticsProvider>

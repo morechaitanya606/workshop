@@ -57,6 +57,8 @@ export default function HeroSection({ source }: { source: "supabase" | "mock" | 
         delay: 1.5,
     });
 
+    const headlineWords = ["A", "Better", "Weekend"];
+
     return (
         <section
             ref={heroRef}
@@ -76,6 +78,7 @@ export default function HeroSection({ source }: { source: "supabase" | "mock" | 
                     className="object-cover"
                     sizes="100vw"
                 />
+                <div className="absolute inset-0 hero-gradient-mesh" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_#fbe4db_0%,_#fefbea_45%,_#f5e48a_100%)] opacity-75 mix-blend-soft-light" />
                 <div className="absolute inset-0 grain-overlay" />
                 <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/80" />
@@ -99,15 +102,41 @@ export default function HeroSection({ source }: { source: "supabase" | "mock" | 
                     </span>
                 </motion.div>
 
-                <div className="text-animate-reveal mb-6">
-                    <motion.h1
-                        {...heroHeadlineMotionProps}
-                        className="heading-xl text-white max-w-4xl text-balance text-glow-soft"
-                    >
-                        A Better Weekend
+                <div className="mb-6">
+                    <h1 className="heading-xl text-white max-w-4xl text-balance text-glow-soft">
+                        {headlineWords.map((word, i) => (
+                            <motion.span
+                                key={word}
+                                initial={shouldReduceMotion ? undefined : { opacity: 0, y: 20 }}
+                                animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+                                transition={
+                                    shouldReduceMotion
+                                        ? { duration: 0 }
+                                        : {
+                                              duration: 0.5,
+                                              delay: 0.3 + i * 0.12,
+                                              ease: [0.22, 1, 0.36, 1],
+                                          }
+                                }
+                                className="inline-block mr-[0.3em]"
+                            >
+                                {word}
+                            </motion.span>
+                        ))}
                         <br />
-                        <span className="text-terracotta-300">Awaits.</span>
-                    </motion.h1>
+                        <motion.span
+                            initial={shouldReduceMotion ? undefined : { opacity: 0, y: 20 }}
+                            animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+                            transition={
+                                shouldReduceMotion
+                                    ? { duration: 0 }
+                                    : { duration: 0.5, delay: 0.66, ease: [0.22, 1, 0.36, 1] }
+                            }
+                            className="text-terracotta-300 inline-block"
+                        >
+                            Awaits.
+                        </motion.span>
+                    </h1>
                 </div>
 
                 <div className="overflow-hidden mb-10">
@@ -125,7 +154,7 @@ export default function HeroSection({ source }: { source: "supabase" | "mock" | 
                 >
                     <Link
                         href="/explore"
-                        className="btn-primary btn-animated text-base !px-10 !py-4 shadow-lg shadow-terracotta/25"
+                        className="btn-primary btn-animated text-base !px-10 !py-4 shadow-lg shadow-terracotta/25 hover:shadow-xl hover:shadow-terracotta/40 hover:ring-4 hover:ring-terracotta/20"
                     >
                         Explore Workshops
                         <ArrowRight className="w-5 h-5" />
