@@ -14,7 +14,6 @@ import {
     Users,
 } from "lucide-react";
 import Footer from "@/components/Footer";
-import MobileNav from "@/components/MobileNav";
 import Navbar from "@/components/Navbar";
 import CommunityListCard from "@/components/communities/CommunityListCard";
 import CommunitySpotlightCard from "@/components/communities/CommunitySpotlightCard";
@@ -25,24 +24,30 @@ import {
     listCommunities,
     mergeCommunities,
     mockCommunities,
+    normalizeCommunitySlug,
     type Community,
 } from "@/lib/communities";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 
+export const dynamic = "force-dynamic";
 export const revalidate = 60;
 
 async function loadCommunity(slug: string) {
-    const localCommunity = await getLocalCommunityBySlug(slug);
+    const normalizedSlug = normalizeCommunitySlug(slug);
+    const localCommunity = await getLocalCommunityBySlug(normalizedSlug);
 
     if (!isSupabaseServiceConfigured) {
-        return localCommunity || getMockCommunityBySlug(slug);
+        return localCommunity || getMockCommunityBySlug(normalizedSlug);
     }
 
     try {
-        const liveCommunity = await getCommunityBySlug(createSupabaseServiceClient(), slug);
-        return liveCommunity || localCommunity || getMockCommunityBySlug(slug);
+        const liveCommunity = await getCommunityBySlug(
+            createSupabaseServiceClient(),
+            normalizedSlug
+        );
+        return liveCommunity || localCommunity || getMockCommunityBySlug(normalizedSlug);
     } catch {
-        return localCommunity || getMockCommunityBySlug(slug);
+        return localCommunity || getMockCommunityBySlug(normalizedSlug);
     }
 }
 
@@ -205,12 +210,12 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                                     <h2 className="font-playfair text-3xl font-bold text-dark">
                                         Quick Details
                                     </h2>
-                                    <div className="mt-5 grid gap-4 sm:grid-cols-3">
+                                    <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
                                         <div className="rounded-2xl border border-clay/20 bg-cream-50 p-5">
                                             <p className="text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
                                                 Category
                                             </p>
-                                            <p className="mt-2 font-playfair text-2xl font-bold text-dark">
+                                            <p className="mt-2 font-playfair text-xl font-bold text-dark sm:text-2xl">
                                                 {community.category}
                                             </p>
                                         </div>
@@ -218,15 +223,15 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                                             <p className="text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
                                                 City
                                             </p>
-                                            <p className="mt-2 font-playfair text-2xl font-bold text-dark">
+                                            <p className="mt-2 font-playfair text-xl font-bold text-dark sm:text-2xl">
                                                 {community.city}
                                             </p>
                                         </div>
-                                        <div className="rounded-2xl border border-clay/20 bg-cream-50 p-5">
+                                        <div className="col-span-2 rounded-2xl border border-clay/20 bg-cream-50 p-5 sm:col-span-1">
                                             <p className="text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
                                                 Format
                                             </p>
-                                            <p className="mt-2 font-playfair text-2xl font-bold text-dark">
+                                            <p className="mt-2 font-playfair text-xl font-bold text-dark sm:text-2xl">
                                                 {community.meetingFormat}
                                             </p>
                                         </div>
@@ -343,7 +348,6 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
             )}
 
             <Footer />
-            <MobileNav />
         </main>
     );
 }

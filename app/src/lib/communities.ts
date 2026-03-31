@@ -155,6 +155,16 @@ export function slugifyCommunityTitle(title: string) {
         .slice(0, 72);
 }
 
+export function normalizeCommunitySlug(slug: string) {
+    const trimmedSlug = slug.trim();
+
+    try {
+        return decodeURIComponent(trimmedSlug).trim().toLowerCase();
+    } catch {
+        return trimmedSlug.toLowerCase();
+    }
+}
+
 export async function generateUniqueCommunitySlug(
     serviceClient: SupabaseServerClient,
     title: string
@@ -238,7 +248,13 @@ export async function listCommunities(
 }
 
 export function getMockCommunityBySlug(slug: string) {
-    return mockCommunities.find((community) => community.slug === slug) || null;
+    const normalizedSlug = normalizeCommunitySlug(slug);
+
+    return (
+        mockCommunities.find(
+            (community) => normalizeCommunitySlug(community.slug) === normalizedSlug
+        ) || null
+    );
 }
 
 export function mergeCommunities(primary: Community[], fallback: Community[]) {
@@ -246,8 +262,10 @@ export function mergeCommunities(primary: Community[], fallback: Community[]) {
     const merged: Community[] = [];
 
     for (const community of [...primary, ...fallback]) {
-        if (seen.has(community.slug)) continue;
-        seen.add(community.slug);
+        const normalizedSlug = normalizeCommunitySlug(community.slug);
+
+        if (seen.has(normalizedSlug)) continue;
+        seen.add(normalizedSlug);
         merged.push(community);
     }
 

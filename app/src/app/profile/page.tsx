@@ -21,7 +21,6 @@ import {
     Banknote,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
-import MobileNav from "@/components/MobileNav";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
@@ -1379,7 +1378,6 @@ export default function ProfilePage() {
                     </div>
                 </div>
             </div>
-            <MobileNav />
         </main>
     );
 }

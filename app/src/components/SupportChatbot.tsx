@@ -281,14 +281,22 @@ export default function SupportChatbot({
             : stage === "asking_phone"
               ? "Apna phone number enter karo"
               : "Apna message type karo";
+    const floatingPanelClass =
+        mode === "embedded"
+            ? "h-[min(100vh,720px)] w-full"
+            : isWorkshopPage
+              ? "fixed left-3 right-3 bottom-[12rem] z-[70] max-h-[50dvh] sm:max-h-[600px] sm:left-auto sm:right-4 sm:w-[min(calc(100vw-2rem),24rem)] lg:bottom-6 lg:right-6 lg:max-h-[calc(100dvh-6rem)]"
+              : "fixed bottom-20 right-3 z-[70] w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-8rem)] sm:max-h-[600px] max-w-sm sm:right-4 sm:max-w-md lg:bottom-6 lg:right-6 lg:max-h-[calc(100dvh-6rem)]";
+    const supportMenuClass = isWorkshopPage
+        ? "fixed bottom-[16rem] right-4 z-[70] w-[min(calc(100vw-2rem),22rem)] rounded-[28px] border border-black/5 bg-white p-3 shadow-[0_24px_60px_rgba(15,23,42,0.18)] lg:bottom-24 lg:right-6"
+        : "fixed bottom-36 right-4 z-[70] w-[min(calc(100vw-2rem),22rem)] rounded-[28px] border border-black/5 bg-white p-3 shadow-[0_24px_60px_rgba(15,23,42,0.18)] lg:bottom-24 lg:right-6";
+    const launcherButtonClass = isWorkshopPage
+        ? "fixed bottom-[12rem] right-4 z-[70] flex h-12 w-12 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_16px_40px_rgba(37,211,102,0.35)] transition-transform hover:scale-[1.02] lg:bottom-6 lg:right-6 lg:h-14 lg:w-14"
+        : "fixed bottom-20 right-4 z-[70] flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_16px_40px_rgba(37,211,102,0.35)] transition-transform hover:scale-[1.02] lg:bottom-6 lg:right-6";
 
     const panelContent = (
         <div
-            className={`flex flex-col overflow-hidden rounded-[28px] border border-black/5 bg-[#EFEAE2] shadow-[0_24px_60px_rgba(7,94,84,0.28)] ${
-                mode === "embedded"
-                    ? "h-[min(100vh,720px)] w-full"
-                    : "fixed bottom-20 right-3 z-[70] w-[calc(100vw-1.5rem)] max-w-sm sm:right-4 sm:max-w-md lg:bottom-6 lg:right-6"
-            }`}
+            className={`flex flex-col overflow-hidden rounded-[28px] border border-black/5 bg-[#EFEAE2] shadow-[0_24px_60px_rgba(7,94,84,0.28)] ${floatingPanelClass}`}
         >
             <div className="flex items-center justify-between bg-[#075E54] px-4 py-3 text-white">
                 <div className="min-w-0">
@@ -303,10 +311,10 @@ export default function SupportChatbot({
                     <button
                         type="button"
                         onClick={closeChat}
-                        className="rounded-full p-2 transition-colors hover:bg-white/10"
+                        className="shrink-0 rounded-full p-2 transition-colors hover:bg-white/10"
                         aria-label="Close chat"
                     >
-                        <X className="h-4 w-4" />
+                        <X className="h-5 w-5" />
                     </button>
                 )}
             </div>
@@ -400,7 +408,7 @@ export default function SupportChatbot({
                         animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
                         exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
                         transition={{ duration: 0.2 }}
-                        className="fixed bottom-36 right-4 z-[70] w-[min(calc(100vw-2rem),22rem)] rounded-[28px] border border-black/5 bg-white p-3 shadow-[0_24px_60px_rgba(15,23,42,0.18)] lg:bottom-24 lg:right-6"
+                        className={supportMenuClass}
                     >
                         <p className="px-1 pb-2 text-xs font-inter font-semibold uppercase tracking-[0.18em] text-slate-500">
                             Choose Support
@@ -458,7 +466,7 @@ export default function SupportChatbot({
                         animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
                         exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
                         transition={{ duration: 0.2 }}
-                        className="fixed bottom-20 right-4 z-[70] flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_16px_40px_rgba(37,211,102,0.35)] transition-transform hover:scale-[1.02] lg:bottom-6 lg:right-6"
+                        className={launcherButtonClass}
                         aria-expanded={isLauncherOpen}
                         aria-label="Open support options"
                     >

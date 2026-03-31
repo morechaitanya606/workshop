@@ -143,7 +143,7 @@ describe("POST /api/bookings/checkout", () => {
             orders: {
                 create: vi.fn().mockResolvedValue({
                     id: "order_123",
-                    amount: 314900,
+                    amount: 309900,
                     currency: "INR",
                 }),
             },
@@ -183,7 +183,7 @@ describe("POST /api/bookings/checkout", () => {
             mode: "order_created",
             order: {
                 id: "order_123",
-                amount: 314900,
+                amount: 309900,
                 currency: "INR",
                 keyId: "rzp_test_123",
                 name: "Only Workshops",
@@ -201,7 +201,7 @@ describe("POST /api/bookings/checkout", () => {
             },
         });
         expect(razorpay.orders.create).toHaveBeenCalledWith({
-            amount: 314900,
+            amount: 309900,
             currency: "INR",
             receipt: "11111111-1111-4111-8111-111111111111",
             notes: {

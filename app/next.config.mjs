@@ -1,5 +1,7 @@
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 
+const disablePersistentWebpackCache = process.platform === "win32";
+
 /** @type {import('next').NextConfig} */
 const baseConfig = {
     images: {
@@ -33,6 +35,15 @@ const baseConfig = {
     // Limit build parallelism for more stable local builds on constrained machines.
     experimental: {
         cpus: 1,
+    },
+    webpack: (config) => {
+        if (disablePersistentWebpackCache) {
+            // Filesystem cache serialization is unstable on this Windows setup and has been
+            // crashing local dev/build checks with Array buffer allocation failures.
+            config.cache = false;
+        }
+
+        return config;
     },
 };
 
