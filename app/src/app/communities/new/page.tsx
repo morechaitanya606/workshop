@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Send } from "lucide-react";
 import Footer from "@/components/Footer";
-import MobileNav from "@/components/MobileNav";
 import Navbar from "@/components/Navbar";
 import { createCommunity, toApiErrorMessage } from "@/lib/api-client";
 import { communityCreateSchema } from "@/lib/validators";
@@ -376,7 +375,6 @@ export default function CreateCommunityPage() {
             </section>
 
             <Footer />
-            <MobileNav />
         </main>
     );
 }

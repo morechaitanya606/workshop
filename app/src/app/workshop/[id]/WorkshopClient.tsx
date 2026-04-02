@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -29,9 +30,7 @@ import {
     Loader2,
     X,
 } from "lucide-react";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import MobileNav from "@/components/MobileNav";
 import { useToast } from "@/components/ToastProvider";
 import type { AppliedCoupon } from "@/app/booking/types";
 import type { Workshop } from "@/lib/data";
@@ -50,7 +49,7 @@ import {
     uploadMedia,
 } from "@/lib/api-client";
 import { addRecentlyViewed } from "@/lib/recently-viewed";
-import { formatCurrency, formatDate, getInitials } from "@/lib/utils";
+import { formatCurrency, formatDate, formatTime, getInitials } from "@/lib/utils";
 import { BOOKING_CUTOFF_HOURS, getWorkshopDateTime, isBookingClosedNow } from "@/lib/booking-time";
 import { useAuth } from "@/lib/auth-context";
 import { trackEvent } from "@/lib/analytics";
@@ -155,6 +154,7 @@ export default function WorkshopClient({
     const [guests, setGuests] = useState(2);
     const [activeImage, setActiveImage] = useState(0);
     const [isSaved, setIsSaved] = useState(false);
+    const [isMounted, setIsMounted] = useState(false);
     const [favoriteLoading, setFavoriteLoading] = useState(false);
     const [showVideo, setShowVideo] = useState(false);
     const [bookingLoading, setBookingLoading] = useState(false);
@@ -286,7 +286,23 @@ export default function WorkshopClient({
         .slice(0, 3);
     const isDirectVideoFile = isDirectVideoFileUrl(workshop.videoUrl);
     const accessToken = session?.access_token ?? null;
+    const formattedWorkshopTime = (() => {
+        if (!workshop.time) {
+            return "Time will be shared soon";
+        }
+
+        try {
+            const nextValue = formatTime(workshop.time);
+            return nextValue === "Invalid Date" ? workshop.time : nextValue;
+        } catch {
+            return workshop.time;
+        }
+    })();
     const closeVideoModal = () => setShowVideo(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
     useEffect(() => {
         if (!accessToken) {
@@ -871,11 +887,72 @@ export default function WorkshopClient({
                   item.createdAt !== userFeedback.created_at
           )
         : publicFeedback;
+    const mobileBookingBar = !isPastWorkshop ? (
+        <div className="fixed inset-x-0 bottom-16 z-40 md:bottom-0 min-[900px]:hidden">
+            <div className="bg-white/95 backdrop-blur-xl border-t border-clay/30 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] px-4 py-3">
+                <div className="flex items-center justify-between gap-4 max-w-lg mx-auto">
+                    <div className="min-w-0 flex-1">
+                        {isEbEligible && (
+                            <span className="mr-2 text-xs font-inter text-dark-muted line-through">
+                                {formatCurrency(workshop.price)}
+                            </span>
+                        )}
+                        <span className="font-playfair text-lg font-bold text-dark">
+                            {formatCurrency(currentPricePerGuest)}
+                        </span>
+                        <span className="text-xs font-inter text-dark-muted ml-1">/ person</span>
+                        <p className="mt-1 text-[11px] font-inter text-dark-muted">
+                            {formatDate(workshop.date)} &bull; {formattedWorkshopTime}
+                        </p>
+                        <p
+                            className={`mt-1 text-[11px] font-inter ${
+                                isSoldOut || isBookingClosed ? "text-red-700" : "text-emerald-700"
+                            }`}
+                        >
+                            {seatAvailabilityLabel}
+                        </p>
+                    </div>
+                    {isBookingClosed ? (
+                        <button
+                            type="button"
+                            disabled
+                            className="rounded-full bg-gray-100 px-5 py-2.5 text-sm font-inter font-semibold text-dark-muted cursor-not-allowed"
+                        >
+                            Booking Closed
+                        </button>
+                    ) : isSoldOut ? (
+                        <button
+                            onClick={() => setShowWaitlistModal(true)}
+                            className="btn-secondary !py-2.5 !px-6 text-sm"
+                        >
+                            Join Waitlist
+                        </button>
+                    ) : user ? (
+                        <button
+                            onClick={handleBooking}
+                            disabled={bookingLoading}
+                            className="btn-primary shrink-0 !py-2.5 !px-5 text-sm disabled:opacity-60"
+                        >
+                            {bookingLoading ? "Reserving..." : "Reserve Spot"}
+                        </button>
+                    ) : (
+                        <Link
+                            href={loginRedirectHref}
+                            className="btn-primary shrink-0 !py-2.5 !px-5 text-sm"
+                        >
+                            Log in to Reserve
+                        </Link>
+                    )}
+                </div>
+                {holdError && (
+                    <p className="mt-2 text-center text-xs font-inter text-red-600">{holdError}</p>
+                )}
+            </div>
+        </div>
+    ) : null;
 
     return (
         <main className="min-h-screen pb-44 min-[900px]:pb-0">
-            <Navbar />
-
             <div className="pt-20 sm:pt-24">
                 <div className="section-padding mb-4">
                     <motion.nav
@@ -1106,6 +1183,102 @@ export default function WorkshopClient({
                                         {seatAvailabilityLabel}
                                     </span>
                                 </div>
+                                <div className="mt-4 grid grid-cols-2 gap-3 min-[900px]:hidden">
+                                    <div className="rounded-2xl border border-clay/40 bg-white/95 px-4 py-3 shadow-soft">
+                                        <p className="text-[10px] font-inter font-bold uppercase tracking-[0.18em] text-dark-muted">
+                                            Price
+                                        </p>
+                                        <div className="mt-1 flex items-baseline gap-1.5">
+                                            <span className="font-playfair text-2xl font-bold text-dark">
+                                                {formatCurrency(currentPricePerGuest)}
+                                            </span>
+                                            <span className="text-xs font-inter text-dark-muted">
+                                                / person
+                                            </span>
+                                        </div>
+                                        {isEbEligible && (
+                                            <p className="mt-1 text-[11px] font-inter text-emerald-700">
+                                                Was {formatCurrency(workshop.price)}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div className="rounded-2xl border border-clay/40 bg-white/95 px-4 py-3 shadow-soft">
+                                        <p className="flex items-center gap-1.5 text-[10px] font-inter font-bold uppercase tracking-[0.18em] text-dark-muted">
+                                            <Calendar className="h-3.5 w-3.5" />
+                                            Date
+                                        </p>
+                                        <p className="mt-1 text-sm font-inter font-semibold text-dark">
+                                            {formatDate(workshop.date)}
+                                        </p>
+                                        <p className="mt-1 text-[11px] font-inter text-dark-muted">
+                                            {workshop.location}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-2xl border border-clay/40 bg-white/95 px-4 py-3 shadow-soft">
+                                        <p className="flex items-center gap-1.5 text-[10px] font-inter font-bold uppercase tracking-[0.18em] text-dark-muted">
+                                            <Clock className="h-3.5 w-3.5" />
+                                            Time
+                                        </p>
+                                        <p className="mt-1 text-sm font-inter font-semibold text-dark">
+                                            {formattedWorkshopTime}
+                                        </p>
+                                        <p className="mt-1 text-[11px] font-inter text-dark-muted">
+                                            {workshop.duration}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-2xl border border-clay/40 bg-white/95 px-4 py-3 shadow-soft">
+                                        <p className="flex items-center gap-1.5 text-[10px] font-inter font-bold uppercase tracking-[0.18em] text-dark-muted">
+                                            <Tag className="h-3.5 w-3.5" />
+                                            Seats
+                                        </p>
+                                        <p
+                                            className={`mt-1 text-sm font-inter font-semibold ${
+                                                isSoldOut || isBookingClosed
+                                                    ? "text-red-700"
+                                                    : "text-emerald-700"
+                                            }`}
+                                        >
+                                            {seatAvailabilityLabel}
+                                        </p>
+                                    </div>
+                                </div>
+                                {!isPastWorkshop && (
+                                    <div className="mt-4 min-[900px]:hidden">
+                                        {isBookingClosed ? (
+                                            <button
+                                                type="button"
+                                                disabled
+                                                className="w-full rounded-full bg-gray-100 px-5 py-3.5 text-sm font-inter font-semibold text-dark-muted cursor-not-allowed"
+                                            >
+                                                Booking Closed
+                                            </button>
+                                        ) : isSoldOut ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowWaitlistModal(true)}
+                                                className="btn-secondary w-full !py-3.5 text-sm"
+                                            >
+                                                Join Waitlist
+                                            </button>
+                                        ) : user ? (
+                                            <button
+                                                type="button"
+                                                onClick={handleBooking}
+                                                disabled={bookingLoading}
+                                                className="btn-primary w-full !py-3.5 text-sm disabled:opacity-60"
+                                            >
+                                                {bookingLoading ? "Reserving..." : "Reserve Spot"}
+                                            </button>
+                                        ) : (
+                                            <Link
+                                                href={loginRedirectHref}
+                                                className="btn-primary block w-full text-center !py-3.5 text-sm"
+                                            >
+                                                Log in to Reserve
+                                            </Link>
+                                        )}
+                                    </div>
+                                )}
                                 {/* Quick suitability strip */}
                                 {badgeLabels.length > 0 && (
                                     <div className="mt-4 flex flex-wrap gap-2 text-xs font-inter text-dark-muted">
@@ -1540,8 +1713,8 @@ export default function WorkshopClient({
                                         Past Event
                                     </div>
                                     <p className="text-sm font-inter text-dark-muted mb-5">
-                                        {formatDate(workshop.date)} &bull; {workshop.time} &bull;{" "}
-                                        {workshop.location}, {workshop.city}
+                                        {formatDate(workshop.date)} &bull; {formattedWorkshopTime}{" "}
+                                        &bull; {workshop.location}, {workshop.city}
                                     </p>
 
                                     <div className="bg-cream-100 rounded-2xl p-4 border border-clay/40 mb-5">
@@ -1838,7 +2011,7 @@ export default function WorkshopClient({
                                                 <Calendar className="w-4 h-4 text-dark-muted" />
                                                 <span className="text-sm font-inter text-dark">
                                                     {formatDate(workshop.date)} &bull;{" "}
-                                                    {workshop.time}
+                                                    {formattedWorkshopTime}
                                                 </span>
                                             </div>
                                             <ChevronRight className="w-4 h-4 text-dark-muted" />
@@ -2406,7 +2579,6 @@ export default function WorkshopClient({
             )}
 
             <Footer />
-            <MobileNav />
 
             {/* ═══ WAITLIST MODAL ═══ */}
             {showWaitlistModal && (
@@ -2492,73 +2664,7 @@ export default function WorkshopClient({
                 </div>
             )}
 
-            {/* ═══ STICKY MOBILE BOOKING BAR ═══ */}
-            {!isPastWorkshop && (
-                <div className="fixed inset-x-0 bottom-16 z-40 md:bottom-0 min-[900px]:hidden">
-                    <div className="bg-white/95 backdrop-blur-xl border-t border-clay/30 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] px-4 py-3">
-                        <div className="flex items-center justify-between gap-4 max-w-lg mx-auto">
-                            <div className="min-w-0 flex-1">
-                                {isEbEligible && (
-                                    <span className="mr-2 text-xs font-inter text-dark-muted line-through">
-                                        {formatCurrency(workshop.price)}
-                                    </span>
-                                )}
-                                <span className="font-playfair text-lg font-bold text-dark">
-                                    {formatCurrency(currentPricePerGuest)}
-                                </span>
-                                <span className="text-xs font-inter text-dark-muted ml-1">
-                                    / person
-                                </span>
-                                <p
-                                    className={`mt-1 text-[11px] font-inter ${
-                                        isSoldOut || isBookingClosed
-                                            ? "text-red-700"
-                                            : "text-emerald-700"
-                                    }`}
-                                >
-                                    {seatAvailabilityLabel}
-                                </p>
-                            </div>
-                            {isBookingClosed ? (
-                                <button
-                                    type="button"
-                                    disabled
-                                    className="rounded-full bg-gray-100 px-5 py-2.5 text-sm font-inter font-semibold text-dark-muted cursor-not-allowed"
-                                >
-                                    Booking Closed
-                                </button>
-                            ) : isSoldOut ? (
-                                <button
-                                    onClick={() => setShowWaitlistModal(true)}
-                                    className="btn-secondary !py-2.5 !px-6 text-sm"
-                                >
-                                    Join Waitlist
-                                </button>
-                            ) : user ? (
-                                <button
-                                    onClick={handleBooking}
-                                    disabled={bookingLoading}
-                                    className="btn-primary shrink-0 !py-2.5 !px-5 text-sm disabled:opacity-60"
-                                >
-                                    {bookingLoading ? "Reserving..." : "Reserve Spot →"}
-                                </button>
-                            ) : (
-                                <Link
-                                    href={loginRedirectHref}
-                                    className="btn-primary shrink-0 !py-2.5 !px-5 text-sm"
-                                >
-                                    Log in to Book
-                                </Link>
-                            )}
-                        </div>
-                        {holdError && (
-                            <p className="mt-2 text-center text-xs font-inter text-red-600">
-                                {holdError}
-                            </p>
-                        )}
-                    </div>
-                </div>
-            )}
+            {isMounted && mobileBookingBar ? createPortal(mobileBookingBar, document.body) : null}
         </main>
     );
 }

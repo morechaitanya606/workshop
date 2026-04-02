@@ -16,7 +16,6 @@ import {
 } from "@/lib/motion-presets";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import MobileNav from "@/components/MobileNav";
 import ExploreCommunitiesSection from "@/components/communities/ExploreCommunitiesSection";
 import ExploreResultsSection from "@/components/explore/ExploreResultsSection";
 import ExploreToolbarSection from "@/components/explore/ExploreToolbarSection";
@@ -570,7 +569,6 @@ export default function ExploreClient({
             </Sheet>
 
             <Footer />
-            <MobileNav />
         </main>
     );
 }

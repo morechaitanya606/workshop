@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Compass, Sparkles, Users } from "lucide-react";
 import Footer from "@/components/Footer";
-import MobileNav from "@/components/MobileNav";
 import Navbar from "@/components/Navbar";
 import CommunityListCard from "@/components/communities/CommunityListCard";
 import CommunitySpotlightCard from "@/components/communities/CommunitySpotlightCard";
@@ -21,6 +20,7 @@ export const metadata: Metadata = {
         "Discover creative communities, meet regularly, and stay connected between workshops.",
 };
 
+export const dynamic = "force-dynamic";
 export const revalidate = 60;
 
 async function loadPublicCommunities() {
@@ -47,8 +47,8 @@ function buildStats(communities: Community[]) {
 
     return [
         { label: "Communities", value: String(communities.length) },
-        { label: "Categories", value: String(categoryCount) },
         { label: "Cities", value: String(cityCount) },
+        { label: "Categories", value: String(categoryCount) },
     ];
 }
 
@@ -98,11 +98,15 @@ export default async function CommunitiesPage() {
                                 </div>
                             </div>
 
-                            <div className="mt-8 grid gap-3 sm:grid-cols-3">
-                                {stats.map((stat) => (
+                            <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                                {stats.map((stat, index) => (
                                     <div
                                         key={stat.label}
-                                        className="rounded-2xl border border-clay/15 bg-white/80 px-5 py-4"
+                                        className={`rounded-2xl border border-clay/15 bg-white/80 px-5 py-4 ${
+                                            index === stats.length - 1
+                                                ? "col-span-2 sm:col-span-1"
+                                                : ""
+                                        }`}
                                     >
                                         <p className="font-playfair text-3xl font-bold text-dark">
                                             {stat.value}
@@ -183,7 +187,6 @@ export default async function CommunitiesPage() {
             </section>
 
             <Footer />
-            <MobileNav />
         </main>
     );
 }

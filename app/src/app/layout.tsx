@@ -83,7 +83,7 @@ export default function RootLayout({
                         <ToastProvider>
                             <AuthProvider>
                                 <Navbar />
-                                <main className="flex-1 pb-40 lg:pb-8">{children}</main>
+                                <main className="flex-1 pb-20 lg:pb-8">{children}</main>
                                 <MobileNav />
                                 <SupportChatbot />
                                 <CookieConsentBanner />

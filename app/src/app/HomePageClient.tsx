@@ -6,7 +6,6 @@ import { useReducedMotion } from "framer-motion";
 import { Info } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import MobileNav from "@/components/MobileNav";
 import HeroSection from "@/components/home/HeroSection";
 import WorkshopGridSection from "@/components/home/WorkshopGridSection";
 import PastEventHighlight from "@/components/home/PastEventHighlight";
@@ -163,7 +162,7 @@ export default function HomePageClient({
     }, [notifyMessage]);
 
     return (
-        <main className="min-h-screen pb-20 md:pb-0">
+        <div className="min-h-screen">
             <Navbar />
 
             {source === "mock" && (
@@ -284,7 +283,6 @@ export default function HomePageClient({
             </ScrollReveal>
 
             <Footer />
-            <MobileNav />
-        </main>
+        </div>
     );
 }

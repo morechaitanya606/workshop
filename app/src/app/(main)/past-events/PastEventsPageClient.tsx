@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import MobileNav from "@/components/MobileNav";
 import { Dialog } from "@/components/ui/dialog";
 import type { Workshop } from "@/lib/data";
 import { mockWorkshops } from "@/lib/data";
@@ -399,7 +398,6 @@ export default function PastEventsPageClient({
             </Dialog>
 
             <Footer />
-            <MobileNav />
         </main>
     );
 }

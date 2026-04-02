@@ -1,10 +1,10 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Community } from "@/lib/communities";
-import { slugifyCommunityTitle } from "@/lib/communities";
+import { normalizeCommunitySlug, slugifyCommunityTitle } from "@/lib/communities";
 import type { CommunityCreateInput, CommunityJoinInput } from "@/lib/validators";
 
 type LocalCommunityJoinRequest = {
@@ -31,6 +31,12 @@ const EMPTY_STORE: LocalCommunityStore = {
     communities: [],
     joinRequests: [],
 };
+const STORE_READ_RETRIES = 3;
+const STORE_READ_RETRY_DELAY_MS = 25;
+
+function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function ensureStoreFile() {
     await mkdir(DATA_DIR, { recursive: true });
@@ -49,21 +55,52 @@ async function ensureStoreFile() {
 async function readStore(): Promise<LocalCommunityStore> {
     await ensureStoreFile();
 
-    const raw = await readFile(DATA_FILE, "utf8");
-    if (!raw.trim()) {
-        return { ...EMPTY_STORE };
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= STORE_READ_RETRIES; attempt += 1) {
+        try {
+            const raw = await readFile(DATA_FILE, "utf8");
+            if (!raw.trim()) {
+                return { ...EMPTY_STORE };
+            }
+
+            const parsed = JSON.parse(raw) as Partial<LocalCommunityStore>;
+            return {
+                communities: Array.isArray(parsed.communities) ? parsed.communities : [],
+                joinRequests: Array.isArray(parsed.joinRequests) ? parsed.joinRequests : [],
+            };
+        } catch (error) {
+            lastError = error;
+
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                await ensureStoreFile();
+            }
+
+            const isRetryableParseError = error instanceof SyntaxError;
+            if (attempt < STORE_READ_RETRIES && isRetryableParseError) {
+                await delay(STORE_READ_RETRY_DELAY_MS * attempt);
+                continue;
+            }
+
+            throw error;
+        }
     }
 
-    const parsed = JSON.parse(raw) as Partial<LocalCommunityStore>;
-    return {
-        communities: Array.isArray(parsed.communities) ? parsed.communities : [],
-        joinRequests: Array.isArray(parsed.joinRequests) ? parsed.joinRequests : [],
-    };
+    throw lastError instanceof Error
+        ? lastError
+        : new Error("Failed to read local communities store.");
 }
 
 async function writeStore(store: LocalCommunityStore) {
     await mkdir(DATA_DIR, { recursive: true });
-    await writeFile(DATA_FILE, JSON.stringify(store, null, 2), "utf8");
+    const tempFile = `${DATA_FILE}.${randomUUID()}.tmp`;
+
+    try {
+        await writeFile(tempFile, JSON.stringify(store, null, 2), "utf8");
+        await rename(tempFile, DATA_FILE);
+    } finally {
+        await rm(tempFile, { force: true }).catch(() => undefined);
+    }
 }
 
 function sortByCreatedAtDesc<T extends { createdAt: string }>(items: T[]) {
@@ -77,7 +114,13 @@ export async function listLocalCommunities(limit = 24): Promise<Community[]> {
 
 export async function getLocalCommunityBySlug(slug: string): Promise<Community | null> {
     const store = await readStore();
-    return store.communities.find((community) => community.slug === slug) || null;
+    const normalizedSlug = normalizeCommunitySlug(slug);
+
+    return (
+        store.communities.find(
+            (community) => normalizeCommunitySlug(community.slug) === normalizedSlug
+        ) || null
+    );
 }
 
 export async function generateUniqueLocalCommunitySlug(title: string) {

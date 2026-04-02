@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import MobileNav from "@/components/MobileNav";
 import ScrollReveal from "@/components/ui/ScrollReveal";
 import { RevealGroup, RevealItem } from "@/components/ui";
 import {
@@ -446,7 +445,6 @@ export default function ListYourSpacePage() {
             </section>
 
             <Footer />
-            <MobileNav />
         </main>
     );
 }

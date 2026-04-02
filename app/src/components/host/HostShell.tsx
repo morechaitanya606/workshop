@@ -16,7 +16,6 @@ import {
     Bot,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
-import MobileNav from "@/components/MobileNav";
 import { useAuth } from "@/lib/auth-context";
 import { fadeIn, quickTransition, useMotionProps } from "@/lib/motion-presets";
 
@@ -135,8 +134,6 @@ export default function HostShell({ children }: HostShellProps) {
                     {children}
                 </motion.section>
             </div>
-
-            <MobileNav />
         </main>
     );
 }

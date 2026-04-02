@@ -1,6 +1,5 @@
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import MobileNav from "@/components/MobileNav";
 import { Skeleton } from "@/components/ui";
 
 function SkeletonCard() {
@@ -41,7 +40,6 @@ export default function ExploreLoading() {
                 </div>
             </section>
             <Footer />
-            <MobileNav />
         </main>
     );
 }

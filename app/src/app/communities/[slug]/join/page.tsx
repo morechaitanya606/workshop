@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Send } from "lucide-react";
 import Footer from "@/components/Footer";
-import MobileNav from "@/components/MobileNav";
 import Navbar from "@/components/Navbar";
 import { submitCommunityJoinRequest, toApiErrorMessage } from "@/lib/api-client";
 import { communityJoinSchema } from "@/lib/validators";
@@ -202,7 +201,6 @@ export default function JoinCommunityPage({ params }: JoinPageProps) {
             </section>
 
             <Footer />
-            <MobileNav />
         </main>
     );
 }

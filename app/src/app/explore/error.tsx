@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import MobileNav from "@/components/MobileNav";
 
 export default function ExploreError({
     error,
@@ -37,7 +36,6 @@ export default function ExploreError({
                 </div>
             </section>
             <Footer />
-            <MobileNav />
         </main>
     );
 }
