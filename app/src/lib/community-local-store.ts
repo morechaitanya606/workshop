@@ -34,26 +34,50 @@ const EMPTY_STORE: LocalCommunityStore = {
 const STORE_READ_RETRIES = 3;
 const STORE_READ_RETRY_DELAY_MS = 25;
 
+const READ_ONLY_FS_CODES = new Set(["EROFS", "EACCES", "EPERM"]);
+
+function isReadOnlyFsError(error: unknown): boolean {
+    const code = (error as NodeJS.ErrnoException)?.code;
+    return typeof code === "string" && READ_ONLY_FS_CODES.has(code);
+}
+
 function delay(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function ensureStoreFile() {
-    await mkdir(DATA_DIR, { recursive: true });
+async function ensureStoreFile(): Promise<boolean> {
+    try {
+        await mkdir(DATA_DIR, { recursive: true });
+    } catch (error) {
+        if (isReadOnlyFsError(error)) return false;
+        throw error;
+    }
 
     try {
         await readFile(DATA_FILE, "utf8");
     } catch (error) {
+        if (isReadOnlyFsError(error)) return false;
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
             throw error;
         }
 
-        await writeFile(DATA_FILE, JSON.stringify(EMPTY_STORE, null, 2), "utf8");
+        try {
+            await writeFile(DATA_FILE, JSON.stringify(EMPTY_STORE, null, 2), "utf8");
+        } catch (writeError) {
+            if (isReadOnlyFsError(writeError)) return false;
+            throw writeError;
+        }
     }
+
+    return true;
 }
 
 async function readStore(): Promise<LocalCommunityStore> {
-    await ensureStoreFile();
+    const fsWritable = await ensureStoreFile();
+
+    if (!fsWritable) {
+        return { ...EMPTY_STORE };
+    }
 
     let lastError: unknown = null;
 
@@ -70,11 +94,11 @@ async function readStore(): Promise<LocalCommunityStore> {
                 joinRequests: Array.isArray(parsed.joinRequests) ? parsed.joinRequests : [],
             };
         } catch (error) {
-            lastError = error;
-
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-                await ensureStoreFile();
+            if (isReadOnlyFsError(error) || (error as NodeJS.ErrnoException).code === "ENOENT") {
+                return { ...EMPTY_STORE };
             }
+
+            lastError = error;
 
             const isRetryableParseError = error instanceof SyntaxError;
             if (attempt < STORE_READ_RETRIES && isRetryableParseError) {
@@ -92,12 +116,21 @@ async function readStore(): Promise<LocalCommunityStore> {
 }
 
 async function writeStore(store: LocalCommunityStore) {
-    await mkdir(DATA_DIR, { recursive: true });
+    try {
+        await mkdir(DATA_DIR, { recursive: true });
+    } catch (error) {
+        if (isReadOnlyFsError(error)) return;
+        throw error;
+    }
+
     const tempFile = `${DATA_FILE}.${randomUUID()}.tmp`;
 
     try {
         await writeFile(tempFile, JSON.stringify(store, null, 2), "utf8");
         await rename(tempFile, DATA_FILE);
+    } catch (error) {
+        if (isReadOnlyFsError(error)) return;
+        throw error;
     } finally {
         await rm(tempFile, { force: true }).catch(() => undefined);
     }
