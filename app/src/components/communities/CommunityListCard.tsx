@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { MapPin, Users, Calendar, ArrowUpRight } from "lucide-react";
 import type { Community } from "@/lib/communities";
 
@@ -28,6 +27,14 @@ const BADGE_STYLES: Record<string, string> = {
     default: "bg-cream-100 text-dark-muted",
 };
 
+function buildThumbnailStyle(coverImage: string | null) {
+    if (!coverImage) return undefined;
+
+    return {
+        backgroundImage: `linear-gradient(rgba(26,20,16,0.08), rgba(26,20,16,0.28)), url(${coverImage})`,
+    };
+}
+
 export default function CommunityListCard({ community }: { community: Community }) {
     const badge = getTimeBadge(community.createdAt);
 
@@ -37,14 +44,12 @@ export default function CommunityListCard({ community }: { community: Community 
             className="group flex items-start gap-4 rounded-2xl border border-clay/20 bg-white px-4 py-4 shadow-soft transition-all duration-300 hover:border-terracotta/30 hover:shadow-md sm:gap-5 sm:px-5 sm:py-5"
         >
             {/* Thumbnail */}
-            <div className="relative h-20 w-20 flex-none overflow-hidden rounded-xl sm:h-24 sm:w-24">
+            <div className="relative h-20 w-20 flex-none overflow-hidden rounded-xl bg-gradient-to-br from-terracotta/80 to-terracotta-700/90 sm:h-24 sm:w-24">
                 {community.coverImage ? (
-                    <Image
-                        src={community.coverImage}
-                        alt={community.title}
-                        fill
-                        sizes="96px"
-                        className="object-cover transition-transform duration-500 group-hover:scale-110"
+                    <div
+                        aria-hidden="true"
+                        className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-110"
+                        style={buildThumbnailStyle(community.coverImage)}
                     />
                 ) : (
                     <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-terracotta/80 to-terracotta-700/90">

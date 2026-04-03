@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     getMockCommunityBySlug,
+    getCommunitySocialPreviewImage,
     mergeCommunities,
     normalizeCommunitySlug,
     mockCommunities,
@@ -59,5 +60,17 @@ describe("communities helpers", () => {
             )
         ).toHaveLength(1);
         expect(merged[0]?.title).toBe("Duplicate Casing");
+    });
+
+    it("uses remote cover images for social previews", () => {
+        expect(getCommunitySocialPreviewImage("https://cdn.example.com/community-cover.webp")).toBe(
+            "https://cdn.example.com/community-cover.webp"
+        );
+    });
+
+    it("falls back to the default social preview for local cover image paths", () => {
+        expect(getCommunitySocialPreviewImage(mockCommunities[0]!.coverImage)).toBe(
+            "/images/og-default.jpg"
+        );
     });
 });

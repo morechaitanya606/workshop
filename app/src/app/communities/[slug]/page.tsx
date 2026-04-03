@@ -21,6 +21,7 @@ import { getLocalCommunityBySlug, listLocalCommunities } from "@/lib/community-l
 import {
     getCommunityBySlug,
     getMockCommunityBySlug,
+    getCommunitySocialPreviewImage,
     listCommunities,
     mergeCommunities,
     mockCommunities,
@@ -99,13 +100,15 @@ export async function generateMetadata({
         return { title: "Community Not Found | Only Workshops" };
     }
 
+    const socialPreviewImage = getCommunitySocialPreviewImage(community.coverImage);
+
     return {
         title: `${community.title} | Only Workshops`,
         description: community.summary,
         openGraph: {
             title: community.title,
             description: community.summary,
-            images: community.coverImage ? [{ url: community.coverImage }] : [],
+            images: [{ url: socialPreviewImage }],
         },
     };
 }

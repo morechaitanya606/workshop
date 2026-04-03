@@ -34,11 +34,11 @@ const EMPTY_STORE: LocalCommunityStore = {
 const STORE_READ_RETRIES = 3;
 const STORE_READ_RETRY_DELAY_MS = 25;
 
-const READ_ONLY_FS_CODES = new Set(["EROFS", "EACCES", "EPERM"]);
+const UNAVAILABLE_LOCAL_STORE_CODES = new Set(["EROFS", "EACCES", "EPERM", "ENOENT"]);
 
-function isReadOnlyFsError(error: unknown): boolean {
+function isUnavailableLocalStoreError(error: unknown): boolean {
     const code = (error as NodeJS.ErrnoException)?.code;
-    return typeof code === "string" && READ_ONLY_FS_CODES.has(code);
+    return typeof code === "string" && UNAVAILABLE_LOCAL_STORE_CODES.has(code);
 }
 
 function delay(ms: number) {
@@ -49,14 +49,14 @@ async function ensureStoreFile(): Promise<boolean> {
     try {
         await mkdir(DATA_DIR, { recursive: true });
     } catch (error) {
-        if (isReadOnlyFsError(error)) return false;
+        if (isUnavailableLocalStoreError(error)) return false;
         throw error;
     }
 
     try {
         await readFile(DATA_FILE, "utf8");
     } catch (error) {
-        if (isReadOnlyFsError(error)) return false;
+        if (isUnavailableLocalStoreError(error)) return false;
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
             throw error;
         }
@@ -64,7 +64,7 @@ async function ensureStoreFile(): Promise<boolean> {
         try {
             await writeFile(DATA_FILE, JSON.stringify(EMPTY_STORE, null, 2), "utf8");
         } catch (writeError) {
-            if (isReadOnlyFsError(writeError)) return false;
+            if (isUnavailableLocalStoreError(writeError)) return false;
             throw writeError;
         }
     }
@@ -94,7 +94,7 @@ async function readStore(): Promise<LocalCommunityStore> {
                 joinRequests: Array.isArray(parsed.joinRequests) ? parsed.joinRequests : [],
             };
         } catch (error) {
-            if (isReadOnlyFsError(error) || (error as NodeJS.ErrnoException).code === "ENOENT") {
+            if (isUnavailableLocalStoreError(error)) {
                 return { ...EMPTY_STORE };
             }
 
@@ -119,7 +119,7 @@ async function writeStore(store: LocalCommunityStore) {
     try {
         await mkdir(DATA_DIR, { recursive: true });
     } catch (error) {
-        if (isReadOnlyFsError(error)) return;
+        if (isUnavailableLocalStoreError(error)) return;
         throw error;
     }
 
@@ -129,7 +129,7 @@ async function writeStore(store: LocalCommunityStore) {
         await writeFile(tempFile, JSON.stringify(store, null, 2), "utf8");
         await rename(tempFile, DATA_FILE);
     } catch (error) {
-        if (isReadOnlyFsError(error)) return;
+        if (isUnavailableLocalStoreError(error)) return;
         throw error;
     } finally {
         await rm(tempFile, { force: true }).catch(() => undefined);

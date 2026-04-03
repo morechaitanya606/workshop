@@ -118,10 +118,21 @@ export const mockCommunities: Community[] = [
     },
 ];
 
+const DEFAULT_COMMUNITY_SOCIAL_PREVIEW_IMAGE = "/images/og-default.jpg";
+
 function normalizeOptionalUrl(value: unknown) {
     if (typeof value !== "string") return null;
     const trimmed = value.trim();
     return trimmed ? trimmed : null;
+}
+
+function isHttpUrl(value: string) {
+    try {
+        const parsed = new URL(value);
+        return parsed.protocol === "http:" || parsed.protocol === "https:";
+    } catch {
+        return false;
+    }
 }
 
 export function mapCommunityRowToCommunity(row: Tables<"communities">): Community {
@@ -163,6 +174,15 @@ export function normalizeCommunitySlug(slug: string) {
     } catch {
         return trimmedSlug.toLowerCase();
     }
+}
+
+export function getCommunitySocialPreviewImage(coverImage: string | null) {
+    const normalizedCoverImage = normalizeOptionalUrl(coverImage);
+    if (normalizedCoverImage && isHttpUrl(normalizedCoverImage)) {
+        return normalizedCoverImage;
+    }
+
+    return DEFAULT_COMMUNITY_SOCIAL_PREVIEW_IMAGE;
 }
 
 export async function generateUniqueCommunitySlug(
