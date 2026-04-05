@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useReducedMotion } from "framer-motion";
 import { Info } from "lucide-react";
-import Navbar from "@/components/Navbar";
+
 import Footer from "@/components/Footer";
 import HeroSection from "@/components/home/HeroSection";
 import WorkshopGridSection from "@/components/home/WorkshopGridSection";
@@ -163,8 +163,6 @@ export default function HomePageClient({
 
     return (
         <div className="min-h-screen">
-            <Navbar />
-
             {source === "mock" && (
                 <div className="section-padding pt-24 sm:pt-28 pb-0">
                     <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-inter text-amber-900">

@@ -39,7 +39,7 @@ const config: Config = {
                     DEFAULT: "#000000",
                     text: "#1F1F1F",
                     secondary: "#4A4A4A",
-                    muted: "#7A7A7A",
+                    muted: "#666666",
                 },
                 /**
                  * Additional semantic colors used in profile/admin screens.

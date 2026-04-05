@@ -22,6 +22,11 @@ interface WorkshopCardProps {
 const favoritesCache = new Map<string, string[]>();
 const favoritesRequests = new Map<string, Promise<string[]>>();
 
+export function clearFavoritesCache() {
+    favoritesCache.clear();
+    favoritesRequests.clear();
+}
+
 async function getCachedFavorites(accessToken: string) {
     if (favoritesCache.has(accessToken)) {
         return favoritesCache.get(accessToken)!;
@@ -235,31 +240,25 @@ export default function WorkshopCard({
                 onBlur={() => setIsHovered(false)}
             >
                 <div
-                    className={`card-workshop light-sweep hover-lift active:scale-[0.97]${isPastWorkshop ? " card-workshop-past" : ""}`}
+                    className={`card-workshop light-sweep hover-lift active:scale-[0.97] flex flex-row sm:flex-col ${isPastWorkshop ? " card-workshop-past" : ""}`}
                     onMouseEnter={() => setIsHovered(true)}
                     onMouseLeave={() => setIsHovered(false)}
                 >
                     {/* Image */}
                     <div
-                        className={`relative overflow-hidden aspect-[4/3] bg-cream-100 ${!imageLoaded ? "animate-pulse" : ""}`}
+                        className={`relative overflow-hidden w-2/5 sm:w-full shrink-0 aspect-square sm:aspect-[4/3] bg-cream-100 ${!imageLoaded ? "animate-pulse" : ""}`}
                     >
-                        {imagePool.map((src, idx) => {
-                            const isActive = (isHovered ? imageIndex : 0) === idx;
-                            return (
-                                <Image
-                                    key={src}
-                                    src={src}
-                                    alt={`${workshop.category} workshop: ${workshop.title}`}
-                                    fill
-                                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                                    className={`object-cover transition-all duration-500 ease-in-out image-hover-pan ${
-                                        isActive ? "opacity-100" : "opacity-0"
-                                    } ${!imageLoaded ? "blur-sm scale-105" : "blur-0 scale-100"}`}
-                                    loading={isHovered ? "eager" : "lazy"}
-                                    onLoad={() => setImageLoaded(true)}
-                                />
-                            );
-                        })}
+                        <Image
+                            key={imagePool[isHovered ? imageIndex : 0]} // Force remount on source change to reset loading state if needed, but actually without key it might blink. Let's omit key to allow Next.js to swap it smoothly.
+                            src={imagePool[isHovered ? imageIndex : 0]}
+                            alt={`${workshop.category} workshop: ${workshop.title}`}
+                            fill
+                            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                            className={`object-cover transition-transform duration-700 ease-out ${
+                                isHovered ? "scale-105" : "scale-100"
+                            } ${!imageLoaded ? "blur-sm" : "blur-0"}`}
+                            onLoad={() => setImageLoaded(true)}
+                        />
                         {/* Category Badge - Removed per user request */}
                         {/* Bestseller / New Badge */}
                         {highlightedBadge && (
@@ -317,27 +316,27 @@ export default function WorkshopCard({
                     </div>
 
                     {/* Content */}
-                    <div className="p-4 transition-transform duration-300 group-hover:-translate-y-0.5">
+                    <div className="flex-1 flex flex-col p-3 sm:p-4 min-w-0 transition-transform duration-300 group-hover:-translate-y-0.5">
                         {/* Date & Time */}
-                        <div className="flex items-center gap-1.5 mb-2">
-                            <Calendar className="w-3.5 h-3.5 text-dark-muted" />
-                            <span className="text-xs font-inter text-dark-muted">
+                        <div className="flex items-center gap-1.5 mb-1.5 sm:mb-2">
+                            <Calendar className="w-3 sm:w-3.5 h-3 sm:h-3.5 text-dark-muted shrink-0" />
+                            <span className="text-[10px] sm:text-xs font-inter text-dark-muted truncate">
                                 {formatDate(workshop.date)} &bull; {formatTime(workshop.time)}
                             </span>
                         </div>
 
-                        <h3 className="font-inter text-lg sm:text-xl font-bold text-dark leading-snug mb-1 tracking-tight line-clamp-2 group-hover:text-terracotta transition-colors duration-300">
+                        <h3 className="font-inter text-base sm:text-lg lg:text-xl font-bold text-dark leading-tight sm:leading-snug mb-1 sm:mb-1.5 tracking-tight line-clamp-2 md:line-clamp-2 group-hover:text-terracotta transition-colors duration-300">
                             {workshop.title}
                         </h3>
 
                         {/* Description snippet */}
-                        <p className="text-xs font-inter text-dark-muted leading-relaxed mb-2 line-clamp-1">
+                        <p className="hidden sm:block text-xs font-inter text-dark-muted leading-relaxed mb-2 line-clamp-1">
                             {truncateText(workshop.description, 80)}
                         </p>
 
                         {/* Suitability badges */}
                         {badgeLabels.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 mb-3">
+                            <div className="hidden sm:flex flex-wrap gap-1.5 mb-3">
                                 {badgeLabels.map((label) => (
                                     <span
                                         key={label}
@@ -351,9 +350,9 @@ export default function WorkshopCard({
 
                         {/* Host & Location */}
                         {variant === "default" && (
-                            <div className="flex items-center gap-1.5 mb-3">
+                            <div className="flex items-center gap-1.5 mb-2 sm:mb-3 mt-auto sm:mt-0">
                                 {workshop.hostAvatar ? (
-                                    <div className="relative w-4 h-4 rounded-full overflow-hidden shrink-0 border border-gray-100">
+                                    <div className="hidden sm:block relative w-4 h-4 rounded-full overflow-hidden shrink-0 border border-gray-100">
                                         <Image
                                             src={workshop.hostAvatar}
                                             alt={workshop.hostName}
@@ -363,17 +362,20 @@ export default function WorkshopCard({
                                         />
                                     </div>
                                 ) : (
-                                    <MapPin className="w-3.5 h-3.5 text-dark-muted" />
+                                    <MapPin className="hidden sm:block w-3.5 h-3.5 text-dark-muted shrink-0" />
                                 )}
-                                <span className="text-xs font-inter text-dark-muted truncate">
-                                    {workshop.hostName} &bull; {workshop.location}, {workshop.city}
+                                <span className="text-[10px] sm:text-xs font-inter text-dark-muted truncate">
+                                    <span className="hidden sm:inline">
+                                        {workshop.hostName} &bull;{" "}
+                                    </span>
+                                    {workshop.location}, {workshop.city}
                                 </span>
                             </div>
                         )}
 
                         {/* Bottom Row */}
-                        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                            <div className="flex items-center gap-1.5">
+                        <div className="flex items-center justify-between pt-2 border-t border-gray-100 mt-auto sm:mt-0">
+                            <div className="flex items-center gap-1.5 hidden sm:flex">
                                 {workshop.reviewCount > 0 ? (
                                     <>
                                         <Star className="w-3.5 h-3.5 text-terracotta fill-terracotta" />
@@ -396,13 +398,13 @@ export default function WorkshopCard({
                                     </span>
                                 )}
                             </div>
-                            <span className="text-lg font-inter font-bold text-terracotta">
+                            <span className="text-sm sm:text-lg font-inter font-bold text-terracotta ml-auto">
                                 {formatCurrency(workshop.price)}
                             </span>
                         </div>
 
                         {/* Seats / Status indicator */}
-                        <div className="mt-2">
+                        <div className="hidden sm:block mt-2">
                             {isPastWorkshop ? (
                                 <span className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-inter font-semibold uppercase tracking-wider border bg-gray-100 text-gray-500 border-gray-200">
                                     Event ended

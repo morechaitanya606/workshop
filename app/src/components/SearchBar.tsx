@@ -58,10 +58,14 @@ export default function SearchBar({ selectedCategoryId = "trending" }: SearchBar
                     <div className="flex items-center gap-3 px-4 py-3 sm:border-r border-gray-100">
                         <Search className="w-5 h-5 text-dark-muted flex-shrink-0" />
                         <div className="flex-1">
-                            <label className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-0.5">
+                            <label
+                                htmlFor="search-what"
+                                className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-0.5"
+                            >
                                 What
                             </label>
                             <input
+                                id="search-what"
                                 type="text"
                                 placeholder="Pottery, Jazz, Hiking..."
                                 value={query}
@@ -81,10 +85,14 @@ export default function SearchBar({ selectedCategoryId = "trending" }: SearchBar
                     <div className="flex items-center gap-3 px-4 py-3 sm:border-r border-gray-100">
                         <Calendar className="w-5 h-5 text-dark-muted flex-shrink-0" />
                         <div className="flex-1">
-                            <label className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-0.5">
+                            <label
+                                htmlFor="search-when"
+                                className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-0.5"
+                            >
                                 When
                             </label>
                             <input
+                                id="search-when"
                                 type="date"
                                 placeholder="Pick a date"
                                 value={date}
@@ -98,10 +106,14 @@ export default function SearchBar({ selectedCategoryId = "trending" }: SearchBar
                     <div className="flex items-center gap-3 px-4 py-3">
                         <MapPin className="w-5 h-5 text-dark-muted flex-shrink-0" />
                         <div className="flex-1">
-                            <label className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-0.5">
+                            <label
+                                htmlFor="search-where"
+                                className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-0.5"
+                            >
                                 Where
                             </label>
                             <select
+                                id="search-where"
                                 value={city}
                                 onChange={(e) => setCity(e.target.value)}
                                 className="w-full bg-transparent outline-none text-sm font-inter text-dark appearance-none cursor-pointer focus-visible:outline-none"

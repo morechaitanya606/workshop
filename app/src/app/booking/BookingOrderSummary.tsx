@@ -173,6 +173,7 @@ export default function BookingOrderSummary({
                             <div className="flex gap-2">
                                 <input
                                     type="text"
+                                    aria-label="Discount code"
                                     placeholder="Discount code"
                                     value={couponCode}
                                     onChange={(event) => onCouponCodeChange(event.target.value)}
@@ -214,7 +215,7 @@ export default function BookingOrderSummary({
                     </span>
                 </div>
                 <div className="flex items-center gap-2 bg-cream-100 rounded-xl px-3 py-2.5">
-                    <Users className="w-4 h-4 text-violet-600 flex-shrink-0" />
+                    <Users className="w-4 h-4 text-cyan-600 flex-shrink-0" />
                     <span className="text-xs font-inter text-dark-secondary">
                         1,000+ happy attendees
                     </span>

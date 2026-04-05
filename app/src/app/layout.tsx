@@ -78,12 +78,20 @@ export default function RootLayout({
     return (
         <html lang="en" className={`${playfair.variable} ${inter.variable}`}>
             <body className="min-h-screen bg-cream antialiased">
+                <a
+                    href="#main-content"
+                    className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:rounded-full focus:bg-terracotta focus:px-6 focus:py-3 focus:text-white focus:font-inter focus:font-semibold focus:shadow-lg"
+                >
+                    Skip to content
+                </a>
                 <MotionProvider>
                     <AnalyticsProvider>
                         <ToastProvider>
                             <AuthProvider>
                                 <Navbar />
-                                <main className="flex-1 pb-20 lg:pb-8">{children}</main>
+                                <main id="main-content" className="flex-1 pb-20 lg:pb-8">
+                                    {children}
+                                </main>
                                 <MobileNav />
                                 <SupportChatbot />
                                 <CookieConsentBanner />

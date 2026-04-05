@@ -149,7 +149,7 @@ export default function SocialShareButtons({
             icon: InstagramIcon,
             onClick: handleInstagramShare,
             bgClass:
-                "bg-gradient-to-br from-purple-500/10 to-pink-500/10 hover:from-purple-500/20 hover:to-pink-500/20 text-pink-600",
+                "bg-gradient-to-br from-orange-500/10 to-pink-500/10 hover:from-orange-500/20 hover:to-pink-500/20 text-pink-600",
         },
         {
             label: "Snapchat",

@@ -3,8 +3,19 @@ import { NextResponse } from "next/server";
 import { handleApiError, parseBody } from "@/lib/api-route";
 import { loadSupportChatWorkshops, resolveSupportChatReply } from "@/lib/support-chat";
 import { supportChatRequestSchema } from "@/lib/validators";
+import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
+    const rateLimitResult = await assertRateLimit({
+        key: getRateLimitKey(request, "api-support-chat"),
+        limit: 20,
+        windowMs: 60_000,
+        message: "Too many support messages. Please wait a moment and try again.",
+    });
+    if (!rateLimitResult.ok) {
+        return rateLimitResult.response;
+    }
+
     const parsed = await parseBody(
         request,
         supportChatRequestSchema,

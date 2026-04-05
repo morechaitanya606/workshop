@@ -29,8 +29,8 @@ const STEPS = [
         icon: PartyPopper,
         title: "Experience",
         description: "Show up, create something amazing, and take home memories that last.",
-        gradient: "from-violet-50 to-indigo-50",
-        iconColor: "text-violet-600",
+        gradient: "from-cyan-50 to-blue-50",
+        iconColor: "text-cyan-600",
     },
 ];
 

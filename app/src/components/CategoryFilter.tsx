@@ -53,7 +53,7 @@ export default function CategoryFilter({ onCategoryChange, activeCategory }: Cat
 
     return (
         <div>
-            <div className="flex items-center gap-3 overflow-x-auto px-1 pt-2 pb-3 scrollbar-subtle">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 sm:overflow-x-auto px-1 pt-2 pb-3 scrollbar-subtle">
                 {filterCategories.map((cat) => (
                     <motion.button
                         key={cat.id}
@@ -74,6 +74,7 @@ export default function CategoryFilter({ onCategoryChange, activeCategory }: Cat
                 <div className="mt-3 max-w-xs">
                     <input
                         value={customCategory}
+                        aria-label="Custom category"
                         onChange={(event) => handleCustomCategoryChange(event.target.value)}
                         placeholder="Type a custom category"
                         className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-inter text-dark outline-none"
