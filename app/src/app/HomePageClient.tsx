@@ -14,6 +14,7 @@ import SocialProofSection from "@/components/home/SocialProofSection";
 import PartnersMarquee from "@/components/home/PartnersMarquee";
 import CommunityGallerySection from "@/components/home/CommunityGallerySection";
 import HostCtaSection from "@/components/home/HostCtaSection";
+import SpecialEventBanner from "@/components/home/SpecialEventBanner";
 import ScrollReveal from "@/components/ui/ScrollReveal";
 import { categories, mockWorkshops, PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
@@ -190,6 +191,7 @@ export default function HomePageClient({
             )}
 
             <HeroSection source={source} />
+            <SpecialEventBanner />
             <ScrollReveal>
                 <HowItWorksSection />
             </ScrollReveal>

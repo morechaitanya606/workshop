@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { IndianRupee, Loader2, Plus, Tag, ToggleLeft, ToggleRight } from "lucide-react";
+import {
+    CalendarDays,
+    Gift,
+    IndianRupee,
+    Loader2,
+    Plus,
+    Tag,
+    ToggleLeft,
+    ToggleRight,
+} from "lucide-react";
+
 import AdminShell from "@/components/admin/AdminShell";
 import { Stat } from "@/components/ui";
 import {
@@ -15,6 +25,13 @@ import {
     type PlatformSettings,
 } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { usePlatformSettings } from "@/lib/platform-settings-context";
+import {
+    DEFAULT_SPECIAL_PAGE_SETTINGS,
+    normalizeSpecialPageDate,
+    normalizeSpecialPagePath,
+    resolveSpecialPageSettings,
+} from "@/lib/special-page";
 import { formatCurrency } from "@/lib/utils";
 
 const DEFAULT_SERVICE_FEE = 99;
@@ -30,10 +47,30 @@ type CouponFormState = {
     discount_value: string;
 };
 
+type SpecialPageFormState = {
+    enabled: boolean;
+    path: string;
+    title: string;
+    description: string;
+    badge: string;
+    ctaLabel: string;
+    visibleUntil: string;
+};
+
 const INITIAL_COUPON_FORM: CouponFormState = {
     code: "",
     discount_type: "percentage",
     discount_value: "",
+};
+
+const INITIAL_SPECIAL_PAGE_FORM: SpecialPageFormState = {
+    enabled: DEFAULT_SPECIAL_PAGE_SETTINGS.enabled,
+    path: DEFAULT_SPECIAL_PAGE_SETTINGS.path,
+    title: DEFAULT_SPECIAL_PAGE_SETTINGS.title,
+    description: DEFAULT_SPECIAL_PAGE_SETTINGS.description,
+    badge: DEFAULT_SPECIAL_PAGE_SETTINGS.badge,
+    ctaLabel: DEFAULT_SPECIAL_PAGE_SETTINGS.ctaLabel,
+    visibleUntil: DEFAULT_SPECIAL_PAGE_SETTINGS.visibleUntil,
 };
 
 function normalizeCoupon(coupon: AdminCoupon): CouponRecord {
@@ -46,6 +83,7 @@ function normalizeCoupon(coupon: AdminCoupon): CouponRecord {
 
 export default function AdminSettingsPage() {
     const { session } = useAuth();
+    const { mergeSettings } = usePlatformSettings();
     const [settings, setSettings] = useState<PlatformSettings>({});
     const [coupons, setCoupons] = useState<CouponRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -53,6 +91,8 @@ export default function AdminSettingsPage() {
     const [reloadKey, setReloadKey] = useState(0);
 
     const [feeInput, setFeeInput] = useState(String(DEFAULT_SERVICE_FEE));
+    const [specialPageForm, setSpecialPageForm] =
+        useState<SpecialPageFormState>(INITIAL_SPECIAL_PAGE_FORM);
     const [savingSettings, setSavingSettings] = useState(false);
     const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
 
@@ -80,12 +120,23 @@ export default function AdminSettingsPage() {
 
                 const nextSettings = settingsResult.settings || {};
                 const rawFee = Number(nextSettings.service_fee);
+                const nextSpecialPage = resolveSpecialPageSettings(nextSettings.special_page);
+
                 setSettings(nextSettings);
                 setFeeInput(
                     Number.isFinite(rawFee) && rawFee >= 0
                         ? String(rawFee)
                         : String(DEFAULT_SERVICE_FEE)
                 );
+                setSpecialPageForm({
+                    enabled: nextSpecialPage.enabled,
+                    path: nextSpecialPage.path,
+                    title: nextSpecialPage.title,
+                    description: nextSpecialPage.description,
+                    badge: nextSpecialPage.badge,
+                    ctaLabel: nextSpecialPage.ctaLabel,
+                    visibleUntil: nextSpecialPage.visibleUntil,
+                });
                 setCoupons(
                     Array.isArray(couponsResult.coupons)
                         ? couponsResult.coupons.map(normalizeCoupon)
@@ -125,18 +176,52 @@ export default function AdminSettingsPage() {
             return;
         }
 
+        const title = specialPageForm.title.trim();
+        const description = specialPageForm.description.trim();
+
+        if (!title || !description) {
+            setSettingsMsg("Please add a title and description for the special page.");
+            return;
+        }
+
+        const nextSpecialPage = {
+            enabled: specialPageForm.enabled,
+            path: normalizeSpecialPagePath(specialPageForm.path),
+            title,
+            description,
+            badge: specialPageForm.badge.trim() || DEFAULT_SPECIAL_PAGE_SETTINGS.badge,
+            cta_label: specialPageForm.ctaLabel.trim() || DEFAULT_SPECIAL_PAGE_SETTINGS.ctaLabel,
+            visible_until: normalizeSpecialPageDate(specialPageForm.visibleUntil),
+        };
+
         setSavingSettings(true);
         setSettingsMsg(null);
 
         try {
             await updatePlatformSettings(session.access_token, {
-                settings: { service_fee: fee },
+                settings: {
+                    service_fee: fee,
+                    special_page: nextSpecialPage,
+                },
             });
 
-            setSettings((prev) => ({
-                ...prev,
+            const nextSettings = {
+                ...settings,
                 service_fee: fee,
-            }));
+                special_page: nextSpecialPage,
+            };
+
+            setSettings(nextSettings);
+            mergeSettings(nextSettings);
+            setSpecialPageForm({
+                enabled: nextSpecialPage.enabled,
+                path: nextSpecialPage.path,
+                title: nextSpecialPage.title,
+                description: nextSpecialPage.description,
+                badge: nextSpecialPage.badge,
+                ctaLabel: nextSpecialPage.cta_label,
+                visibleUntil: nextSpecialPage.visible_until,
+            });
             setSettingsMsg("Platform settings updated.");
         } catch (saveError) {
             setSettingsMsg(
@@ -212,6 +297,7 @@ export default function AdminSettingsPage() {
 
     const serviceFee = Number(settings.service_fee ?? DEFAULT_SERVICE_FEE);
     const activeCoupons = coupons.filter((coupon) => coupon.is_active).length;
+    const specialPageStatus = specialPageForm.enabled ? "Active" : "Disabled";
 
     return (
         <AdminShell>
@@ -221,7 +307,8 @@ export default function AdminSettingsPage() {
                 </p>
                 <h1 className="heading-md">Platform Settings</h1>
                 <p className="mt-1 text-body text-dark-muted">
-                    Manage the service fee and platform-wide coupon campaigns.
+                    Manage the service fee, special page promotion, and platform-wide coupon
+                    campaigns.
                 </p>
             </div>
 
@@ -242,40 +329,44 @@ export default function AdminSettingsPage() {
 
             {loading ? (
                 <div className="flex items-center gap-2 text-sm font-inter text-dark-muted">
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     Loading platform settings...
                 </div>
             ) : (
                 <div className="space-y-8">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
                         <Stat
                             label="Service Fee"
                             value={formatCurrency(serviceFee)}
-                            icon={<IndianRupee className="w-5 h-5 text-terracotta" />}
+                            icon={<IndianRupee className="h-5 w-5 text-terracotta" />}
+                        />
+                        <Stat
+                            label="Special Page"
+                            value={specialPageStatus}
+                            icon={<Gift className="h-5 w-5 text-terracotta" />}
                         />
                         <Stat
                             label="Coupon Codes"
                             value={coupons.length}
-                            icon={<Tag className="w-5 h-5 text-terracotta" />}
+                            icon={<Tag className="h-5 w-5 text-terracotta" />}
                         />
                         <Stat
                             label="Active Coupons"
                             value={activeCoupons}
-                            icon={<ToggleRight className="w-5 h-5 text-terracotta" />}
+                            icon={<ToggleRight className="h-5 w-5 text-terracotta" />}
                         />
                     </div>
-
                     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px,1fr]">
-                        <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-soft">
-                            <h2 className="text-lg font-playfair font-bold text-dark">
-                                Service Fee
-                            </h2>
-                            <p className="mt-1 text-sm font-inter text-dark-muted">
-                                Applied to each successful booking across the platform.
-                            </p>
+                        <div className="space-y-6">
+                            <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-soft">
+                                <h2 className="text-lg font-playfair font-bold text-dark">
+                                    Service Fee
+                                </h2>
+                                <p className="mt-1 text-sm font-inter text-dark-muted">
+                                    Applied to each successful booking across the platform.
+                                </p>
 
-                            <div className="mt-6 space-y-4">
-                                <div>
+                                <div className="mt-6">
                                     <label className="mb-2 block text-xs font-inter font-semibold uppercase tracking-wider text-dark-muted">
                                         Fixed Amount (Rupees)
                                     </label>
@@ -291,7 +382,154 @@ export default function AdminSettingsPage() {
                                         />
                                     </div>
                                 </div>
+                            </section>
 
+                            <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-soft">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                        <h2 className="flex items-center gap-2 text-lg font-playfair font-bold text-dark">
+                                            <Gift className="h-5 w-5 text-terracotta" />
+                                            Special Page
+                                        </h2>
+                                        <p className="mt-1 text-sm font-inter text-dark-muted">
+                                            Control the homepage banner and floating surprise box.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setSpecialPageForm((prev) => ({
+                                                ...prev,
+                                                enabled: !prev.enabled,
+                                            }))
+                                        }
+                                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                            specialPageForm.enabled
+                                                ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                        }`}
+                                    >
+                                        {specialPageForm.enabled ? "Enabled" : "Disabled"}
+                                        {specialPageForm.enabled ? (
+                                            <ToggleRight className="h-4 w-4" />
+                                        ) : (
+                                            <ToggleLeft className="h-4 w-4" />
+                                        )}
+                                    </button>
+                                </div>
+
+                                <div className="mt-6 space-y-4">
+                                    <div>
+                                        <label className="mb-1 block text-xs font-inter font-semibold text-dark-muted">
+                                            Page Path
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="/workshop/summer-family-retreat"
+                                            value={specialPageForm.path}
+                                            onChange={(event) =>
+                                                setSpecialPageForm((prev) => ({
+                                                    ...prev,
+                                                    path: event.target.value,
+                                                }))
+                                            }
+                                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="mb-1 block text-xs font-inter font-semibold text-dark-muted">
+                                            Badge Label
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="Special Event"
+                                            value={specialPageForm.badge}
+                                            onChange={(event) =>
+                                                setSpecialPageForm((prev) => ({
+                                                    ...prev,
+                                                    badge: event.target.value,
+                                                }))
+                                            }
+                                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="mb-1 block text-xs font-inter font-semibold text-dark-muted">
+                                            Page Title
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="Summer Family Retreat"
+                                            value={specialPageForm.title}
+                                            onChange={(event) =>
+                                                setSpecialPageForm((prev) => ({
+                                                    ...prev,
+                                                    title: event.target.value,
+                                                }))
+                                            }
+                                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="mb-1 block text-xs font-inter font-semibold text-dark-muted">
+                                            Call To Action
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="Discover More"
+                                            value={specialPageForm.ctaLabel}
+                                            onChange={(event) =>
+                                                setSpecialPageForm((prev) => ({
+                                                    ...prev,
+                                                    ctaLabel: event.target.value,
+                                                }))
+                                            }
+                                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="mb-1 flex items-center gap-1.5 text-xs font-inter font-semibold text-dark-muted">
+                                            <CalendarDays className="h-3.5 w-3.5" />
+                                            Visible Until
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={specialPageForm.visibleUntil}
+                                            onChange={(event) =>
+                                                setSpecialPageForm((prev) => ({
+                                                    ...prev,
+                                                    visibleUntil: event.target.value,
+                                                }))
+                                            }
+                                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="mb-1 block text-xs font-inter font-semibold text-dark-muted">
+                                            Description
+                                        </label>
+                                        <textarea
+                                            rows={4}
+                                            placeholder="Describe the special page that should be promoted on the homepage and in the floating surprise box."
+                                            value={specialPageForm.description}
+                                            onChange={(event) =>
+                                                setSpecialPageForm((prev) => ({
+                                                    ...prev,
+                                                    description: event.target.value,
+                                                }))
+                                            }
+                                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
+                                        />
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-soft">
                                 <button
                                     type="button"
                                     onClick={handleSaveSettings}
@@ -299,14 +537,14 @@ export default function AdminSettingsPage() {
                                     className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     {savingSettings ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <Loader2 className="h-4 w-4 animate-spin" />
                                     ) : null}
-                                    {savingSettings ? "Saving..." : "Save Settings"}
+                                    {savingSettings ? "Saving..." : "Save Platform Settings"}
                                 </button>
 
                                 {settingsMsg && (
                                     <p
-                                        className={`text-sm font-medium ${
+                                        className={`mt-3 text-sm font-medium ${
                                             settingsMsg.toLowerCase().includes("updated")
                                                 ? "text-emerald-600"
                                                 : "text-red-500"
@@ -315,8 +553,8 @@ export default function AdminSettingsPage() {
                                         {settingsMsg}
                                     </p>
                                 )}
-                            </div>
-                        </section>
+                            </section>
+                        </div>
 
                         <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-soft">
                             <div className="mb-6">
@@ -396,9 +634,9 @@ export default function AdminSettingsPage() {
                                         className="btn-secondary !px-4 !py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                         {creatingCoupon ? (
-                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            <Loader2 className="h-4 w-4 animate-spin" />
                                         ) : (
-                                            <Plus className="w-4 h-4" />
+                                            <Plus className="h-4 w-4" />
                                         )}
                                         {creatingCoupon ? "Adding..." : "Add Coupon"}
                                     </button>
