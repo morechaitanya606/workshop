@@ -7,10 +7,6 @@ import {
     isMissingCommunitiesSchemaError,
 } from "@/lib/community-api-errors";
 import { getMockCommunityBySlug } from "@/lib/communities";
-import {
-    createLocalCommunityJoinRequest,
-    getLocalCommunityBySlug,
-} from "@/lib/community-local-store";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { communityJoinSchema } from "@/lib/validators";
@@ -49,16 +45,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
 
     if (!isSupabaseServiceConfigured) {
-        const localCommunity = await getLocalCommunityBySlug(params.slug);
-        if (localCommunity) {
-            await createLocalCommunityJoinRequest(localCommunity, parsed.data);
-            return NextResponse.json({
-                success: true,
-                message: "Your join request has been submitted.",
-            });
-        }
-
-        return jsonError("Community not found.", 404);
+        return jsonError("Backend database connection is not configured.", 503);
     }
 
     const serviceClient = createSupabaseServiceClient();
@@ -74,15 +61,6 @@ export async function POST(request: NextRequest, { params }: Params) {
             throw communityError;
         }
         if (!community) {
-            const localCommunity = await getLocalCommunityBySlug(params.slug);
-            if (localCommunity) {
-                await createLocalCommunityJoinRequest(localCommunity, parsed.data);
-                return NextResponse.json({
-                    success: true,
-                    message: "Your join request has been submitted.",
-                });
-            }
-
             return jsonError("Community not found.", 404);
         }
 
@@ -105,15 +83,6 @@ export async function POST(request: NextRequest, { params }: Params) {
         });
     } catch (error) {
         if (isMissingCommunitiesSchemaError(error)) {
-            const fallbackCommunity = await getLocalCommunityBySlug(params.slug);
-            if (fallbackCommunity) {
-                await createLocalCommunityJoinRequest(fallbackCommunity, parsed.data);
-                return NextResponse.json({
-                    success: true,
-                    message: "Your join request has been submitted.",
-                });
-            }
-
             return NextResponse.json(
                 {
                     error: getCommunitiesSetupIncompleteMessage(),

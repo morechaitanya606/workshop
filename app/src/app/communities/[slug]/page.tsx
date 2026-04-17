@@ -17,7 +17,6 @@ import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 import CommunityListCard from "@/components/communities/CommunityListCard";
 import CommunitySpotlightCard from "@/components/communities/CommunitySpotlightCard";
-import { getLocalCommunityBySlug, listLocalCommunities } from "@/lib/community-local-store";
 import {
     getCommunityBySlug,
     getMockCommunityBySlug,
@@ -35,10 +34,9 @@ export const revalidate = 60;
 
 async function loadCommunity(slug: string) {
     const normalizedSlug = normalizeCommunitySlug(slug);
-    const localCommunity = await getLocalCommunityBySlug(normalizedSlug);
 
     if (!isSupabaseServiceConfigured) {
-        return localCommunity || getMockCommunityBySlug(normalizedSlug);
+        return getMockCommunityBySlug(normalizedSlug);
     }
 
     try {
@@ -46,27 +44,22 @@ async function loadCommunity(slug: string) {
             createSupabaseServiceClient(),
             normalizedSlug
         );
-        return liveCommunity || localCommunity || getMockCommunityBySlug(normalizedSlug);
+        return liveCommunity || getMockCommunityBySlug(normalizedSlug);
     } catch {
-        return localCommunity || getMockCommunityBySlug(normalizedSlug);
+        return getMockCommunityBySlug(normalizedSlug);
     }
 }
 
 async function loadSimilarCommunities(current: Community, limit = 4): Promise<Community[]> {
-    const localCommunities = await listLocalCommunities(24);
-
     let allCommunities: Community[];
     if (!isSupabaseServiceConfigured) {
-        allCommunities = mergeCommunities(localCommunities, mockCommunities);
+        allCommunities = mockCommunities;
     } else {
         try {
             const liveCommunities = await listCommunities(createSupabaseServiceClient(), 24);
-            allCommunities = mergeCommunities(
-                mergeCommunities(liveCommunities, localCommunities),
-                mockCommunities
-            );
+            allCommunities = mergeCommunities(liveCommunities, mockCommunities);
         } catch {
-            allCommunities = mergeCommunities(localCommunities, mockCommunities);
+            allCommunities = mockCommunities;
         }
     }
 

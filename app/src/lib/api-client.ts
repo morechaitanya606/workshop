@@ -1,4 +1,5 @@
 import type { Workshop } from "@/lib/data";
+import type { SpecialPageSettings } from "@/lib/special-page";
 import type {
     CommunityCreateInput,
     CommunityJoinInput,
@@ -448,6 +449,7 @@ export function toApiErrorMessage(error: unknown, fallbackMessage: string) {
 
 export type PlatformSettings = {
     service_fee?: number;
+    special_page?: SpecialPageSettings;
 };
 
 export type PlatformSettingsResponse = {

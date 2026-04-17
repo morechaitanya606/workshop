@@ -12,10 +12,6 @@ import {
     getCommunitiesSetupIncompleteMessage,
     isMissingCommunitiesSchemaError,
 } from "@/lib/community-api-errors";
-import {
-    createLocalCommunity,
-    generateUniqueLocalCommunitySlug,
-} from "@/lib/community-local-store";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { communityCreateSchema } from "@/lib/validators";
 
@@ -40,23 +36,10 @@ export async function POST(request: NextRequest) {
         return parsed.response;
     }
 
-    const localSlug = await generateUniqueLocalCommunitySlug(parsed.data.title);
-
-    const revalidateCommunityPages = (slug: string) => {
-        revalidatePath("/communities");
-        revalidatePath(`/communities/${slug}`);
-    };
-
     if (!isSupabaseServiceConfigured) {
-        const community = await createLocalCommunity(parsed.data, localSlug);
-        revalidateCommunityPages(community.slug);
-
         return NextResponse.json(
-            {
-                community,
-                message: "Community page created successfully.",
-            },
-            { status: 201 }
+            { error: getCommunitiesSetupIncompleteMessage() },
+            { status: 400 }
         );
     }
 
@@ -75,7 +58,8 @@ export async function POST(request: NextRequest) {
             throw error;
         }
 
-        revalidateCommunityPages(slug);
+        revalidatePath("/communities");
+        revalidatePath(`/communities/${slug}`);
 
         return NextResponse.json(
             {
@@ -86,15 +70,12 @@ export async function POST(request: NextRequest) {
         );
     } catch (error) {
         if (isMissingCommunitiesSchemaError(error)) {
-            const community = await createLocalCommunity(parsed.data, localSlug);
-            revalidateCommunityPages(community.slug);
-
             return NextResponse.json(
                 {
-                    community,
-                    message: getCommunitiesSetupIncompleteMessage(),
+                    error: getCommunitiesSetupIncompleteMessage(),
+                    ok: false,
                 },
-                { status: 201 }
+                { status: 400 }
             );
         }
 

@@ -1,11 +1,19 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
+import { usePathname } from "next/navigation";
+
+import { usePlatformSettings } from "@/lib/platform-settings-context";
+import { isSpecialPagePath } from "@/lib/special-page";
 
 export default function Template({ children }: { children: React.ReactNode }) {
     const prefersReducedMotion = Boolean(useReducedMotion());
+    const pathname = usePathname();
+    const { settings } = usePlatformSettings();
+    const shouldBypassAnimation =
+        prefersReducedMotion || isSpecialPagePath(pathname, settings.special_page);
 
-    if (prefersReducedMotion) {
+    if (shouldBypassAnimation) {
         return <>{children}</>;
     }
 

@@ -1,7 +1,18 @@
 import { BriefcaseBusiness } from "lucide-react";
 import StaticPage from "@/components/StaticPage";
+import { Metadata } from "next";
 import CareersApplicationForm from "./CareersApplicationForm";
 
+export const metadata: Metadata = {
+    title: "Careers | Only Workshops",
+    description:
+        "Join our team at Only Workshops. We are looking for talented creators, storytellers, and marketing talent to shape the future of creative experiences.",
+    openGraph: {
+        title: "Careers | Only Workshops",
+        description:
+            "Join our team at Only Workshops. We are looking for talented creators, storytellers, and marketing talent to shape the future of creative experiences.",
+    },
+};
 const hiringRoles = [
     "Directors",
     "Storytellers",

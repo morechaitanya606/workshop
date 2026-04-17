@@ -9,6 +9,7 @@ import { mapWorkshopRowToWorkshop, queryMockWorkshops } from "@/lib/workshop-uti
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
 import { normalizeFilterCategoryLabel, PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
+import type { SpecialPageSettings } from "@/lib/special-page";
 
 export type WorkshopPageSource = "supabase" | "mock" | "error";
 
@@ -323,6 +324,7 @@ export type PlatformSettingsType = {
         discount_value: number;
         days_before: number;
     };
+    special_page?: SpecialPageSettings;
 };
 
 export async function getPlatformSettings(): Promise<PlatformSettingsType> {

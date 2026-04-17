@@ -2,8 +2,6 @@
 
 import { useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 
 export default function ExploreError({
     error,
@@ -22,20 +20,16 @@ export default function ExploreError({
     }, [error]);
 
     return (
-        <main className="min-h-screen bg-cream pb-20 md:pb-0">
-            <Navbar />
-            <section className="section-padding pt-32 pb-20">
-                <div className="mx-auto max-w-2xl rounded-[2rem] border border-red-200 bg-white p-8 text-center shadow-soft sm:p-12">
-                    <h1 className="heading-md">Explore is taking a breather</h1>
-                    <p className="mt-4 text-body text-dark-muted">
-                        We could not load workshops right now. Please try the search again.
-                    </p>
-                    <button onClick={reset} className="btn-primary mt-8">
-                        Try again
-                    </button>
-                </div>
-            </section>
-            <Footer />
-        </main>
+        <section className="section-padding pt-32 pb-20">
+            <div className="mx-auto max-w-2xl rounded-[2rem] border border-red-200 bg-white p-8 text-center shadow-soft sm:p-12">
+                <h1 className="heading-md">Explore is taking a breather</h1>
+                <p className="mt-4 text-body text-dark-muted">
+                    We could not load workshops right now. Please try the search again.
+                </p>
+                <button onClick={reset} className="btn-primary mt-8">
+                    Try again
+                </button>
+            </div>
+        </section>
     );
 }

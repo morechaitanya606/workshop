@@ -109,11 +109,58 @@ export default async function WorkshopDetailPage({ params }: { params: { id: str
 
     const similarWorkshops = await getSimilarWorkshops(workshop);
     const platformSettings = await getPlatformSettings();
+
+    const jsonLd = {
+        "@context": "https://schema.org",
+        "@type": "Event",
+        name: workshop.title,
+        description: workshop.description.substring(0, 300),
+        startDate: `${workshop.date}T${workshop.time || "10:00"}`,
+        location: {
+            "@type": "Place",
+            name: workshop.location,
+            address: {
+                "@type": "PostalAddress",
+                addressLocality: workshop.city,
+            },
+        },
+        image: workshop.coverImage,
+        organizer: {
+            "@type": "Organization",
+            name: workshop.hostName,
+        },
+        offers: {
+            "@type": "Offer",
+            price: workshop.price,
+            priceCurrency: "INR",
+            availability:
+                workshop.seatsRemaining > 0
+                    ? "https://schema.org/InStock"
+                    : "https://schema.org/SoldOut",
+            url: `${process.env.NEXT_PUBLIC_APP_URL || "https://onlyworkshops.com"}/workshop/${workshop.id}`,
+        },
+        ...(workshop.rating > 0 && workshop.reviewCount > 0
+            ? {
+                  aggregateRating: {
+                      "@type": "AggregateRating",
+                      ratingValue: workshop.rating,
+                      reviewCount: workshop.reviewCount,
+                  },
+              }
+            : {}),
+    };
+
     return (
-        <WorkshopClient
-            workshop={workshop}
-            similarWorkshops={similarWorkshops}
-            platformSettings={platformSettings}
-        />
+        <>
+            <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+            />
+            <WorkshopClient
+                workshop={workshop}
+                similarWorkshops={similarWorkshops}
+                platformSettings={platformSettings}
+            />
+        </>
     );
 }

@@ -108,6 +108,7 @@ export default function ExploreToolbarSection({
                     <Search className="w-5 h-5 text-dark-muted flex-shrink-0" />
                     <input
                         type="text"
+                        aria-label="Search query"
                         placeholder="Search workshops, artists, or locations..."
                         value={searchQuery}
                         onChange={(event) => onSearchQueryChange(event.target.value)}
@@ -145,6 +146,7 @@ export default function ExploreToolbarSection({
                     </button>
 
                     <select
+                        aria-label="Sort workshops by"
                         value={sort}
                         onChange={(event) => onSortChange(event.target.value as SortOption)}
                         className="bg-white border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"

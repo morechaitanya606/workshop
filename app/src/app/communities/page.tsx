@@ -5,7 +5,6 @@ import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 import CommunityListCard from "@/components/communities/CommunityListCard";
 import CommunitySpotlightCard from "@/components/communities/CommunitySpotlightCard";
-import { listLocalCommunities } from "@/lib/community-local-store";
 import {
     listCommunities,
     mergeCommunities,
@@ -24,20 +23,15 @@ export const dynamic = "force-dynamic";
 export const revalidate = 60;
 
 async function loadPublicCommunities() {
-    const localCommunities = await listLocalCommunities(24);
-
     if (!isSupabaseServiceConfigured) {
-        return mergeCommunities(localCommunities, mockCommunities);
+        return mockCommunities;
     }
 
     try {
         const liveCommunities = await listCommunities(createSupabaseServiceClient(), 24);
-        return mergeCommunities(
-            mergeCommunities(liveCommunities, localCommunities),
-            mockCommunities
-        );
+        return mergeCommunities(liveCommunities, mockCommunities);
     } catch {
-        return mergeCommunities(localCommunities, mockCommunities);
+        return mockCommunities;
     }
 }
 

@@ -2059,7 +2059,7 @@ export default function WorkshopClient({
                                                 </button>
                                             </div>
                                             {workshop.maxSeats >= 6 && (
-                                                <p className="mt-2 text-xs font-inter text-dark-muted bg-violet-50 border border-violet-100 rounded-lg px-3 py-2">
+                                                <p className="mt-2 text-xs font-inter text-dark-muted bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
                                                     🎉 Great for groups! Bring 3+ friends for a
                                                     memorable weekend.
                                                 </p>

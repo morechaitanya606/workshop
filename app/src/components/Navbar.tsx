@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -19,6 +19,64 @@ const SUGGESTIONS = [
     "Jazz Event",
     "Baking Masterclass",
 ];
+
+const FOCUSABLE_SELECTOR =
+    'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function MobileMenuPanel({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+    const panelRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const panel = panelRef.current;
+        if (!panel) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                onClose();
+                return;
+            }
+
+            if (e.key !== "Tab") return;
+
+            const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+            if (focusable.length === 0) return;
+
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        };
+
+        document.addEventListener("keydown", handleKeyDown);
+
+        const firstFocusable = panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+        firstFocusable?.focus();
+
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [onClose]);
+
+    return (
+        <motion.div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation menu"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="fixed inset-0 z-40 bg-cream pt-24 px-6 md:hidden"
+        >
+            {children}
+        </motion.div>
+    );
+}
 
 export default function Navbar() {
     const router = useRouter();
@@ -128,6 +186,10 @@ export default function Navbar() {
                                 type="text"
                                 placeholder="Search experiences..."
                                 aria-label="Search workshops"
+                                role="combobox"
+                                aria-expanded={showSuggestions && filteredSuggestions.length > 0}
+                                aria-controls="search-suggestions"
+                                aria-autocomplete="list"
                                 value={query}
                                 onFocus={() => setShowSuggestions(true)}
                                 onChange={(e) => setQuery(e.target.value)}
@@ -141,7 +203,11 @@ export default function Navbar() {
                                 className="flex-1 w-full bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted"
                             />
                             {showSuggestions && filteredSuggestions.length > 0 && (
-                                <div className="absolute top-[100%] mt-2 left-0 w-full bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50 max-h-56 overflow-y-auto">
+                                <div
+                                    id="search-suggestions"
+                                    role="listbox"
+                                    className="absolute top-[100%] mt-2 left-0 w-full bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50 max-h-56 overflow-y-auto"
+                                >
                                     <div className="px-4 py-1.5 text-xs font-semibold text-dark-muted uppercase tracking-wider mb-1">
                                         Suggestive Experiences
                                     </div>
@@ -149,6 +215,8 @@ export default function Navbar() {
                                         <button
                                             key={idx}
                                             type="button"
+                                            role="option"
+                                            aria-selected={false}
                                             className="w-full text-left px-4 py-2.5 text-sm font-medium text-dark hover:bg-cream-50 hover:text-terracotta transition-colors flex items-center gap-3"
                                             onMouseDown={(e) => e.preventDefault()}
                                             onClick={() => {
@@ -238,13 +306,7 @@ export default function Navbar() {
 
             <AnimatePresence>
                 {isMobileMenuOpen && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3, ease: "easeOut" }}
-                        className="fixed inset-0 z-40 bg-cream pt-24 px-6 md:hidden"
-                    >
+                    <MobileMenuPanel onClose={() => setIsMobileMenuOpen(false)}>
                         {user && (
                             <Link
                                 href="/profile"
@@ -343,7 +405,7 @@ export default function Navbar() {
                                 )}
                             </motion.div>
                         </nav>
-                    </motion.div>
+                    </MobileMenuPanel>
                 )}
             </AnimatePresence>
         </>

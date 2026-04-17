@@ -5,6 +5,8 @@ import { User, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./supabase";
 import { getAuthMe } from "@/lib/api-client";
 
+import { clearFavoritesCache } from "@/components/WorkshopCard";
+
 type UserRole = "admin" | "host" | "user";
 
 interface AuthContextType {
@@ -148,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const signOut = async () => {
         if (!isSupabaseConfigured) return;
+        clearFavoritesCache();
         await supabase.auth.signOut();
     };
 
