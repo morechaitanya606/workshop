@@ -14,6 +14,7 @@ import { fadeInUp, revealViewport, standardTransition } from "@/lib/motion-prese
 
 interface WorkshopCardProps {
     workshop: Workshop;
+    todayIso: string;
     index?: number;
     variant?: "default" | "compact";
     animateOnScroll?: boolean;
@@ -50,6 +51,7 @@ async function getCachedFavorites(accessToken: string) {
 
 export default function WorkshopCard({
     workshop,
+    todayIso,
     index = 0,
     variant = "default",
     animateOnScroll = true,
@@ -65,12 +67,11 @@ export default function WorkshopCard({
     const [imageLoaded, setImageLoaded] = useState(false);
     const [heartPopping, setHeartPopping] = useState(false);
 
-    const today = new Date().toISOString().slice(0, 10);
     const workshopDateTime = getWorkshopDateTime(workshop.date, workshop.time);
     const now = Date.now();
     const isPastWorkshop = workshopDateTime
         ? workshopDateTime.getTime() < now
-        : workshop.date < today;
+        : workshop.date < todayIso;
 
     const hoursUntil = workshopDateTime
         ? (workshopDateTime.getTime() - now) / (1000 * 60 * 60)

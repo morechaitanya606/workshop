@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,12 @@ export function Dialog({
     children,
     className,
 }: DialogProps) {
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
+
     useEffect(() => {
         if (!open) return;
 
@@ -40,9 +47,9 @@ export function Dialog({
         };
     }, [onOpenChange, open]);
 
-    if (!open) return null;
+    if (!open || !isMounted) return null;
 
-    return (
+    return createPortal(
         <div
             className="fixed inset-0 z-[120] flex items-end justify-center bg-black/60 p-2 sm:items-center sm:p-4"
             onClick={() => onOpenChange(false)}
@@ -74,6 +81,7 @@ export function Dialog({
                 </div>
                 {children}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

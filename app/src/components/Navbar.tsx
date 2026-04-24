@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -78,6 +78,45 @@ function MobileMenuPanel({ onClose, children }: { onClose: () => void; children:
     );
 }
 
+function NavLink({
+    href,
+    pathname,
+    isHomePage,
+    isScrolled,
+    children,
+}: {
+    href: string;
+    pathname: string;
+    isHomePage: boolean;
+    isScrolled: boolean;
+    children: ReactNode;
+}) {
+    const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
+    const isHomeHeroNav = isHomePage && !isScrolled;
+
+    return (
+        <Link
+            href={href}
+            className={`relative inline-flex items-center rounded-full px-3 py-2 text-sm font-inter font-medium transition-all duration-300 ease-out ${
+                isActive
+                    ? "bg-white text-terracotta shadow-[0_12px_24px_-18px_rgba(0,0,0,0.45)]"
+                    : isHomeHeroNav
+                      ? "text-dark hover:-translate-y-0.5 hover:scale-[1.08] hover:bg-terracotta hover:text-white hover:shadow-[0_16px_32px_-18px_rgba(193,104,74,0.75)]"
+                      : "text-dark-secondary hover:bg-terracotta/10 hover:text-terracotta hover:scale-[1.04]"
+            }`}
+        >
+            {children}
+            {isActive && (
+                <motion.div
+                    layoutId="navbar-indicator"
+                    className="absolute bottom-1.5 left-3 right-3 h-0.5 rounded-full bg-terracotta"
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                />
+            )}
+        </Link>
+    );
+}
+
 export default function Navbar() {
     const router = useRouter();
     const [isScrolled, setIsScrolled] = useState(false);
@@ -88,32 +127,6 @@ export default function Navbar() {
     const pathname = usePathname();
     const { user, role, roleLoading, loading, signOut } = useAuth();
     const isHomePage = pathname === "/";
-
-    const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => {
-        const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
-        const isHomeHeroNav = isHomePage && !isScrolled;
-        return (
-            <Link
-                href={href}
-                className={`relative inline-flex items-center rounded-full px-3 py-2 text-sm font-inter font-medium transition-all duration-300 ease-out ${
-                    isActive
-                        ? "bg-white text-terracotta shadow-[0_12px_24px_-18px_rgba(0,0,0,0.45)]"
-                        : isHomeHeroNav
-                          ? "text-dark hover:-translate-y-0.5 hover:scale-[1.08] hover:bg-terracotta hover:text-white hover:shadow-[0_16px_32px_-18px_rgba(193,104,74,0.75)]"
-                          : "text-dark-secondary hover:bg-terracotta/10 hover:text-terracotta hover:scale-[1.04]"
-                }`}
-            >
-                {children}
-                {isActive && (
-                    <motion.div
-                        layoutId="navbar-indicator"
-                        className="absolute bottom-1.5 left-3 right-3 h-0.5 rounded-full bg-terracotta"
-                        transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                    />
-                )}
-            </Link>
-        );
-    };
 
     const filteredSuggestions = query
         ? SUGGESTIONS.filter((s) => s.toLowerCase().includes(query.toLowerCase()))
@@ -236,17 +249,52 @@ export default function Navbar() {
                         </div>
 
                         <nav className="hidden md:flex items-center gap-4">
-                            <NavLink href="/explore">Explore</NavLink>
-                            <NavLink href="/past-events">Past Events</NavLink>
+                            <NavLink
+                                href="/explore"
+                                pathname={pathname}
+                                isHomePage={isHomePage}
+                                isScrolled={isScrolled}
+                            >
+                                Explore
+                            </NavLink>
+                            <NavLink
+                                href="/past-events"
+                                pathname={pathname}
+                                isHomePage={isHomePage}
+                                isScrolled={isScrolled}
+                            >
+                                Past Events
+                            </NavLink>
                             {user && !roleLoading && role === "admin" && (
-                                <NavLink href="/admin/dashboard">Dashboard</NavLink>
+                                <NavLink
+                                    href="/admin/dashboard"
+                                    pathname={pathname}
+                                    isHomePage={isHomePage}
+                                    isScrolled={isScrolled}
+                                >
+                                    Dashboard
+                                </NavLink>
                             )}
                             {user && !roleLoading && role === "host" && (
-                                <NavLink href="/host/dashboard">Host Panel</NavLink>
+                                <NavLink
+                                    href="/host/dashboard"
+                                    pathname={pathname}
+                                    isHomePage={isHomePage}
+                                    isScrolled={isScrolled}
+                                >
+                                    Host Panel
+                                </NavLink>
                             )}
                             {!loading && !user && (
                                 <>
-                                    <NavLink href="/auth/login">Log In</NavLink>
+                                    <NavLink
+                                        href="/auth/login"
+                                        pathname={pathname}
+                                        isHomePage={isHomePage}
+                                        isScrolled={isScrolled}
+                                    >
+                                        Log In
+                                    </NavLink>
                                     <Link
                                         href="/auth/signup"
                                         className="btn-primary !py-2.5 !px-6 text-sm"

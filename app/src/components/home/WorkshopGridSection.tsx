@@ -16,6 +16,7 @@ export default function WorkshopGridSection({
     cardWrapperClassName,
     gridKeyPrefix,
     selectedCategory,
+    todayIso,
     shouldReduceMotion,
     workshops,
     emptyTitle,
@@ -32,6 +33,7 @@ export default function WorkshopGridSection({
     cardWrapperClassName?: string;
     gridKeyPrefix: string;
     selectedCategory: string;
+    todayIso: string;
     shouldReduceMotion: boolean;
     workshops: Workshop[];
     emptyTitle: string;
@@ -76,6 +78,7 @@ export default function WorkshopGridSection({
                                     <WorkshopCard
                                         key={workshop.id}
                                         workshop={workshop}
+                                        todayIso={todayIso}
                                         index={index}
                                         animateOnScroll={false}
                                     />
@@ -85,6 +88,7 @@ export default function WorkshopGridSection({
                                 <div key={workshop.id} className={cardWrapperClassName}>
                                     <WorkshopCard
                                         workshop={workshop}
+                                        todayIso={todayIso}
                                         index={index}
                                         animateOnScroll={false}
                                     />

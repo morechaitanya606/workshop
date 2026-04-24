@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { isKnownMockWorkshopId } from "@/lib/data";
 import { handleApiError } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
-import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 import {
     getFallbackPublicFeedback,
     isMissingFeedbackTableError,
@@ -41,12 +41,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const limit = Number.isFinite(requestedLimit)
         ? Math.min(Math.max(requestedLimit, 1), MAX_LIMIT)
         : DEFAULT_LIMIT;
-
-    const service = requireSupabaseService();
-    if (!service.ok) {
-        if (!allowMockFallback) {
-            return service.response;
-        }
+    const formatFallbackFeedback = () => {
         const fallback = getFallbackPublicFeedback(workshopId);
         return NextResponse.json({
             feedback: fallback.map((record) => {
@@ -62,11 +57,22 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
                 };
             }),
         });
+    };
+
+    const service = requireSupabaseService();
+    if (!service.ok) {
+        if (!allowMockFallback) {
+            return service.response;
+        }
+        return formatFallbackFeedback();
     }
 
     try {
         const serviceClient = service.client;
-        await ensureWorkshopSeededFromMock(serviceClient, workshopId);
+
+        if (allowMockFallback && isKnownMockWorkshopId(workshopId)) {
+            return formatFallbackFeedback();
+        }
 
         const { data, error } = await serviceClient
             .from("workshop_feedback")
@@ -76,21 +82,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
             .limit(limit);
 
         if (isMissingFeedbackTableError(error)) {
-            const fallback = getFallbackPublicFeedback(workshopId);
-            return NextResponse.json({
-                feedback: fallback.map((record) => {
-                    const normalized = toFallbackWorkshopFeedbackResponse(record);
-                    return {
-                        id: `${record.userId}-${record.workshopId}`,
-                        rating: normalized.rating,
-                        comment: normalized.comment,
-                        photos: normalized.photos || [],
-                        createdAt: normalized.created_at,
-                        userDisplayName: "Workshop attendee",
-                        avatarUrl: null,
-                    };
-                }),
-            });
+            return formatFallbackFeedback();
         }
 
         if (error) {

@@ -4,7 +4,6 @@ import { Children } from "react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { RevealGroup, RevealItem } from "@/components/ui";
 import { fadeUp, standardTransition, revealViewport } from "@/lib/motion-presets";
@@ -30,9 +29,8 @@ export default function StaticPage({
     const isCentered = alignment === "center";
 
     return (
-        <main className="min-h-screen bg-cream">
-            <Navbar />
-            <section className="pt-28 pb-16 section-padding">
+        <>
+            <section className="min-h-screen bg-cream pt-28 pb-16 section-padding">
                 <div className="max-w-3xl mx-auto">
                     <motion.div
                         className={cn(isCentered && "text-center")}
@@ -94,6 +92,6 @@ export default function StaticPage({
                 </div>
             </section>
             <Footer />
-        </main>
+        </>
     );
 }

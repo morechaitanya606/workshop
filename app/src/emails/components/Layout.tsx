@@ -11,13 +11,14 @@ import {
     Text,
 } from "@react-email/components";
 import * as React from "react";
+import { getAppUrl } from "@/lib/env";
 
 interface LayoutProps {
     previewText: string;
     children: React.ReactNode;
 }
 
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const baseUrl = getAppUrl();
 
 export function EmailLayout({ previewText, children }: LayoutProps) {
     return (

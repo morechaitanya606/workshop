@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { mockWorkshops } from "@/lib/data";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { handleApiError } from "@/lib/api-route";
-import { ensureWorkshopSeededFromMock, mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
+import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import type { SupabaseServerClient } from "@/lib/supabase-server";
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
 
@@ -37,7 +37,6 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     } else {
         try {
             const serviceClient = service.client;
-            await ensureWorkshopSeededFromMock(serviceClient, workshopId);
             let { data, error } = await loadWorkshopRow(serviceClient, workshopId);
 
             if (error && isMissingApprovalStatusColumnError(error)) {

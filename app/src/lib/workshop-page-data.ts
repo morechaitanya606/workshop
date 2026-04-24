@@ -1,7 +1,6 @@
 import "server-only";
 
 import * as Sentry from "@sentry/core";
-import { unstable_noStore as noStore } from "next/cache";
 import { warnDevFallback } from "@/lib/dev-warnings";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { workshopQuerySchema } from "@/lib/validators";
@@ -192,7 +191,6 @@ export async function loadHomeWorkshops(): Promise<HomeWorkshopsResult> {
     }
 
     if (!allowMockFallback) {
-        noStore();
         return {
             data: [],
             source: "error",
@@ -308,7 +306,6 @@ export async function loadExploreWorkshops(searchParams: {
         });
     }
 
-    noStore();
     return {
         data: [],
         total: 0,

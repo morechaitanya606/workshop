@@ -23,7 +23,7 @@ export const DEFAULT_SPECIAL_PAGE_SETTINGS: ResolvedSpecialPageSettings = {
     path: "/workshop/summer-family-retreat",
     title: "Summer Family Retreat",
     description:
-        "A curated family experience where creativity meets connection. Art, movement, storytelling and bonding for families to celebrate summer together.",
+        "A special outing with your child to experience parenthood while tasting artisanal cheese and watching your child learn to make drone models and cakesicles. Parent and child are welcome.",
     badge: "Special Event",
     ctaLabel: "Discover More",
     visibleUntil: "2026-05-09",

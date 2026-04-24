@@ -5,10 +5,10 @@ import { parseBody } from "@/lib/api-route";
 import type { Tables } from "@/lib/database.types";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { workshopFeedbackSchema } from "@/lib/validators";
-import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import {
     getFallbackFeedback,
+    getFallbackWorkshopInfo,
     isMissingFeedbackTableError,
     saveFallbackFeedback,
     toFallbackWorkshopFeedbackResponse,
@@ -40,11 +40,18 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const serviceClient = service.client;
 
     const workshopId = params.id;
+    const allowMockFallback = process.env.NODE_ENV !== "production";
+    const fallbackWorkshop = allowMockFallback ? getFallbackWorkshopInfo(workshopId) : null;
 
     try {
-        const seeded = await ensureWorkshopSeededFromMock(serviceClient, workshopId);
-        if (!seeded) {
-            return jsonError("Workshop not found.", 404);
+        if (fallbackWorkshop) {
+            const fallbackFeedback = getFallbackFeedback(auth.user.id, workshopId);
+            return NextResponse.json({
+                feedback: fallbackFeedback
+                    ? toFallbackWorkshopFeedbackResponse(fallbackFeedback)
+                    : null,
+                canLeaveFeedback: isWorkshopPast(fallbackWorkshop.date, fallbackWorkshop.time),
+            });
         }
 
         const { data: workshop, error: workshopError } = await serviceClient
@@ -137,11 +144,26 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     const workshopId = params.id;
+    const allowMockFallback = process.env.NODE_ENV !== "production";
+    const fallbackWorkshop = allowMockFallback ? getFallbackWorkshopInfo(workshopId) : null;
 
     try {
-        const seeded = await ensureWorkshopSeededFromMock(serviceClient, workshopId);
-        if (!seeded) {
-            return jsonError("Workshop not found.", 404);
+        if (fallbackWorkshop) {
+            if (!isWorkshopPast(fallbackWorkshop.date, fallbackWorkshop.time)) {
+                return jsonError("Feedback can only be submitted after the event.", 409);
+            }
+
+            const savedFallback = saveFallbackFeedback(auth.user.id, workshopId, {
+                rating: parsed.data.rating ?? null,
+                comment: parsed.data.comment,
+                photos: parsed.data.photos || [],
+                videoUrl: parsed.data.videoUrl || null,
+            });
+
+            return NextResponse.json({
+                feedback: toFallbackWorkshopFeedbackResponse(savedFallback),
+                message: "Thanks for sharing your feedback.",
+            });
         }
 
         const { data: workshop, error: workshopError } = await serviceClient

@@ -13,7 +13,6 @@ import {
     verifyRazorpayOrderSignature,
 } from "@/lib/razorpay-server";
 import type { SupabaseServerClient } from "@/lib/supabase-server";
-import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 import { sendPaymentNotification } from "@/lib/payment-notifications";
 import { BOOKING_CUTOFF_HOURS, isBookingClosedNow } from "@/lib/booking-time";
 import {
@@ -263,8 +262,6 @@ export async function POST(request: NextRequest) {
         Boolean(payload.razorpaySignature);
 
     try {
-        await ensureWorkshopSeededFromMock(serviceClient, payload.workshopId);
-
         const { data: holdData, error: holdError } = await loadHoldWithWorkshop(
             serviceClient,
             payload.holdId,

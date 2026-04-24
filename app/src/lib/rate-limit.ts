@@ -13,6 +13,7 @@ const UPSTASH_RATE_LIMIT_PREFIX = "rate-limit";
 const upstashRedisRestUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
 const upstashRedisRestToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
 const isUpstashRateLimitConfigured = Boolean(upstashRedisRestUrl && upstashRedisRestToken);
+let hasWarnedAboutRateLimitFallback = false;
 
 function getClientAddress(request: NextRequest) {
     const forwardedFor = request.headers.get("x-forwarded-for");
@@ -160,6 +161,12 @@ export async function assertRateLimit({
             state = consumeRateLimitInMemory(key, windowMs);
         }
     } else {
+        if (process.env.NODE_ENV === "production" && !hasWarnedAboutRateLimitFallback) {
+            hasWarnedAboutRateLimitFallback = true;
+            console.warn(
+                "Upstash rate limiting is not configured. Production requests will fall back to per-instance in-memory limits."
+            );
+        }
         state = consumeRateLimitInMemory(key, windowMs);
     }
 

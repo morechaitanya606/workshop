@@ -1,10 +1,36 @@
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 
 const disablePersistentWebpackCache = process.platform === "win32";
+const isProduction = process.env.NODE_ENV === "production";
+
+const baseSecurityHeaders = [
+    {
+        key: "X-Content-Type-Options",
+        value: "nosniff",
+    },
+    {
+        key: "Referrer-Policy",
+        value: "strict-origin-when-cross-origin",
+    },
+    {
+        key: "Permissions-Policy",
+        value: "camera=(), microphone=(), geolocation=()",
+    },
+];
+
+const strictTransportSecurityHeader = isProduction
+    ? [
+          {
+              key: "Strict-Transport-Security",
+              value: "max-age=31536000; includeSubDomains; preload",
+          },
+      ]
+    : [];
 
 /** @type {import('next').NextConfig} */
 const baseConfig = {
     images: {
+        formats: ["image/avif", "image/webp"],
         remotePatterns: [
             {
                 protocol: "https",
@@ -33,8 +59,25 @@ const baseConfig = {
         ],
     },
     // Limit build parallelism for more stable local builds on constrained machines.
-    experimental: {
-        cpus: 1,
+    experimental: isProduction ? undefined : { cpus: 1 },
+    async headers() {
+        return [
+            {
+                source: "/chatbot/embed",
+                headers: [...baseSecurityHeaders, ...strictTransportSecurityHeader],
+            },
+            {
+                source: "/:path((?!chatbot/embed$).*)",
+                headers: [
+                    ...baseSecurityHeaders,
+                    ...strictTransportSecurityHeader,
+                    {
+                        key: "X-Frame-Options",
+                        value: "SAMEORIGIN",
+                    },
+                ],
+            },
+        ];
     },
     webpack: (config) => {
         if (disablePersistentWebpackCache) {
