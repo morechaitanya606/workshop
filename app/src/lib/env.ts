@@ -221,6 +221,10 @@ export function getMissingProductionEnvVars() {
 }
 
 export function assertProductionEnv() {
+    if (process.env.SKIP_ENV_VALIDATION === "true" || process.env.SKIP_ENV_VALIDATION === "1") {
+        return;
+    }
+
     if (process.env.NODE_ENV !== "production") {
         return;
     }

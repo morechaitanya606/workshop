@@ -1,2 +1,0 @@
-Set-Location 'd:\Users\Chait\Pratice\tts\workshop\app'
-npm.cmd run dev 1>> 'd:\Users\Chait\Pratice\tts\workshop\app\.codex-logs\next-dev.out.log' 2>> 'd:\Users\Chait\Pratice\tts\workshop\app\.codex-logs\next-dev.err.log'

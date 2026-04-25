@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
-import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -13,22 +12,13 @@ import {
     MapPin,
     Clock,
     Calendar,
-    Minus,
-    Plus,
-    Shield,
     Tag,
     Check,
     ChevronRight,
     ArrowRight,
-    Share2,
-    Heart,
-    Grid3X3,
-    Play,
     Instagram,
     Youtube,
     Globe,
-    Loader2,
-    X,
 } from "lucide-react";
 import Footer from "@/components/Footer";
 import { useToast } from "@/components/ToastProvider";
@@ -54,16 +44,18 @@ import { BOOKING_CUTOFF_HOURS, getWorkshopDateTime, isBookingClosedNow } from "@
 import { useAuth } from "@/lib/auth-context";
 import { trackEvent } from "@/lib/analytics";
 import {
-    fadeIn,
     fadeInUp,
     quickTransition,
     revealViewport,
-    slideInRight,
     staggerContainer,
     standardTransition,
 } from "@/lib/motion-presets";
-import { isDirectVideoFileUrl } from "@/lib/workshop-media";
 import type { PlatformSettingsType } from "@/lib/workshop-page-data";
+import WorkshopGallery from "./WorkshopGallery";
+import WorkshopBookingSidebar from "./WorkshopBookingSidebar";
+import WorkshopPastEventSidebar from "./WorkshopPastEventSidebar";
+import WorkshopWaitlistModal from "./WorkshopWaitlistModal";
+import WorkshopMobileBookingBar from "./WorkshopMobileBookingBar";
 
 const SocialShareButtons = dynamic(() => import("@/components/SocialShareButtons"), {
     loading: () => (
@@ -205,7 +197,6 @@ export default function WorkshopClient({
     >([]);
     const [publicFeedbackLoading, setPublicFeedbackLoading] = useState(false);
     const [publicFeedbackError, setPublicFeedbackError] = useState<string | null>(null);
-    const videoModalRef = useRef<HTMLDivElement | null>(null);
 
     // Waitlist state
     const [showWaitlistModal, setShowWaitlistModal] = useState(false);
@@ -234,10 +225,10 @@ export default function WorkshopClient({
     const daysUntilWorkshop = Math.ceil(
         (workshopDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24)
     );
-    const isEbEligible = isEbActive && daysUntilWorkshop >= (ebOffer.days_before || 0);
+    const isEbEligible = Boolean(isEbActive && daysUntilWorkshop >= (ebOffer.days_before || 0));
 
     let earlyBirdDiscountPerGuest = 0;
-    if (isEbEligible) {
+    if (isEbEligible && ebOffer) {
         if (ebOffer.discount_type === "percentage") {
             earlyBirdDiscountPerGuest = Math.floor((workshop.price * ebOffer.discount_value) / 100);
         } else {
@@ -284,7 +275,7 @@ export default function WorkshopClient({
                 (item.category === workshop.category || item.city === workshop.city)
         )
         .slice(0, 3);
-    const isDirectVideoFile = isDirectVideoFileUrl(workshop.videoUrl);
+
     const accessToken = session?.access_token ?? null;
     const formattedWorkshopTime = (() => {
         if (!workshop.time) {
@@ -298,7 +289,6 @@ export default function WorkshopClient({
             return workshop.time;
         }
     })();
-    const closeVideoModal = () => setShowVideo(false);
 
     useEffect(() => {
         setIsMounted(true);
@@ -428,7 +418,7 @@ export default function WorkshopClient({
 
         const previousActive = document.activeElement as HTMLElement | null;
         const modalNode = showVideo
-            ? videoModalRef.current
+            ? (document.querySelector('[role="dialog"][aria-label]') as HTMLElement | null)
             : document.getElementById("waitlist-modal");
         if (!modalNode) {
             return;
@@ -887,76 +877,13 @@ export default function WorkshopClient({
                   item.createdAt !== userFeedback.created_at
           )
         : publicFeedback;
-    const mobileBookingBar = !isPastWorkshop ? (
-        <div className="fixed inset-x-0 bottom-16 z-40 md:bottom-0 min-[900px]:hidden">
-            <div className="bg-white/95 backdrop-blur-xl border-t border-clay/30 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] px-4 py-3">
-                <div className="flex items-center justify-between gap-4 max-w-lg mx-auto">
-                    <div className="min-w-0 flex-1">
-                        {isEbEligible && (
-                            <span className="mr-2 text-xs font-inter text-dark-muted line-through">
-                                {formatCurrency(workshop.price)}
-                            </span>
-                        )}
-                        <span className="font-playfair text-lg font-bold text-dark">
-                            {formatCurrency(currentPricePerGuest)}
-                        </span>
-                        <span className="text-xs font-inter text-dark-muted ml-1">/ person</span>
-                        <p className="mt-1 text-[11px] font-inter text-dark-muted">
-                            {formatDate(workshop.date)} &bull; {formattedWorkshopTime}
-                        </p>
-                        <p
-                            className={`mt-1 text-[11px] font-inter ${
-                                isSoldOut || isBookingClosed ? "text-red-700" : "text-emerald-700"
-                            }`}
-                        >
-                            {seatAvailabilityLabel}
-                        </p>
-                    </div>
-                    {isBookingClosed ? (
-                        <button
-                            type="button"
-                            disabled
-                            className="rounded-full bg-gray-100 px-5 py-2.5 text-sm font-inter font-semibold text-dark-muted cursor-not-allowed"
-                        >
-                            Booking Closed
-                        </button>
-                    ) : isSoldOut ? (
-                        <button
-                            onClick={() => setShowWaitlistModal(true)}
-                            className="btn-secondary !py-2.5 !px-6 text-sm"
-                        >
-                            Join Waitlist
-                        </button>
-                    ) : user ? (
-                        <button
-                            onClick={handleBooking}
-                            disabled={bookingLoading}
-                            className="btn-primary shrink-0 !py-2.5 !px-5 text-sm disabled:opacity-60"
-                        >
-                            {bookingLoading ? "Reserving..." : "Reserve Spot"}
-                        </button>
-                    ) : (
-                        <Link
-                            href={loginRedirectHref}
-                            className="btn-primary shrink-0 !py-2.5 !px-5 text-sm"
-                        >
-                            Log in to Reserve
-                        </Link>
-                    )}
-                </div>
-                {holdError && (
-                    <p className="mt-2 text-center text-xs font-inter text-red-600">{holdError}</p>
-                )}
-            </div>
-        </div>
-    ) : null;
 
     return (
         <div className="min-h-full pb-44 min-[900px]:pb-0">
             <div className="pt-20 sm:pt-24">
                 <div className="section-padding mb-4">
                     <motion.nav
-                        variants={prefersReducedMotion ? undefined : fadeIn}
+                        variants={prefersReducedMotion ? undefined : fadeInUp}
                         initial={prefersReducedMotion ? undefined : "hidden"}
                         animate={prefersReducedMotion ? undefined : "visible"}
                         transition={prefersReducedMotion ? { duration: 0 } : quickTransition}
@@ -981,160 +908,16 @@ export default function WorkshopClient({
                     <div className="grid grid-cols-1 items-start gap-8 min-[900px]:grid-cols-[minmax(0,1fr),320px] xl:grid-cols-[minmax(0,1fr),380px] xl:gap-12">
                         {/* ═══ LEFT COLUMN ═══ */}
                         <div>
-                            <motion.div
-                                variants={prefersReducedMotion ? undefined : fadeInUp}
-                                initial={prefersReducedMotion ? undefined : "hidden"}
-                                animate={prefersReducedMotion ? undefined : "visible"}
-                                transition={
-                                    prefersReducedMotion ? { duration: 0 } : standardTransition
-                                }
-                                className="relative"
-                            >
-                                <div className="bg-white/90 rounded-3xl shadow-card border border-white/40 backdrop-blur-sm p-2">
-                                    <div className="grid grid-cols-1 sm:grid-cols-[2fr,1fr] gap-2 rounded-2xl overflow-hidden">
-                                        <div className="relative aspect-[4/3] sm:aspect-auto sm:row-span-2 ring-1 ring-white/50">
-                                            <Image
-                                                src={workshop.galleryImages[activeImage]}
-                                                alt={workshop.title}
-                                                fill
-                                                priority
-                                                className="object-cover"
-                                                sizes="(max-width: 1024px) 100vw, 60vw"
-                                            />
-                                            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/35 via-black/10 to-transparent" />
-                                            {workshop.isBestseller && (
-                                                <div className="absolute top-4 left-4 bg-terracotta text-white text-xs font-inter font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg">
-                                                    Bestseller
-                                                </div>
-                                            )}
-                                            {workshop.videoUrl && (
-                                                <button
-                                                    onClick={() => setShowVideo(true)}
-                                                    className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm text-dark text-xs font-inter font-semibold px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-white transition-colors shadow-soft"
-                                                >
-                                                    <Play className="w-4 h-4 text-terracotta fill-terracotta" />{" "}
-                                                    Watch Video
-                                                </button>
-                                            )}
-                                        </div>
-                                        {workshop.galleryImages.slice(1, 3).map((img, i) => {
-                                            const thumbIndex = i + 1;
-                                            const isActive = activeImage === thumbIndex;
-                                            return (
-                                                <div
-                                                    key={i}
-                                                    className={`hidden sm:block cursor-pointer rounded-xl bg-cream-100 border border-clay/40 p-1 transition-all ${
-                                                        isActive
-                                                            ? "ring-2 ring-terracotta/50"
-                                                            : "hover:ring-2 hover:ring-terracotta/30"
-                                                    }`}
-                                                    onClick={() => setActiveImage(thumbIndex)}
-                                                >
-                                                    <div className="relative aspect-[4/3] overflow-hidden rounded-lg">
-                                                        <Image
-                                                            src={img}
-                                                            alt={`${workshop.title} ${i + 2}`}
-                                                            fill
-                                                            className="object-cover hover:opacity-90 transition-opacity"
-                                                            sizes="20vw"
-                                                            loading="lazy"
-                                                        />
-                                                        {i === 1 && (
-                                                            <button className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-sm text-dark text-xs font-inter font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-white transition-colors">
-                                                                <Grid3X3 className="w-3.5 h-3.5" />{" "}
-                                                                View All
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                                <div className="absolute top-4 right-4 flex gap-2 sm:hidden">
-                                    <button
-                                        type="button"
-                                        aria-label="Share workshop"
-                                        className="p-2.5 bg-white/90 backdrop-blur-sm rounded-full shadow-soft"
-                                    >
-                                        <Share2 className="w-4 h-4 text-dark" />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleToggleFavorite}
-                                        disabled={favoriteLoading}
-                                        aria-label={
-                                            isSaved ? "Remove from wishlist" : "Save to wishlist"
-                                        }
-                                        aria-pressed={isSaved}
-                                        className="p-2.5 bg-white/90 backdrop-blur-sm rounded-full shadow-soft disabled:opacity-60"
-                                    >
-                                        <Heart
-                                            className={`w-4 h-4 ${isSaved ? "text-terracotta fill-terracotta" : "text-dark"}`}
-                                        />
-                                    </button>
-                                </div>
-                            </motion.div>
-
-                            {showVideo && workshop.videoUrl && (
-                                <motion.div
-                                    variants={prefersReducedMotion ? undefined : fadeIn}
-                                    initial={prefersReducedMotion ? undefined : "hidden"}
-                                    animate={prefersReducedMotion ? undefined : "visible"}
-                                    transition={
-                                        prefersReducedMotion ? { duration: 0 } : quickTransition
-                                    }
-                                    className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4"
-                                    onClick={closeVideoModal}
-                                >
-                                    <motion.div
-                                        initial={
-                                            prefersReducedMotion
-                                                ? undefined
-                                                : { opacity: 0, scale: 0.9 }
-                                        }
-                                        animate={
-                                            prefersReducedMotion
-                                                ? undefined
-                                                : { opacity: 1, scale: 1 }
-                                        }
-                                        transition={
-                                            prefersReducedMotion ? { duration: 0 } : quickTransition
-                                        }
-                                        className="relative w-full max-w-4xl aspect-video rounded-2xl overflow-hidden"
-                                        onClick={(e) => e.stopPropagation()}
-                                        role="dialog"
-                                        aria-modal="true"
-                                        aria-label={`${workshop.title} video preview`}
-                                        tabIndex={-1}
-                                        ref={videoModalRef}
-                                    >
-                                        {isDirectVideoFile ? (
-                                            <video
-                                                src={workshop.videoUrl}
-                                                className="w-full h-full bg-black"
-                                                controls
-                                                autoPlay
-                                            />
-                                        ) : (
-                                            <iframe
-                                                src={workshop.videoUrl}
-                                                title={`${workshop.title} video`}
-                                                className="w-full h-full"
-                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                                allowFullScreen
-                                            />
-                                        )}
-                                        <button
-                                            onClick={closeVideoModal}
-                                            className="absolute -top-12 right-0 text-white text-sm font-inter hover:text-terracotta transition-colors"
-                                            aria-label="Close video"
-                                        >
-                                            Close X
-                                        </button>
-                                    </motion.div>
-                                </motion.div>
-                            )}
+                            <WorkshopGallery
+                                workshop={workshop}
+                                activeImage={activeImage}
+                                setActiveImage={setActiveImage}
+                                showVideo={showVideo}
+                                setShowVideo={setShowVideo}
+                                isSaved={isSaved}
+                                favoriteLoading={favoriteLoading}
+                                onToggleFavorite={handleToggleFavorite}
+                            />
 
                             <motion.div
                                 variants={prefersReducedMotion ? undefined : fadeInUp}
@@ -1698,548 +1481,82 @@ export default function WorkshopClient({
                         {/* ═══ RIGHT COLUMN - BOOKING SIDEBAR ═══ */}
                         <div className="hidden min-[900px]:block min-[900px]:self-start">
                             {isPastWorkshop ? (
-                                <motion.div
-                                    variants={prefersReducedMotion ? undefined : slideInRight}
-                                    initial={prefersReducedMotion ? undefined : "hidden"}
-                                    animate={prefersReducedMotion ? undefined : "visible"}
-                                    transition={
-                                        prefersReducedMotion
-                                            ? { duration: 0 }
-                                            : { ...standardTransition, delay: 0.3 }
-                                    }
-                                    className="min-[900px]:sticky min-[900px]:top-28 min-[900px]:max-h-[calc(100vh-8rem)] min-[900px]:overflow-y-auto bg-white rounded-2xl shadow-card p-6 border border-clay/50"
-                                >
-                                    <div className="inline-flex items-center gap-2 bg-terracotta/10 text-terracotta text-xs font-inter font-bold uppercase tracking-wider px-3 py-1.5 rounded-full mb-4">
-                                        Past Event
-                                    </div>
-                                    <p className="text-sm font-inter text-dark-muted mb-5">
-                                        {formatDate(workshop.date)} &bull; {formattedWorkshopTime}{" "}
-                                        &bull; {workshop.location}, {workshop.city}
-                                    </p>
-
-                                    <div className="bg-cream-100 rounded-2xl p-4 border border-clay/40 mb-5">
-                                        <p className="text-[11px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                            Attendee Feedback
-                                        </p>
-                                        <p className="text-sm font-inter text-dark-secondary leading-relaxed">
-                                            &ldquo;
-                                            {workshop.feedbackHighlight ||
-                                                `Rated ${workshop.rating}/5 from ${workshop.reviewCount} reviews.`}
-                                            &rdquo;
-                                        </p>
-                                        <p className="text-xs font-inter text-dark-muted mt-2">
-                                            {workshop.feedbackAuthor ||
-                                                `${workshop.reviewCount} verified reviews`}
-                                        </p>
-                                    </div>
-
-                                    <div className="space-y-3">
-                                        <button
-                                            onClick={() => handlePastNotify("similar")}
-                                            disabled={notifyLoadingMode !== null}
-                                            className={`w-full inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-inter font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${notifyState.similar ? "bg-emerald-100 text-emerald-700 border border-emerald-300" : "bg-terracotta text-white hover:bg-terracotta-600"}`}
-                                        >
-                                            <BellRing className="w-4 h-4" />
-                                            {notifyLoadingMode === "similar"
-                                                ? "Saving..."
-                                                : notifyState.similar
-                                                  ? "Similar Event Alerts On"
-                                                  : "Notify Similar Event"}
-                                        </button>
-                                        <button
-                                            onClick={() => handlePastNotify("creator")}
-                                            disabled={notifyLoadingMode !== null}
-                                            className={`w-full inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-inter font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${notifyState.creator ? "bg-emerald-100 text-emerald-700 border border-emerald-300" : "bg-white text-dark-secondary border border-gray-200 hover:border-terracotta hover:text-terracotta"}`}
-                                        >
-                                            <BellRing className="w-4 h-4" />
-                                            {notifyLoadingMode === "creator"
-                                                ? "Saving..."
-                                                : notifyState.creator
-                                                  ? "Creator Alerts On"
-                                                  : "Notify Creator Event"}
-                                        </button>
-                                    </div>
-                                    {notifyMessage && (
-                                        <p className="mt-4 text-xs font-inter text-emerald-700">
-                                            {notifyMessage}
-                                        </p>
-                                    )}
-                                    {notifyError && (
-                                        <p className="mt-2 text-xs font-inter text-red-600">
-                                            {notifyError}
-                                        </p>
-                                    )}
-
-                                    {userFeedback && !isEditingFeedback && (
-                                        <div className="mt-6 pt-5 border-t border-dashed border-clay/50">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <p className="text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted">
-                                                    Your Feedback
-                                                </p>
-                                                <button
-                                                    type="button"
-                                                    onClick={handleStartFeedbackEdit}
-                                                    className="text-xs font-inter font-semibold text-terracotta hover:text-terracotta-700 transition-colors"
-                                                >
-                                                    Edit
-                                                </button>
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                {Array.from({ length: 5 }).map((_, index) => (
-                                                    <Star
-                                                        key={index}
-                                                        className={`w-4 h-4 ${
-                                                            index < (userFeedback.rating ?? 0)
-                                                                ? "text-terracotta fill-terracotta"
-                                                                : "text-dark-muted/40"
-                                                        }`}
-                                                    />
-                                                ))}
-                                                <span className="text-xs font-inter text-dark-muted ml-2">
-                                                    {userFeedback.rating ?? "—"} / 5
-                                                </span>
-                                            </div>
-                                            <p className="mt-2 text-sm font-inter text-dark-secondary leading-relaxed">
-                                                {userFeedback.comment}
-                                            </p>
-                                            {userFeedback.photos?.length > 0 && (
-                                                <div className="mt-3 grid grid-cols-3 gap-2">
-                                                    {userFeedback.photos.map((photo, index) => (
-                                                        <div
-                                                            key={`${photo}-${index}`}
-                                                            className="relative aspect-square overflow-hidden rounded-lg bg-cream-100 border border-clay/30"
-                                                        >
-                                                            <Image
-                                                                src={photo}
-                                                                alt="Your workshop feedback"
-                                                                fill
-                                                                className="object-cover"
-                                                                sizes="96px"
-                                                            />
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {canLeaveFeedback && (isEditingFeedback || !userFeedback) && (
-                                        <div className="mt-6 pt-5 border-t border-dashed border-clay/50">
-                                            <label className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                                Rate this workshop
-                                            </label>
-                                            <div className="flex items-center gap-1 mb-3">
-                                                {Array.from({ length: 5 }).map((_, index) => (
-                                                    <button
-                                                        key={index}
-                                                        type="button"
-                                                        onClick={() => setFeedbackRating(index + 1)}
-                                                        className="p-1"
-                                                        aria-label={`Rate ${index + 1} stars`}
-                                                    >
-                                                        <Star
-                                                            className={`w-4 h-4 ${
-                                                                index < feedbackRating
-                                                                    ? "text-terracotta fill-terracotta"
-                                                                    : "text-dark-muted/40"
-                                                            }`}
-                                                        />
-                                                    </button>
-                                                ))}
-                                                <span className="text-xs font-inter text-dark-muted ml-2">
-                                                    {feedbackRating} / 5
-                                                </span>
-                                            </div>
-                                            <label className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                                Feedback
-                                            </label>
-                                            <textarea
-                                                value={feedbackDraft}
-                                                onChange={(event) =>
-                                                    setFeedbackDraft(event.target.value)
-                                                }
-                                                rows={4}
-                                                placeholder="Share your feedback for this workshop"
-                                                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-inter text-dark focus:outline-none focus:ring-2 focus:ring-terracotta/30 focus:border-terracotta/50"
-                                            />
-                                            <div className="mt-3">
-                                                <label className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                                    Upload photos
-                                                </label>
-                                                <div className="flex flex-wrap items-center gap-3">
-                                                    <label className="inline-flex items-center gap-2 rounded-full border border-clay/40 px-3 py-2 text-xs font-inter font-semibold text-dark-secondary cursor-pointer hover:border-terracotta hover:text-terracotta transition-colors">
-                                                        <input
-                                                            type="file"
-                                                            accept="image/*"
-                                                            multiple
-                                                            onChange={handleFeedbackPhotoUpload}
-                                                            disabled={
-                                                                feedbackUploading || feedbackLoading
-                                                            }
-                                                            className="sr-only"
-                                                        />
-                                                        {feedbackUploading
-                                                            ? "Uploading..."
-                                                            : "Add photos"}
-                                                    </label>
-                                                    <span className="text-xs font-inter text-dark-muted">
-                                                        {feedbackPhotos.length}/
-                                                        {MAX_FEEDBACK_PHOTOS}
-                                                    </span>
-                                                </div>
-                                                {feedbackPhotos.length > 0 && (
-                                                    <div className="mt-3 grid grid-cols-3 gap-2">
-                                                        {feedbackPhotos.map((photo, index) => (
-                                                            <div
-                                                                key={`${photo}-${index}`}
-                                                                className="relative aspect-square overflow-hidden rounded-lg bg-cream-100 border border-clay/30"
-                                                            >
-                                                                <Image
-                                                                    src={photo}
-                                                                    alt="Uploaded feedback"
-                                                                    fill
-                                                                    className="object-cover"
-                                                                    sizes="96px"
-                                                                />
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() =>
-                                                                        handleRemoveFeedbackPhoto(
-                                                                            index
-                                                                        )
-                                                                    }
-                                                                    className="absolute top-1 right-1 rounded-full bg-white/90 p-1 shadow-sm"
-                                                                    aria-label="Remove photo"
-                                                                >
-                                                                    <X className="w-3 h-3 text-dark-muted" />
-                                                                </button>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="mt-4 flex items-center gap-3">
-                                                <button
-                                                    onClick={handleFeedbackSubmit}
-                                                    disabled={feedbackLoading}
-                                                    className="flex-1 rounded-full border border-terracotta text-terracotta font-inter font-semibold text-sm px-4 py-2.5 hover:bg-terracotta hover:text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                                                >
-                                                    {feedbackLoading
-                                                        ? "Submitting..."
-                                                        : "Submit Feedback"}
-                                                </button>
-                                                {userFeedback && isEditingFeedback && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={handleCancelFeedbackEdit}
-                                                        className="rounded-full border border-gray-200 px-4 py-2.5 text-sm font-inter font-semibold text-dark-secondary hover:border-terracotta hover:text-terracotta transition-colors"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                )}
-                                            </div>
-                                            {feedbackError && (
-                                                <p className="mt-2 text-xs font-inter text-red-600">
-                                                    {feedbackError}
-                                                </p>
-                                            )}
-                                            {feedbackMessage && (
-                                                <p className="mt-2 text-xs font-inter text-emerald-700">
-                                                    {feedbackMessage}
-                                                </p>
-                                            )}
-                                        </div>
-                                    )}
-                                </motion.div>
+                                <WorkshopPastEventSidebar
+                                    workshopDate={workshop.date}
+                                    formattedWorkshopTime={formattedWorkshopTime}
+                                    workshopLocation={workshop.location}
+                                    workshopCity={workshop.city}
+                                    workshopRating={workshop.rating}
+                                    workshopReviewCount={workshop.reviewCount}
+                                    feedbackHighlight={workshop.feedbackHighlight}
+                                    feedbackAuthor={workshop.feedbackAuthor}
+                                    notifyState={notifyState}
+                                    notifyLoadingMode={notifyLoadingMode}
+                                    notifyMessage={notifyMessage}
+                                    notifyError={notifyError}
+                                    onPastNotify={handlePastNotify}
+                                    userFeedback={userFeedback}
+                                    isEditingFeedback={isEditingFeedback}
+                                    canLeaveFeedback={canLeaveFeedback}
+                                    feedbackDraft={feedbackDraft}
+                                    setFeedbackDraft={setFeedbackDraft}
+                                    feedbackRating={feedbackRating}
+                                    setFeedbackRating={setFeedbackRating}
+                                    feedbackPhotos={feedbackPhotos}
+                                    feedbackUploading={feedbackUploading}
+                                    feedbackLoading={feedbackLoading}
+                                    feedbackError={feedbackError}
+                                    feedbackMessage={feedbackMessage}
+                                    maxFeedbackPhotos={MAX_FEEDBACK_PHOTOS}
+                                    onStartFeedbackEdit={handleStartFeedbackEdit}
+                                    onCancelFeedbackEdit={handleCancelFeedbackEdit}
+                                    onFeedbackSubmit={handleFeedbackSubmit}
+                                    onFeedbackPhotoUpload={handleFeedbackPhotoUpload}
+                                    onRemoveFeedbackPhoto={handleRemoveFeedbackPhoto}
+                                />
                             ) : (
-                                <motion.div
-                                    variants={prefersReducedMotion ? undefined : slideInRight}
-                                    initial={prefersReducedMotion ? undefined : "hidden"}
-                                    animate={prefersReducedMotion ? undefined : "visible"}
-                                    transition={
-                                        prefersReducedMotion
-                                            ? { duration: 0 }
-                                            : { ...standardTransition, delay: 0.3 }
-                                    }
-                                    className="sticky top-28 bg-white rounded-2xl shadow-card p-6 border border-clay/50"
-                                >
-                                    <div className="flex items-end justify-between mb-6">
-                                        <div>
-                                            <p className="text-xs font-inter font-semibold text-terracotta uppercase tracking-wider mb-1">
-                                                Price
-                                            </p>
-                                            <div className="flex flex-col">
-                                                {isEbEligible && (
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className="text-sm font-inter text-dark-muted line-through">
-                                                            {formatCurrency(workshop.price)}
-                                                        </span>
-                                                        <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tight">
-                                                            Early Bird Offer
-                                                        </span>
-                                                    </div>
-                                                )}
-                                                <div className="flex items-baseline gap-1">
-                                                    <span className="font-playfair text-3xl font-bold text-dark">
-                                                        {formatCurrency(currentPricePerGuest)}
-                                                    </span>
-                                                    <span className="text-sm font-inter text-dark-muted">
-                                                        / person
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        {isSoldOut ? (
-                                            <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-inter font-bold text-red-700 transition-colors">
-                                                Sold Out
-                                            </span>
-                                        ) : (
-                                            availableSeatCount <= 5 && (
-                                                <span className="rounded-full bg-terracotta/10 px-2.5 py-1 text-xs font-inter font-bold text-terracotta transition-colors">
-                                                    Selling Fast
-                                                </span>
-                                            )
-                                        )}
-                                    </div>
-
-                                    <div className="mb-4">
-                                        <label className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                            Select Date
-                                        </label>
-                                        <div className="bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between cursor-pointer hover:border-terracotta/40 transition-colors">
-                                            <div className="flex items-center gap-2">
-                                                <Calendar className="w-4 h-4 text-dark-muted" />
-                                                <span className="text-sm font-inter text-dark">
-                                                    {formatDate(workshop.date)} &bull;{" "}
-                                                    {formattedWorkshopTime}
-                                                </span>
-                                            </div>
-                                            <ChevronRight className="w-4 h-4 text-dark-muted" />
-                                        </div>
-                                    </div>
-
-                                    <div
-                                        className={`mb-6 rounded-xl border px-4 py-3 text-sm font-inter transition-colors ${
-                                            isSoldOut
-                                                ? "border-red-200 bg-red-50 text-red-700"
-                                                : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                        }`}
-                                    >
-                                        {seatAvailabilityLabel}
-                                    </div>
-
-                                    {!isSoldOut && (
-                                        <div className="mb-6">
-                                            <label className="mb-2 block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted">
-                                                Guests
-                                            </label>
-                                            <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-cream-100 px-4 py-3">
-                                                <button
-                                                    onClick={() =>
-                                                        setGuests(Math.max(1, guests - 1))
-                                                    }
-                                                    disabled={guests <= 1}
-                                                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 transition-colors hover:border-terracotta hover:text-terracotta disabled:cursor-not-allowed disabled:opacity-40"
-                                                >
-                                                    <Minus className="h-4 w-4" />
-                                                </button>
-                                                <span className="text-lg font-inter font-bold text-dark">
-                                                    {guests}
-                                                </span>
-                                                <button
-                                                    onClick={() =>
-                                                        setGuests(
-                                                            Math.min(availableSeatCount, guests + 1)
-                                                        )
-                                                    }
-                                                    disabled={guests >= availableSeatCount}
-                                                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 transition-colors hover:border-terracotta hover:text-terracotta disabled:cursor-not-allowed disabled:opacity-40"
-                                                >
-                                                    <Plus className="h-4 w-4" />
-                                                </button>
-                                            </div>
-                                            {workshop.maxSeats >= 6 && (
-                                                <p className="mt-2 text-xs font-inter text-dark-muted bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
-                                                    🎉 Great for groups! Bring 3+ friends for a
-                                                    memorable weekend.
-                                                </p>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {!isSoldOut && (
-                                        <div className="mb-6 space-y-3 border-t border-dashed border-clay/50 pt-4">
-                                            <div className="flex justify-between text-sm font-inter">
-                                                <span className="text-dark-secondary">
-                                                    {formatCurrency(currentPricePerGuest)} &times;{" "}
-                                                    {guests} guests
-                                                </span>
-                                                <span className="font-medium text-dark">
-                                                    {formatCurrency(subtotal)}
-                                                </span>
-                                            </div>
-                                            <div className="flex justify-between text-sm font-inter">
-                                                <span className="text-dark-secondary">
-                                                    Service fee
-                                                </span>
-                                                <span className="font-medium text-dark">
-                                                    {formatCurrency(serviceFee)}
-                                                </span>
-                                            </div>
-                                            {appliedCoupon && (
-                                                <div className="flex justify-between text-sm font-inter text-emerald-700">
-                                                    <span className="inline-flex items-center gap-1.5">
-                                                        <Tag className="h-3.5 w-3.5" />
-                                                        {appliedCoupon.code}
-                                                        <button
-                                                            type="button"
-                                                            onClick={handleRemoveCoupon}
-                                                            className="rounded-full p-0.5 transition-colors hover:text-emerald-900"
-                                                            aria-label="Remove coupon"
-                                                        >
-                                                            <X className="h-3 w-3" />
-                                                        </button>
-                                                    </span>
-                                                    <span className="font-medium">
-                                                        -{formatCurrency(couponDiscountAmount)}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            <div className="flex justify-between border-t border-dashed border-clay/50 pt-3 text-base font-inter font-bold">
-                                                <span className="text-dark">Total</span>
-                                                <span className="text-dark">
-                                                    {formatCurrency(total)}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {!isSoldOut && !appliedCoupon && (
-                                        <div className="mb-6 border-t border-dashed border-clay/50 pt-4">
-                                            {!showCouponInput ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setShowCouponInput(true);
-                                                        setCouponError(null);
-                                                    }}
-                                                    className="inline-flex items-center gap-1.5 text-sm font-inter font-medium text-terracotta transition-colors hover:text-terracotta/80"
-                                                >
-                                                    <Tag className="h-4 w-4" />
-                                                    Have a coupon code?
-                                                </button>
-                                            ) : (
-                                                <div className="space-y-2">
-                                                    <div className="flex gap-2">
-                                                        <input
-                                                            type="text"
-                                                            placeholder="Discount code"
-                                                            value={couponCode}
-                                                            onChange={(event) => {
-                                                                setCouponCode(
-                                                                    event.target.value.toUpperCase()
-                                                                );
-                                                                setCouponError(null);
-                                                            }}
-                                                            className="flex-1 rounded-xl border border-clay/50 bg-white px-3 py-2 text-sm font-inter text-dark transition-all focus:border-terracotta focus:outline-none focus:ring-1 focus:ring-terracotta/30"
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => void handleApplyCoupon()}
-                                                            disabled={
-                                                                !couponCode.trim() ||
-                                                                isApplyingCoupon
-                                                            }
-                                                            className="inline-flex min-w-[88px] items-center justify-center rounded-xl bg-dark px-4 py-2 text-sm font-inter font-medium text-white transition-colors hover:bg-dark-hover disabled:cursor-not-allowed disabled:opacity-50"
-                                                        >
-                                                            {isApplyingCoupon ? (
-                                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                                            ) : (
-                                                                "Apply"
-                                                            )}
-                                                        </button>
-                                                    </div>
-                                                    {couponError && (
-                                                        <p className="text-xs font-inter text-red-600">
-                                                            {couponError}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {isBookingClosed ? (
-                                        <button
-                                            type="button"
-                                            disabled
-                                            className="btn-secondary w-full text-center !py-4 text-base cursor-not-allowed opacity-70"
-                                        >
-                                            Booking Closed
-                                        </button>
-                                    ) : isSoldOut ? (
-                                        <button
-                                            onClick={() => setShowWaitlistModal(true)}
-                                            className="btn-secondary w-full text-center !py-4 text-base"
-                                        >
-                                            Join Waitlist
-                                        </button>
-                                    ) : user ? (
-                                        <button
-                                            onClick={handleBooking}
-                                            disabled={bookingLoading}
-                                            className="btn-primary w-full text-center !py-4 text-base disabled:opacity-60 disabled:cursor-not-allowed"
-                                        >
-                                            {bookingLoading ? (
-                                                <>
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                    Reserving...
-                                                </>
-                                            ) : (
-                                                "Reserve Spot ->"
-                                            )}
-                                        </button>
-                                    ) : (
-                                        <Link
-                                            href={loginRedirectHref}
-                                            className="btn-primary block w-full text-center !py-4 text-base"
-                                        >
-                                            {"Log in to Book ->"}
-                                        </Link>
-                                    )}
-                                    <p className="text-center text-xs font-inter text-dark-muted mt-3">
-                                        {isBookingClosed
-                                            ? `Bookings close ${BOOKING_CUTOFF_HOURS} hours before the workshop starts.`
-                                            : isSoldOut
-                                              ? "All spots are taken. Join the waitlist to be notified if someone cancels."
-                                              : user
-                                                ? "Secure payments via Razorpay. You won't be charged twice even if something goes wrong."
-                                                : "Log in to book. Payments are processed securely via Razorpay."}
-                                    </p>
-                                    {holdError && (
-                                        <p className="text-center text-xs font-inter text-red-600 mt-2">
-                                            {holdError}
-                                        </p>
-                                    )}
-
-                                    <div className="flex items-center justify-center gap-5 mt-5 pt-4 border-t border-dashed border-clay/50">
-                                        <div className="flex items-center gap-1.5 text-xs font-inter text-dark-muted">
-                                            <Shield className="w-3.5 h-3.5" />
-                                            Secure
-                                        </div>
-                                        <div className="flex items-center gap-1.5 text-xs font-inter text-dark-muted">
-                                            <Tag className="w-3.5 h-3.5" />
-                                            Best Price
-                                        </div>
-                                    </div>
-                                </motion.div>
+                                <WorkshopBookingSidebar
+                                    workshopPrice={workshop.price}
+                                    currentPricePerGuest={currentPricePerGuest}
+                                    workshopDate={workshop.date}
+                                    formattedWorkshopTime={formattedWorkshopTime}
+                                    workshopLocation={workshop.location}
+                                    maxSeats={workshop.maxSeats}
+                                    guests={guests}
+                                    setGuests={setGuests}
+                                    availableSeatCount={availableSeatCount}
+                                    seatAvailabilityLabel={seatAvailabilityLabel}
+                                    isSoldOut={isSoldOut}
+                                    isBookingClosed={isBookingClosed}
+                                    isEbEligible={isEbEligible}
+                                    subtotal={subtotal}
+                                    serviceFee={serviceFee}
+                                    total={total}
+                                    appliedCoupon={appliedCoupon}
+                                    couponDiscountAmount={couponDiscountAmount}
+                                    couponCode={couponCode}
+                                    setCouponCode={setCouponCode}
+                                    couponError={couponError}
+                                    setCouponError={setCouponError}
+                                    showCouponInput={showCouponInput}
+                                    setShowCouponInput={setShowCouponInput}
+                                    isApplyingCoupon={isApplyingCoupon}
+                                    onApplyCoupon={() => void handleApplyCoupon()}
+                                    onRemoveCoupon={handleRemoveCoupon}
+                                    user={user}
+                                    bookingLoading={bookingLoading}
+                                    holdError={holdError}
+                                    loginRedirectHref={loginRedirectHref}
+                                    onBooking={handleBooking}
+                                    onShowWaitlist={() => setShowWaitlistModal(true)}
+                                />
                             )}
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* ═══ MOBILE STICKY BOOKING BAR ═══ */}
+            {/* ═══ SOLD OUT SUGGESTIONS ═══ */}
             {isSoldOut && (
                 <div className="section-padding mt-8">
                     <motion.div
@@ -2298,242 +1615,42 @@ export default function WorkshopClient({
                 </div>
             )}
 
+            {/* ═══ MOBILE PAST-EVENT PANEL ═══ */}
             {isPastWorkshop && (
                 <div className="section-padding mt-8 min-[900px]:hidden">
-                    <motion.div
-                        variants={prefersReducedMotion ? undefined : fadeInUp}
-                        initial={prefersReducedMotion ? undefined : "hidden"}
-                        animate={prefersReducedMotion ? undefined : "visible"}
-                        transition={
-                            prefersReducedMotion
-                                ? { duration: 0 }
-                                : { ...quickTransition, delay: 0.2 }
-                        }
-                        className="bg-white rounded-2xl shadow-card p-5 border border-gray-100"
-                    >
-                        <div className="inline-flex items-center gap-2 bg-terracotta/10 text-terracotta text-xs font-inter font-bold uppercase tracking-wider px-3 py-1.5 rounded-full mb-4">
-                            Past Event
-                        </div>
-                        <div className="bg-cream-100 rounded-2xl p-4 border border-clay/40 mb-4">
-                            <p className="text-[11px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                Attendee Feedback
-                            </p>
-                            <p className="text-sm font-inter text-dark-secondary leading-relaxed">
-                                &ldquo;
-                                {workshop.feedbackHighlight ||
-                                    `Rated ${workshop.rating}/5 from ${workshop.reviewCount} reviews.`}
-                                &rdquo;
-                            </p>
-                            <p className="text-xs font-inter text-dark-muted mt-2">
-                                {workshop.feedbackAuthor ||
-                                    `${workshop.reviewCount} verified reviews`}
-                            </p>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <button
-                                onClick={() => handlePastNotify("similar")}
-                                disabled={notifyLoadingMode !== null}
-                                className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-inter font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${notifyState.similar ? "bg-emerald-100 text-emerald-700 border border-emerald-300" : "bg-terracotta text-white hover:bg-terracotta-600"}`}
-                            >
-                                <BellRing className="w-4 h-4" />
-                                {notifyLoadingMode === "similar"
-                                    ? "Saving..."
-                                    : notifyState.similar
-                                      ? "Similar Alerts On"
-                                      : "Notify Similar Event"}
-                            </button>
-                            <button
-                                onClick={() => handlePastNotify("creator")}
-                                disabled={notifyLoadingMode !== null}
-                                className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-inter font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${notifyState.creator ? "bg-emerald-100 text-emerald-700 border border-emerald-300" : "bg-white text-dark-secondary border border-gray-200 hover:border-terracotta hover:text-terracotta"}`}
-                            >
-                                <BellRing className="w-4 h-4" />
-                                {notifyLoadingMode === "creator"
-                                    ? "Saving..."
-                                    : notifyState.creator
-                                      ? "Creator Alerts On"
-                                      : "Notify Creator Event"}
-                            </button>
-                        </div>
-                        {notifyMessage && (
-                            <p className="mt-3 text-xs font-inter text-emerald-700">
-                                {notifyMessage}
-                            </p>
-                        )}
-                        {notifyError && (
-                            <p className="mt-2 text-xs font-inter text-red-600">{notifyError}</p>
-                        )}
-
-                        {userFeedback && !isEditingFeedback && (
-                            <div className="mt-5 pt-4 border-t border-gray-100">
-                                <div className="flex items-center justify-between mb-2">
-                                    <p className="text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted">
-                                        Your Feedback
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={handleStartFeedbackEdit}
-                                        className="text-xs font-inter font-semibold text-terracotta hover:text-terracotta-700 transition-colors"
-                                    >
-                                        Edit
-                                    </button>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    {Array.from({ length: 5 }).map((_, index) => (
-                                        <Star
-                                            key={index}
-                                            className={`w-4 h-4 ${
-                                                index < (userFeedback.rating ?? 0)
-                                                    ? "text-terracotta fill-terracotta"
-                                                    : "text-dark-muted/40"
-                                            }`}
-                                        />
-                                    ))}
-                                    <span className="text-xs font-inter text-dark-muted ml-2">
-                                        {userFeedback.rating ?? "—"} / 5
-                                    </span>
-                                </div>
-                                <p className="mt-2 text-sm font-inter text-dark-secondary leading-relaxed">
-                                    {userFeedback.comment}
-                                </p>
-                                {userFeedback.photos?.length > 0 && (
-                                    <div className="mt-3 grid grid-cols-3 gap-2">
-                                        {userFeedback.photos.map((photo, index) => (
-                                            <div
-                                                key={`${photo}-${index}`}
-                                                className="relative aspect-square overflow-hidden rounded-lg bg-cream-100 border border-clay/30"
-                                            >
-                                                <Image
-                                                    src={photo}
-                                                    alt="Your workshop feedback"
-                                                    fill
-                                                    className="object-cover"
-                                                    sizes="96px"
-                                                />
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {canLeaveFeedback && (isEditingFeedback || !userFeedback) && (
-                            <div className="mt-5 pt-4 border-t border-gray-100">
-                                <label className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                    Rate this workshop
-                                </label>
-                                <div className="flex items-center gap-1 mb-3">
-                                    {Array.from({ length: 5 }).map((_, index) => (
-                                        <button
-                                            key={index}
-                                            type="button"
-                                            onClick={() => setFeedbackRating(index + 1)}
-                                            className="p-1"
-                                            aria-label={`Rate ${index + 1} stars`}
-                                        >
-                                            <Star
-                                                className={`w-4 h-4 ${
-                                                    index < feedbackRating
-                                                        ? "text-terracotta fill-terracotta"
-                                                        : "text-dark-muted/40"
-                                                }`}
-                                            />
-                                        </button>
-                                    ))}
-                                    <span className="text-xs font-inter text-dark-muted ml-2">
-                                        {feedbackRating} / 5
-                                    </span>
-                                </div>
-                                <label className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                    Feedback
-                                </label>
-                                <textarea
-                                    value={feedbackDraft}
-                                    onChange={(event) => setFeedbackDraft(event.target.value)}
-                                    rows={4}
-                                    placeholder="Share your feedback for this workshop"
-                                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-inter text-dark focus:outline-none focus:ring-2 focus:ring-terracotta/30 focus:border-terracotta/50"
-                                />
-                                <div className="mt-3">
-                                    <label className="block text-[10px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                        Upload photos
-                                    </label>
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        <label className="inline-flex items-center gap-2 rounded-full border border-clay/40 px-3 py-2 text-xs font-inter font-semibold text-dark-secondary cursor-pointer hover:border-terracotta hover:text-terracotta transition-colors">
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                multiple
-                                                onChange={handleFeedbackPhotoUpload}
-                                                disabled={feedbackUploading || feedbackLoading}
-                                                className="sr-only"
-                                            />
-                                            {feedbackUploading ? "Uploading..." : "Add photos"}
-                                        </label>
-                                        <span className="text-xs font-inter text-dark-muted">
-                                            {feedbackPhotos.length}/{MAX_FEEDBACK_PHOTOS}
-                                        </span>
-                                    </div>
-                                    {feedbackPhotos.length > 0 && (
-                                        <div className="mt-3 grid grid-cols-3 gap-2">
-                                            {feedbackPhotos.map((photo, index) => (
-                                                <div
-                                                    key={`${photo}-${index}`}
-                                                    className="relative aspect-square overflow-hidden rounded-lg bg-cream-100 border border-clay/30"
-                                                >
-                                                    <Image
-                                                        src={photo}
-                                                        alt="Uploaded feedback"
-                                                        fill
-                                                        className="object-cover"
-                                                        sizes="96px"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            handleRemoveFeedbackPhoto(index)
-                                                        }
-                                                        className="absolute top-1 right-1 rounded-full bg-white/90 p-1 shadow-sm"
-                                                        aria-label="Remove photo"
-                                                    >
-                                                        <X className="w-3 h-3 text-dark-muted" />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="mt-4 flex items-center gap-3">
-                                    <button
-                                        onClick={handleFeedbackSubmit}
-                                        disabled={feedbackLoading}
-                                        className="flex-1 rounded-full border border-terracotta text-terracotta font-inter font-semibold text-sm px-4 py-2.5 hover:bg-terracotta hover:text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                                    >
-                                        {feedbackLoading ? "Submitting..." : "Submit Feedback"}
-                                    </button>
-                                    {userFeedback && isEditingFeedback && (
-                                        <button
-                                            type="button"
-                                            onClick={handleCancelFeedbackEdit}
-                                            className="rounded-full border border-gray-200 px-4 py-2.5 text-sm font-inter font-semibold text-dark-secondary hover:border-terracotta hover:text-terracotta transition-colors"
-                                        >
-                                            Cancel
-                                        </button>
-                                    )}
-                                </div>
-                                {feedbackError && (
-                                    <p className="mt-2 text-xs font-inter text-red-600">
-                                        {feedbackError}
-                                    </p>
-                                )}
-                                {feedbackMessage && (
-                                    <p className="mt-2 text-xs font-inter text-emerald-700">
-                                        {feedbackMessage}
-                                    </p>
-                                )}
-                            </div>
-                        )}
-                    </motion.div>
+                    <WorkshopPastEventSidebar
+                        workshopDate={workshop.date}
+                        formattedWorkshopTime={formattedWorkshopTime}
+                        workshopLocation={workshop.location}
+                        workshopCity={workshop.city}
+                        workshopRating={workshop.rating}
+                        workshopReviewCount={workshop.reviewCount}
+                        feedbackHighlight={workshop.feedbackHighlight}
+                        feedbackAuthor={workshop.feedbackAuthor}
+                        notifyState={notifyState}
+                        notifyLoadingMode={notifyLoadingMode}
+                        notifyMessage={notifyMessage}
+                        notifyError={notifyError}
+                        onPastNotify={handlePastNotify}
+                        userFeedback={userFeedback}
+                        isEditingFeedback={isEditingFeedback}
+                        canLeaveFeedback={canLeaveFeedback}
+                        feedbackDraft={feedbackDraft}
+                        setFeedbackDraft={setFeedbackDraft}
+                        feedbackRating={feedbackRating}
+                        setFeedbackRating={setFeedbackRating}
+                        feedbackPhotos={feedbackPhotos}
+                        feedbackUploading={feedbackUploading}
+                        feedbackLoading={feedbackLoading}
+                        feedbackError={feedbackError}
+                        feedbackMessage={feedbackMessage}
+                        maxFeedbackPhotos={MAX_FEEDBACK_PHOTOS}
+                        onStartFeedbackEdit={handleStartFeedbackEdit}
+                        onCancelFeedbackEdit={handleCancelFeedbackEdit}
+                        onFeedbackSubmit={handleFeedbackSubmit}
+                        onFeedbackPhotoUpload={handleFeedbackPhotoUpload}
+                        onRemoveFeedbackPhoto={handleRemoveFeedbackPhoto}
+                    />
                 </div>
             )}
 
@@ -2559,13 +1676,13 @@ export default function WorkshopClient({
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-                            {similarWorkshops.slice(0, 3).map((workshop, idx) => (
+                            {similarWorkshops.slice(0, 3).map((ws, idx) => (
                                 <WorkshopCard
-                                    key={workshop.id}
-                                    workshop={workshop}
+                                    key={ws.id}
+                                    workshop={ws}
                                     todayIso={todayIso}
                                     index={idx}
-                                    animateOnScroll={true}
+                                    animateOnScroll
                                 />
                             ))}
                         </div>
@@ -2582,90 +1699,37 @@ export default function WorkshopClient({
             <Footer />
 
             {/* ═══ WAITLIST MODAL ═══ */}
-            {showWaitlistModal && (
-                <div
-                    className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
-                    onClick={() => setShowWaitlistModal(false)}
-                >
-                    <div
-                        id="waitlist-modal"
-                        className="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-card relative"
-                        onClick={(e) => e.stopPropagation()}
-                        role="dialog"
-                        aria-modal="true"
-                    >
-                        <button
-                            onClick={() => setShowWaitlistModal(false)}
-                            className="absolute top-4 right-4 p-2 rounded-full hover:bg-cream-100 text-dark-muted transition-colors"
-                            aria-label="Close modal"
-                        >
-                            <X className="w-5 h-5" />
-                        </button>
+            <WorkshopWaitlistModal
+                showWaitlistModal={showWaitlistModal}
+                setShowWaitlistModal={setShowWaitlistModal}
+                waitlistEmail={waitlistEmail}
+                setWaitlistEmail={setWaitlistEmail}
+                waitlistLoading={waitlistLoading}
+                waitlistError={waitlistError}
+                setWaitlistError={setWaitlistError}
+                waitlistSuccess={waitlistSuccess}
+                onJoinWaitlist={handleJoinWaitlist}
+            />
 
-                        <div className="text-center mb-6">
-                            <div className="w-12 h-12 bg-terracotta/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <BellRing className="w-6 h-6 text-terracotta" />
-                            </div>
-                            <h3 className="heading-sm mb-2">Join the Waitlist</h3>
-                            <p className="text-sm font-inter text-dark-secondary">
-                                This workshop is currently full. We&apos;ll email you immediately if
-                                a spot opens up.
-                            </p>
-                        </div>
-
-                        {waitlistSuccess ? (
-                            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
-                                <Check className="w-6 h-6 text-emerald-600 mx-auto mb-2" />
-                                <p className="text-sm font-inter font-semibold text-emerald-800">
-                                    You&apos;re on the list!
-                                </p>
-                                <p className="text-xs font-inter text-emerald-700 mt-1">
-                                    We&apos;ll notify {waitlistEmail} if seats become available.
-                                </p>
-                                <button
-                                    onClick={() => setShowWaitlistModal(false)}
-                                    className="btn-primary w-full mt-4 !py-2.5"
-                                >
-                                    Close
-                                </button>
-                            </div>
-                        ) : (
-                            <form onSubmit={handleJoinWaitlist} className="space-y-4">
-                                <div>
-                                    <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                        Email Address
-                                    </label>
-                                    <input
-                                        type="email"
-                                        value={waitlistEmail}
-                                        onChange={(e) => {
-                                            setWaitlistEmail(e.target.value);
-                                            setWaitlistError(null);
-                                        }}
-                                        required
-                                        placeholder="Enter your email"
-                                        className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter focus:outline-none focus:border-terracotta/50 focus:ring-1 focus:ring-terracotta/30"
-                                    />
-                                    {waitlistError && (
-                                        <p className="text-xs font-inter text-red-600 mt-1.5">
-                                            {waitlistError}
-                                        </p>
-                                    )}
-                                </div>
-                                <button
-                                    type="submit"
-                                    disabled={waitlistLoading}
-                                    className="btn-primary w-full !py-3 disabled:opacity-70 disabled:cursor-not-allowed"
-                                >
-                                    {waitlistLoading ? "Joining..." : "Join Waitlist"}
-                                </button>
-                            </form>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {isMounted && mobileBookingBar ? createPortal(mobileBookingBar, document.body) : null}
+            {/* ═══ MOBILE STICKY BOOKING BAR ═══ */}
+            <WorkshopMobileBookingBar
+                isPastWorkshop={isPastWorkshop}
+                isBookingClosed={isBookingClosed}
+                isSoldOut={isSoldOut}
+                isEbEligible={isEbEligible}
+                workshopPrice={workshop.price}
+                currentPricePerGuest={currentPricePerGuest}
+                workshopDate={workshop.date}
+                formattedWorkshopTime={formattedWorkshopTime}
+                seatAvailabilityLabel={seatAvailabilityLabel}
+                user={user}
+                bookingLoading={bookingLoading}
+                holdError={holdError}
+                loginRedirectHref={loginRedirectHref}
+                isMounted={isMounted}
+                onBooking={handleBooking}
+                onShowWaitlist={() => setShowWaitlistModal(true)}
+            />
         </div>
     );
 }
