@@ -221,6 +221,10 @@ export function getMissingProductionEnvVars() {
 }
 
 export function assertProductionEnv() {
+    if (typeof window !== "undefined") {
+        return; // Don't validate server variables in the browser
+    }
+
     if (process.env.SKIP_ENV_VALIDATION === "true" || process.env.SKIP_ENV_VALIDATION === "1") {
         return;
     }
