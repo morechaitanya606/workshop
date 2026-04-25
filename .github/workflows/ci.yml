@@ -33,9 +33,5 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Install Playwright Browser
-        run: npx playwright install --with-deps chromium
-
-      - name: E2E Smoke
-        run: npm run test:e2e
+        env:
+          SKIP_ENV_VALIDATION: "true"

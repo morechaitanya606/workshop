@@ -1,2 +1,0 @@
-Set-Location 'd:\Users\Chait\Pratice\tts\workshop\app'
-npm.cmd run dev -- --port 3002 1>> 'd:\Users\Chait\Pratice\tts\workshop\app\.codex-logs\next-dev-3002.out.log' 2>> 'd:\Users\Chait\Pratice\tts\workshop\app\.codex-logs\next-dev-3002.err.log'
