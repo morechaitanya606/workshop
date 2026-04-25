@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
 import AnalyticsProvider from "@/components/AnalyticsProvider";
+import GlobalFloatingWidgets from "@/components/GlobalFloatingWidgets";
 import MotionProvider from "@/components/MotionProvider";
-import AppShell from "@/components/AppShell";
 import ToastProvider from "@/components/ToastProvider";
 import { AuthProvider } from "@/lib/auth-context";
 import { getAppUrl } from "@/lib/env";
@@ -82,7 +82,8 @@ export default function RootLayout({
                         <ToastProvider>
                             <AuthProvider>
                                 <PlatformSettingsProvider>
-                                    <AppShell>{children}</AppShell>
+                                    {children}
+                                    <GlobalFloatingWidgets />
                                 </PlatformSettingsProvider>
                             </AuthProvider>
                         </ToastProvider>

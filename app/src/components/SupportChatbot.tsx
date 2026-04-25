@@ -281,18 +281,22 @@ export default function SupportChatbot({
             : stage === "asking_phone"
               ? "Apna phone number enter karo"
               : "Apna message type karo";
+    const launcherBottomClass = isWorkshopPage
+        ? "bottom-[calc(var(--floating-support-bottom)+6rem)] lg:bottom-6"
+        : "bottom-[var(--floating-support-bottom)] lg:bottom-[var(--floating-support-bottom)]";
+    const supportMenuBottomClass = isWorkshopPage
+        ? "bottom-[calc(var(--floating-support-bottom)+10rem)] lg:bottom-24"
+        : "bottom-[calc(var(--floating-support-bottom)+4.5rem)] lg:bottom-24";
     const floatingPanelClass =
         mode === "embedded"
             ? "h-[min(100vh,720px)] w-full"
             : isWorkshopPage
-              ? "fixed left-3 right-3 bottom-[12rem] z-[70] max-h-[50dvh] sm:max-h-[600px] sm:left-auto sm:right-4 sm:w-[min(calc(100vw-2rem),24rem)] lg:bottom-6 lg:right-6 lg:max-h-[calc(100dvh-6rem)]"
-              : "fixed bottom-20 right-3 z-[70] w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-8rem)] sm:max-h-[600px] max-w-sm sm:right-4 sm:max-w-md lg:bottom-6 lg:right-6 lg:max-h-[calc(100dvh-6rem)]";
-    const supportMenuClass = isWorkshopPage
-        ? "fixed bottom-[16rem] right-4 z-[70] w-[min(calc(100vw-2rem),22rem)] rounded-[28px] border border-black/5 bg-white p-3 shadow-[0_24px_60px_rgba(15,23,42,0.18)] lg:bottom-24 lg:right-6"
-        : "fixed bottom-36 right-4 z-[70] w-[min(calc(100vw-2rem),22rem)] rounded-[28px] border border-black/5 bg-white p-3 shadow-[0_24px_60px_rgba(15,23,42,0.18)] lg:bottom-24 lg:right-6";
+              ? `fixed left-3 right-3 z-[70] max-h-[50dvh] sm:max-h-[600px] sm:left-auto sm:w-[min(calc(100vw-2rem),24rem)] lg:max-h-[calc(100dvh-6rem)] ${launcherBottomClass} sm:right-[var(--floating-edge-offset)]`
+              : `fixed z-[70] w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-8rem)] sm:max-h-[600px] max-w-sm sm:max-w-md ${launcherBottomClass} right-3 sm:right-[var(--floating-edge-offset)]`;
+    const supportMenuClass = `fixed z-[70] w-[min(calc(100vw-2rem),22rem)] rounded-[28px] border border-black/5 bg-white p-3 shadow-[0_24px_60px_rgba(15,23,42,0.18)] ${supportMenuBottomClass} right-[var(--floating-edge-offset)]`;
     const launcherButtonClass = isWorkshopPage
-        ? "fixed bottom-[12rem] right-4 z-[70] flex h-12 w-12 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_16px_40px_rgba(37,211,102,0.35)] transition-transform hover:scale-[1.02] lg:bottom-6 lg:right-6 lg:h-14 lg:w-14"
-        : "fixed bottom-20 right-4 z-[70] flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_16px_40px_rgba(37,211,102,0.35)] transition-transform hover:scale-[1.02] lg:bottom-6 lg:right-6";
+        ? `fixed z-[70] flex h-12 w-12 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_16px_40px_rgba(37,211,102,0.35)] transition-transform hover:scale-[1.02] ${launcherBottomClass} right-[var(--floating-edge-offset)] lg:h-14 lg:w-14`
+        : `fixed z-[70] flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_16px_40px_rgba(37,211,102,0.35)] transition-transform hover:scale-[1.02] ${launcherBottomClass} right-[var(--floating-edge-offset)]`;
 
     const panelContent = (
         <div
@@ -341,7 +345,7 @@ export default function SupportChatbot({
                                 <a
                                     href={bookingHref}
                                     target="_blank"
-                                    rel="noreferrer"
+                                    rel="noopener noreferrer"
                                     className="mt-3 inline-flex items-center justify-center rounded-full bg-[#25D366] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#1fa855]"
                                 >
                                     Complete Booking
@@ -436,7 +440,7 @@ export default function SupportChatbot({
                             <a
                                 href={whatsappHref}
                                 target="_blank"
-                                rel="noreferrer"
+                                rel="noopener noreferrer"
                                 onClick={() => setIsLauncherOpen(false)}
                                 className="flex w-full items-center gap-3 rounded-[22px] border border-[#075E54]/10 bg-[#f5fbfa] px-3 py-3 text-left transition-colors hover:bg-[#ebf6f4]"
                             >

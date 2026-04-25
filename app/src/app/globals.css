@@ -47,6 +47,29 @@
         --radius-lg: 1rem;
         --radius-xl: 1.5rem;
         --radius-full: 9999px;
+        --mobile-nav-height: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+        --floating-edge-offset: 1rem;
+        --floating-stack-gap: 0.875rem;
+        --floating-launcher-size: 3.5rem;
+        --floating-support-bottom: calc(var(--mobile-nav-height) + 0.875rem);
+        --floating-surprise-bottom: calc(
+            var(--floating-support-bottom) + var(--floating-launcher-size) +
+                var(--floating-stack-gap)
+        );
+    }
+
+    @media screen and (min-width: 1024px) {
+        :root {
+            --mobile-nav-height: 0px;
+            --floating-edge-offset: 1.5rem;
+            --floating-stack-gap: 1rem;
+            --floating-launcher-size: 3.5rem;
+            --floating-support-bottom: 1.5rem;
+            --floating-surprise-bottom: calc(
+                var(--floating-support-bottom) + var(--floating-launcher-size) +
+                    var(--floating-stack-gap)
+            );
+        }
     }
 
     * {
@@ -131,7 +154,6 @@
             border-color var(--motion-duration-fast) ease,
             color var(--motion-duration-fast) ease,
             opacity var(--motion-duration-fast) ease;
-        will-change: transform;
     }
 
     .interactive-link {

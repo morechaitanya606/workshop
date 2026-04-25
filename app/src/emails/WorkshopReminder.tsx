@@ -1,5 +1,6 @@
 import { Button, Text } from "@react-email/components";
 import * as React from "react";
+import { getAppUrl } from "@/lib/env";
 import { EmailLayout } from "./components/Layout";
 
 interface WorkshopReminderEmailProps {
@@ -18,7 +19,7 @@ export function WorkshopReminderEmail({
     location,
 }: WorkshopReminderEmailProps) {
     const previewText = `Reminder: ${workshopTitle} is coming up!`;
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const baseUrl = getAppUrl();
     const profileUrl = `${baseUrl}/profile`;
 
     return (

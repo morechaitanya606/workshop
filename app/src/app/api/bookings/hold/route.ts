@@ -5,7 +5,6 @@ import { jsonError, requireAuthenticatedUser } from "@/lib/api-auth";
 import { bookingHoldSchema } from "@/lib/validators";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
-import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 import { BOOKING_CUTOFF_HOURS, isBookingClosedNow } from "@/lib/booking-time";
 import type { SupabaseServerClient } from "@/lib/supabase-server";
 import {
@@ -123,18 +122,8 @@ export async function POST(request: NextRequest) {
     const { workshopId, guests } = parsed.data;
 
     try {
-        const seeded = await ensureWorkshopSeededFromMock(serviceClient, workshopId);
-        if (!seeded) {
-            return jsonError(
-                "Workshop not found in database and no mock seed exists for this id.",
-                404
-            );
-        }
-
-        const {
-            data: workshopTiming,
-            error: timingError,
-        } = await loadWorkshopTimingWithApprovalCompat(serviceClient, workshopId);
+        const { data: workshopTiming, error: timingError } =
+            await loadWorkshopTimingWithApprovalCompat(serviceClient, workshopId);
 
         if (timingError || !workshopTiming) {
             return jsonError("Workshop not found.", 404);
@@ -185,10 +174,8 @@ export async function POST(request: NextRequest) {
                 .eq("status", "active")
                 .lt("expires_at", new Date().toISOString());
 
-            const {
-                data: workshop,
-                error: workshopError,
-            } = await loadWorkshopSeatsWithApprovalCompat(serviceClient, workshopId);
+            const { data: workshop, error: workshopError } =
+                await loadWorkshopSeatsWithApprovalCompat(serviceClient, workshopId);
 
             if (workshopError || !workshop) {
                 return jsonError("Workshop not found.", 404);

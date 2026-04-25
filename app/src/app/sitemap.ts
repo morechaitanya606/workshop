@@ -9,31 +9,57 @@ const STATIC_PATHS = [
     "/",
     "/explore",
     "/about",
+    "/blog",
+    "/become-a-host",
+    "/list-your-space",
     "/contact",
     "/careers",
     "/communities",
-    "/communities/new",
     "/help",
     "/safety",
     "/cancellations",
     "/legal/privacy",
     "/legal/terms",
+    "/press",
+    "/past-events",
+    "/workshop/summer-family-retreat",
     "/sitemap",
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const siteUrl = getAppUrl().replace(/\/$/, "");
     const now = new Date();
+    const allowMockFallback = process.env.NODE_ENV !== "production";
 
     const staticEntries: MetadataRoute.Sitemap = STATIC_PATHS.map((path) => ({
         url: `${siteUrl}${path}`,
         lastModified: now,
-        changeFrequency: path === "/" || path === "/explore" ? "daily" : "weekly",
-        priority: path === "/" ? 1 : path === "/explore" ? 0.9 : 0.6,
+        changeFrequency:
+            path === "/" || path === "/explore" || path === "/workshop/summer-family-retreat"
+                ? "daily"
+                : "weekly",
+        priority:
+            path === "/"
+                ? 1
+                : path === "/explore"
+                  ? 0.9
+                  : path === "/workshop/summer-family-retreat"
+                    ? 0.95
+                    : 0.6,
     }));
 
-    const workshopIds = new Set<string>(mockWorkshops.map((item) => item.id));
-    const communitySlugs = new Set<string>(mockCommunities.map((item) => item.slug));
+    const workshopIds = new Set<string>();
+    const communitySlugs = new Set<string>();
+
+    if (allowMockFallback) {
+        for (const workshop of mockWorkshops) {
+            workshopIds.add(workshop.id);
+        }
+        for (const community of mockCommunities) {
+            communitySlugs.add(community.slug);
+        }
+    }
+
     if (isSupabaseServiceConfigured) {
         try {
             const serviceClient = createSupabaseServiceClient();
@@ -67,7 +93,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
                 if (row.slug) communitySlugs.add(row.slug);
             }
         } catch {
-            // fall back to mock ids only
+            // In production, keep sitemap limited to known public static routes.
         }
     }
 

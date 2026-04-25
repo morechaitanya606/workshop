@@ -19,18 +19,21 @@ export default function SurpriseBox() {
     const pathname = usePathname();
     const { settings, loading } = usePlatformSettings();
     const [showCard, setShowCard] = useState(false);
+    const isWorkshopPage = pathname.startsWith("/workshop/");
 
     const specialPageSettings = resolveSpecialPageSettings(settings.special_page);
     const isPromotionActive = isSpecialPageActive(settings.special_page);
 
     const shouldHide =
-        pathname.startsWith("/chatbot/embed") ||
-        pathname.startsWith("/admin") ||
-        isSpecialPagePath(pathname, settings.special_page);
+        pathname.startsWith("/chatbot/embed") || isSpecialPagePath(pathname, settings.special_page);
 
     if (loading || shouldHide || !isPromotionActive) {
         return null;
     }
+
+    const launcherPositionClass = isWorkshopPage
+        ? "bottom-[calc(var(--floating-surprise-bottom)+6rem)] right-[var(--floating-edge-offset)] lg:bottom-[5.5rem] lg:right-[var(--floating-edge-offset)]"
+        : "bottom-[var(--floating-surprise-bottom)] right-[var(--floating-edge-offset)] lg:bottom-[var(--floating-surprise-bottom)] lg:right-[var(--floating-edge-offset)]";
 
     return (
         <>
@@ -49,7 +52,7 @@ export default function SurpriseBox() {
                         }
                         exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.5 }}
                         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                        className="fixed bottom-[9.5rem] right-4 z-[69] lg:bottom-[5.5rem] lg:right-6"
+                        className={`fixed z-[69] ${launcherPositionClass}`}
                         aria-label={`${specialPageSettings.badge} - click to reveal`}
                     >
                         <motion.div
@@ -101,7 +104,7 @@ export default function SurpriseBox() {
                                 : { opacity: 0, y: 20, scale: 0.9 }
                         }
                         transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                        className="fixed bottom-[9.5rem] right-4 z-[69] w-[min(calc(100vw-2rem),300px)] lg:bottom-[5.5rem] lg:right-6"
+                        className={`fixed z-[69] w-[min(calc(100vw-2rem),300px)] ${launcherPositionClass}`}
                     >
                         <div
                             className="relative overflow-hidden rounded-2xl border border-amber-200/70 p-5 shadow-[0_16px_48px_rgba(245,166,35,0.25)]"
@@ -140,7 +143,7 @@ export default function SurpriseBox() {
                                 </p>
 
                                 <p className="mb-4 text-[11px] font-inter font-medium uppercase tracking-wider text-amber-700/80">
-                                    Visible till{" "}
+                                    Event on{" "}
                                     {formatSpecialPageDate(specialPageSettings.visibleUntil)}
                                 </p>
 

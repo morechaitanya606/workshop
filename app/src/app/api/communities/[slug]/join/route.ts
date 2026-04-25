@@ -6,7 +6,6 @@ import {
     getCommunitiesSetupIncompleteMessage,
     isMissingCommunitiesSchemaError,
 } from "@/lib/community-api-errors";
-import { getMockCommunityBySlug } from "@/lib/communities";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { communityJoinSchema } from "@/lib/validators";
@@ -34,14 +33,6 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
     if (!parsed.ok) {
         return parsed.response;
-    }
-
-    const mockCommunity = getMockCommunityBySlug(params.slug);
-    if (mockCommunity) {
-        return NextResponse.json({
-            success: true,
-            message: `Thanks for your interest in ${mockCommunity.title}. This sample community page is available for preview right now, and live host follow-up will be enabled once the community is published.`,
-        });
     }
 
     if (!isSupabaseServiceConfigured) {

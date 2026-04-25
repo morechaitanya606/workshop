@@ -2,10 +2,10 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { parseBody } from "@/lib/api-route";
 import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
+import { isKnownMockWorkshopId } from "@/lib/data";
 import type { Tables } from "@/lib/database.types";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { workshopNotificationSchema } from "@/lib/validators";
-import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 
 type NotificationRow = {
@@ -76,11 +76,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const serviceClient = service.client;
 
     const workshopId = params.id;
+    const allowMockFallback = process.env.NODE_ENV !== "production";
 
     try {
-        const seeded = await ensureWorkshopSeededFromMock(serviceClient, workshopId);
-        if (!seeded) {
-            return jsonError("Workshop not found.", 404);
+        if (allowMockFallback && isKnownMockWorkshopId(workshopId)) {
+            return NextResponse.json({
+                subscriptions: getFallbackNotificationState(auth.user.id, workshopId),
+            });
         }
 
         const { data, error } = await serviceClient
@@ -139,11 +141,23 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     const workshopId = params.id;
+    const allowMockFallback = process.env.NODE_ENV !== "production";
 
     try {
-        const seeded = await ensureWorkshopSeededFromMock(serviceClient, workshopId);
-        if (!seeded) {
-            return jsonError("Workshop not found.", 404);
+        if (allowMockFallback && isKnownMockWorkshopId(workshopId)) {
+            const subscriptions = upsertFallbackNotificationState(
+                auth.user.id,
+                workshopId,
+                parsed.data.mode
+            );
+
+            return NextResponse.json({
+                subscriptions,
+                message:
+                    parsed.data.mode === "similar"
+                        ? "Notification enabled for similar events."
+                        : "Notification enabled for creator's next event.",
+            });
         }
 
         const { data: existing, error: existingError } = await serviceClient

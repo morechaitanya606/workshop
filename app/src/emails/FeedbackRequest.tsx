@@ -1,5 +1,6 @@
 import { Button, Text } from "@react-email/components";
 import * as React from "react";
+import { getAppUrl } from "@/lib/env";
 import { EmailLayout } from "./components/Layout";
 
 interface FeedbackRequestEmailProps {
@@ -14,9 +15,8 @@ export function FeedbackRequestEmail({
     workshopId,
 }: FeedbackRequestEmailProps) {
     const previewText = `How was ${workshopTitle}? Share your feedback!`;
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    // Assuming a route exists to leave feedback, or just directing to the workshop page
-    const feedbackUrl = `${baseUrl}/workshops/${workshopId}`;
+    const baseUrl = getAppUrl();
+    const feedbackUrl = `${baseUrl}/workshop/${workshopId}`;
 
     return (
         <EmailLayout previewText={previewText}>

@@ -110,12 +110,11 @@ export default function SpecialEventBanner() {
                         >
                             <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/50 bg-white/60 px-3 py-1.5 text-xs font-inter font-medium text-amber-800/70">
                                 <CalendarDays className="h-3.5 w-3.5" />
-                                Visible till{" "}
-                                {formatSpecialPageDate(specialPageSettings.visibleUntil)}
+                                Event on {formatSpecialPageDate(specialPageSettings.visibleUntil)}
                             </span>
                             <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/50 bg-white/60 px-3 py-1.5 text-xs font-inter font-medium text-amber-800/70">
                                 <Gift className="h-3.5 w-3.5" />
-                                Reopen anytime from the floating surprise box
+                                Parent & child are welcome
                             </span>
                         </motion.div>
 

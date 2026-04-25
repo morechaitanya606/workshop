@@ -31,6 +31,7 @@ export default function ExploreResultsSection({
     isPending,
     total,
     source,
+    todayIso,
     mockBannerMotionProps,
     workshops,
     clearFilters,
@@ -46,6 +47,7 @@ export default function ExploreResultsSection({
     isPending: boolean;
     total: number;
     source: "supabase" | "mock" | "error";
+    todayIso: string;
     mockBannerMotionProps: MotionDivProps;
     workshops: Workshop[];
     clearFilters: () => void;
@@ -144,6 +146,7 @@ export default function ExploreResultsSection({
                             >
                                 <WorkshopCard
                                     workshop={workshop}
+                                    todayIso={todayIso}
                                     index={index}
                                     animateOnScroll={false}
                                 />

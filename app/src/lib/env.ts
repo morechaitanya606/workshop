@@ -97,7 +97,25 @@ export function getPublicSupabaseConfig() {
 }
 
 export function getAppUrl() {
-    return publicEnv.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const configuredUrl = publicEnv.NEXT_PUBLIC_APP_URL?.trim();
+    if (configuredUrl) {
+        return configuredUrl.replace(/\/$/, "");
+    }
+
+    if (process.env.NODE_ENV === "production") {
+        throw new Error("Missing required environment variable: NEXT_PUBLIC_APP_URL");
+    }
+
+    return "http://localhost:3000";
+}
+
+export function getAbsoluteUrl(path = "/") {
+    if (/^https?:\/\//i.test(path)) {
+        return path;
+    }
+
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    return `${getAppUrl()}${normalizedPath}`;
 }
 
 export function getPublicMapplsKey() {
@@ -174,6 +192,9 @@ export function getMissingProductionEnvVars() {
     const publicSupabaseKey =
         publicEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? publicEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+    if (!publicEnv.NEXT_PUBLIC_APP_URL) {
+        missing.push("NEXT_PUBLIC_APP_URL");
+    }
     if (!publicEnv.NEXT_PUBLIC_SUPABASE_URL) {
         missing.push("NEXT_PUBLIC_SUPABASE_URL");
     }
@@ -211,3 +232,5 @@ export function assertProductionEnv() {
         );
     }
 }
+
+assertProductionEnv();
