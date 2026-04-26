@@ -22,10 +22,14 @@ const canonicalUrl = getAbsoluteUrl("/workshop/summer-family-retreat");
 const ogImageUrl = getAbsoluteUrl("/images/summer-family-retreat-og.jpg");
 
 export const metadata: Metadata = {
-    title: "Summer Family Retreat | Only Workshops x The Yellow Slice",
+    title: "Pune Special Event for Parents and Child | Summer Family Retreat",
     description:
-        "Join the Summer Family Retreat on May 9-10 at The Yellow Slice, Pirangut. Drone making and cakesicle workshops for kids, with cheese tasting and estate tours for parents.",
+        "Looking for a Pune special event for parents and child? Join our Summer Family Retreat at The Yellow Slice. Enjoy drone making, cakesicles, cheese tasting, and estate tours for the ultimate family bonding weekend in Pune.",
     keywords: [
+        "pune special event for parents and child",
+        "special events in pune for family",
+        "kids activities and parent events pune",
+        "trending family experience in pune",
         "summer family retreat pune",
         "family workshop pune",
         "kids workshop pirangut",
@@ -64,9 +68,9 @@ export const metadata: Metadata = {
 const eventStructuredData = {
     "@context": "https://schema.org",
     "@type": "Event",
-    name: "Summer Family Retreat",
+    name: "Pune Special Event for Parents and Child: Summer Family Retreat",
     description:
-        "A curated family experience with drone making and cakesicle workshops for kids, plus cheese tasting and estate tours for parents at The Yellow Slice, Pirangut.",
+        "A curated family experience and special event in Pune for parents and children. Features drone making and cakesicle workshops for kids, plus cheese tasting and estate tours for parents at The Yellow Slice, Pirangut.",
     eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
     eventStatus: "https://schema.org/EventScheduled",
     startDate: "2026-05-09T17:00:00+05:30",

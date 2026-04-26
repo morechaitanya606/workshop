@@ -19,7 +19,7 @@ const HERO_PILLS = [
     "May 9-10, 2026",
     "5 PM to 9 PM",
     "The Yellow Slice, Pirangut",
-    "1 Child + 1 Parent",
+    "1 Child + 2 Parent",
 ];
 
 const DAY_PROGRAMS = [
@@ -33,27 +33,23 @@ const DAY_PROGRAMS = [
         scheduleLabel: "Schedule | Day 1 | 9th May",
         timeline: [
             {
-                time: "5:00 PM",
+                time: "4:30-5:00 PM",
                 label: "Arrival & Registration",
                 details: "Welcome, check-in, and meet fellow families.",
             },
             {
-                time: "5:30 PM",
-                label: "Drone Workshop Begins",
-                details: "Kids begin building while parents head to the estate tour.",
+                time: "5:00 PM - 7:30 PM",
+                label: "Drone Workshop for children and Cheese Tasting & Estate Tour for Parents",
+                details:
+                    "Kids begin building while parents head to the estate tour and Artisan cheese and seasonal fruits for parents.",
             },
             {
                 time: "7:30 PM",
-                label: "Cheese Tasting",
-                details: "Artisan cheese and seasonal fruits for parents.",
-            },
-            {
-                time: "8:00 PM",
                 label: "Dinner",
                 details: "Sit-down dinner for all families.",
             },
             {
-                time: "8:30 PM",
+                time: "8:00 PM - 8:30 PM",
                 label: "Grand Fly-Off & Showcase",
                 details: "Drone flights, photos, and celebration time.",
             },
@@ -79,17 +75,13 @@ const DAY_PROGRAMS = [
                 details: "Welcome, check-in, and meet fellow families.",
             },
             {
-                time: "5:30 PM",
-                label: "Cakesicles Workshop Begins",
-                details: "Kids start baking while parents explore the estate.",
+                time: "5:30 -7:30 PM",
+                label: "Cakesicles Workshop Begins and  Cheese Tasting & Estate Tour for Parents",
+                details:
+                    "Kids start baking and parents explore the estate and Artisan cheese and seasonal fruits for parents.",
             },
             {
                 time: "7:30 PM",
-                label: "Cheese Tasting",
-                details: "Artisan cheese and seasonal fruits for parents.",
-            },
-            {
-                time: "8:00 PM",
                 label: "Dinner",
                 details: "Sit-down dinner for all families.",
             },
@@ -276,6 +268,82 @@ export default function SummerRetreatClient() {
                         >
                             Explore the Weekend <span className="sr-arrow">&darr;</span>
                         </a>
+                    </div>
+                </section>
+
+                <section className="sr-sec">
+                    <div className="sr-inner sr-rev">
+                        <span className="sr-lbl" style={{ color: "var(--amber)" }}>
+                            Pune Special Event
+                        </span>
+                        <div
+                            className="sr-rule"
+                            style={{
+                                background: "linear-gradient(to right, var(--amber), transparent)",
+                            }}
+                        />
+                        <h2 className="sr-hdg sr-hdg-lt">
+                            The Ultimate <em>Pune Special Event</em>
+                            <br />
+                            for Parents and Children
+                        </h2>
+                        <div
+                            className="sr-seo-content sr-rev"
+                            style={{
+                                marginTop: 28,
+                                padding: "clamp(24px, 4vw, 40px)",
+                                background: "rgba(255, 253, 247, 0.04)",
+                                borderRadius: "24px",
+                                border: "1px solid rgba(245, 166, 35, 0.15)",
+                                backdropFilter: "blur(12px)",
+                            }}
+                        >
+                            <p
+                                className="sr-body sr-body-lt"
+                                style={{ marginBottom: 16, fontSize: "clamp(14px, 1.6vw, 17px)" }}
+                            >
+                                If you are searching for a{" "}
+                                <strong>Pune special event for parents and child</strong>, this
+                                Summer Family Retreat is the perfect weekend getaway. Located at the
+                                scenic Yellow Slice in Pirangut, it is designed to offer engaging
+                                activities for children and a relaxing retreat for parents.
+                            </p>
+                            <p
+                                className="sr-body sr-body-lt"
+                                style={{ marginBottom: 20, fontSize: "clamp(14px, 1.6vw, 17px)" }}
+                            >
+                                Skip the crowded malls and generic play zones. This is a{" "}
+                                <strong>trending family experience in Pune</strong> where your kids
+                                can learn future-ready skills like drone building and professional
+                                baking, while parents unwind with artisan cheese tasting and curated
+                                estate tours.
+                            </p>
+                            <div
+                                className="sr-pills"
+                                style={{ marginTop: 0, justifyContent: "flex-start" }}
+                            >
+                                {[
+                                    "#PuneFamilyEvents",
+                                    "#ParentChildActivities",
+                                    "#PuneSummerRetreat",
+                                    "#KidsWorkshopsPune",
+                                    "#WeekendGetawayPune",
+                                ].map((tag) => (
+                                    <span
+                                        key={tag}
+                                        className="sr-pill"
+                                        style={{
+                                            padding: "6px 14px",
+                                            fontSize: "11px",
+                                            background: "rgba(245, 166, 35, 0.08)",
+                                            border: "1px solid rgba(245, 166, 35, 0.2)",
+                                        }}
+                                    >
+                                        {tag}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 </section>
 
