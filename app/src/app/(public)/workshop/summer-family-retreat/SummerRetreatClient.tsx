@@ -19,7 +19,7 @@ const HERO_PILLS = [
     "May 9-10, 2026",
     "5 PM to 9 PM",
     "The Yellow Slice, Pirangut",
-    "1 Child + 1 Parent",
+    "1 Child + 2 Parent",
 ];
 
 const DAY_PROGRAMS = [
@@ -33,27 +33,23 @@ const DAY_PROGRAMS = [
         scheduleLabel: "Schedule | Day 1 | 9th May",
         timeline: [
             {
-                time: "5:00 PM",
+                time: "4:30-5:00 PM",
                 label: "Arrival & Registration",
                 details: "Welcome, check-in, and meet fellow families.",
             },
             {
-                time: "5:30 PM",
-                label: "Drone Workshop Begins",
-                details: "Kids begin building while parents head to the estate tour.",
+                time: "5:00 PM - 7:30 PM",
+                label: "Drone Workshop for children and Cheese Tasting & Estate Tour for Parents",
+                details:
+                    "Kids begin building while parents head to the estate tour and Artisan cheese and seasonal fruits for parents.",
             },
             {
                 time: "7:30 PM",
-                label: "Cheese Tasting",
-                details: "Artisan cheese and seasonal fruits for parents.",
-            },
-            {
-                time: "8:00 PM",
                 label: "Dinner",
                 details: "Sit-down dinner for all families.",
             },
             {
-                time: "8:30 PM",
+                time: "8:00 PM - 8:30 PM",
                 label: "Grand Fly-Off & Showcase",
                 details: "Drone flights, photos, and celebration time.",
             },
@@ -79,17 +75,13 @@ const DAY_PROGRAMS = [
                 details: "Welcome, check-in, and meet fellow families.",
             },
             {
-                time: "5:30 PM",
-                label: "Cakesicles Workshop Begins",
-                details: "Kids start baking while parents explore the estate.",
+                time: "5:30 -7:30 PM",
+                label: "Cakesicles Workshop Begins and  Cheese Tasting & Estate Tour for Parents",
+                details:
+                    "Kids start baking and parents explore the estate and Artisan cheese and seasonal fruits for parents.",
             },
             {
                 time: "7:30 PM",
-                label: "Cheese Tasting",
-                details: "Artisan cheese and seasonal fruits for parents.",
-            },
-            {
-                time: "8:00 PM",
                 label: "Dinner",
                 details: "Sit-down dinner for all families.",
             },

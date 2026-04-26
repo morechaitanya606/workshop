@@ -22,25 +22,33 @@ const canonicalUrl = getAbsoluteUrl("/workshop/summer-family-retreat");
 const ogImageUrl = getAbsoluteUrl("/images/summer-family-retreat-og.jpg");
 
 export const metadata: Metadata = {
-    title: "Summer Family Retreat | Only Workshops x The Yellow Slice",
+    title: "Best Pune Special Event for Parents and Child | Summer Family Retreat 2026",
     description:
-        "Join the Summer Family Retreat on May 9-10 at The Yellow Slice, Pirangut. Drone making and cakesicle workshops for kids, with cheese tasting and estate tours for parents.",
+        "Searching for a Pune special event for parents and child? Join our top-rated Summer Family Retreat on May 9-10. Enjoy exciting kids' workshops (drones & cakesicles) while parents relax with exclusive cheese tasting and estate tours at The Yellow Slice, Pirangut. Book the most trending family event in Pune today!",
     keywords: [
-        "summer family retreat pune",
-        "family workshop pune",
-        "kids workshop pirangut",
-        "drone workshop pune",
-        "cakesicle workshop pune",
-        "The Yellow Slice",
-        "Only Workshops",
+        "Pune special event for parents and child",
+        "special events in Pune for family",
+        "Pune kids workshops",
+        "family summer retreat Pune",
+        "fun places for kids in Pune",
+        "drone making workshop Pune",
+        "cakesicle workshop for kids Pune",
+        "weekend family getaways near Pune",
+        "Pune parent-child activities",
+        "things to do in Pune with kids this weekend",
+        "trending family events in Pune",
+        "summer camp for kids in Pune",
+        "parent and child workshops in Pune",
+        "The Yellow Slice Pirangut events",
+        "Only Workshops Pune",
     ],
     alternates: {
         canonical: canonicalUrl,
     },
     openGraph: {
-        title: "Summer Family Retreat | May 9-10 in Pirangut",
+        title: "Top Pune Special Event for Parents and Child | Summer Retreat",
         description:
-            "A two-evening family retreat with creative workshops for kids and curated estate experiences for parents at The Yellow Slice, Pirangut.",
+            "Experience the most trending family weekend in Pune! Creative drone & baking workshops for kids, plus relaxing curated estate experiences for parents at The Yellow Slice, Pirangut.",
         url: canonicalUrl,
         type: "website",
         images: [
@@ -48,15 +56,15 @@ export const metadata: Metadata = {
                 url: ogImageUrl,
                 width: 1200,
                 height: 630,
-                alt: "Summer Family Retreat event preview",
+                alt: "Pune special event for parents and child - Summer Family Retreat",
             },
         ],
     },
     twitter: {
         card: "summary_large_image",
-        title: "Summer Family Retreat | May 9-10 in Pirangut",
+        title: "Must-Attend Pune Special Event for Parents & Child",
         description:
-            "Drone making and cakesicle workshops for kids, plus cheese tasting and estate tours for parents.",
+            "Looking for family events in Pune? Treat your kids to fun workshops while you enjoy relaxing estate tours. The ultimate summer family retreat!",
         images: [ogImageUrl],
     },
 };
@@ -64,9 +72,9 @@ export const metadata: Metadata = {
 const eventStructuredData = {
     "@context": "https://schema.org",
     "@type": "Event",
-    name: "Summer Family Retreat",
+    name: "Pune Special Event for Parents and Child: Summer Family Retreat",
     description:
-        "A curated family experience with drone making and cakesicle workshops for kids, plus cheese tasting and estate tours for parents at The Yellow Slice, Pirangut.",
+        "The ultimate Pune special event for parents and child. A curated family experience featuring drone making and cakesicle workshops for kids, plus exclusive cheese tasting and estate tours for parents at The Yellow Slice, Pirangut. Voted among the top trending events in Pune.",
     eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
     eventStatus: "https://schema.org/EventScheduled",
     startDate: "2026-05-09T17:00:00+05:30",
