@@ -143,7 +143,7 @@
 @layer components {
     .page-transition-shell {
         min-height: 100%;
-        will-change: opacity, transform;
+        will-change: opacity;
     }
 
     .interactive-surface {
