@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./supabase";
 import { getAuthMe } from "@/lib/api-client";
@@ -44,6 +44,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [roleLoading, setRoleLoading] = useState(isSupabaseConfigured);
     const [loading, setLoading] = useState(isSupabaseConfigured);
 
+    const userIdRef = useRef<string | null>(null);
+
     useEffect(() => {
         if (!isSupabaseConfigured) {
             setLoading(false);
@@ -64,6 +66,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
 
         const applySession = (nextSession: Session | null) => {
+            const isSameUser = nextSession?.user?.id === userIdRef.current;
+            userIdRef.current = nextSession?.user?.id ?? null;
+
             setSession(nextSession);
             setUser(nextSession?.user ?? null);
             setLoading(false);
@@ -76,7 +81,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
 
             const currentRequestId = ++roleRequestId;
-            setRoleLoading(true);
+            if (!isSameUser) {
+                setRoleLoading(true);
+            }
+
             void loadRole(nextSession.access_token).then((nextRole) => {
                 if (cancelled || currentRequestId !== roleRequestId) {
                     return;

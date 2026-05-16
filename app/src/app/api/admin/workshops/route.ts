@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { handleApiError, parseBody } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError, requireAdminUser } from "@/lib/api-auth";
@@ -90,6 +91,9 @@ export async function POST(request: NextRequest) {
                 error.message
             );
         }
+
+        revalidatePath("/admin/workshops");
+        revalidatePath("/workshops");
 
         return NextResponse.json(
             {

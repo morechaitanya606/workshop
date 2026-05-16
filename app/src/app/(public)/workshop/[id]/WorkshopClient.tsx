@@ -475,11 +475,17 @@ export default function WorkshopClient({
     const locationQuery = `${workshop.location}, ${workshop.city}`.trim();
     const encodedLocationQuery = encodeURIComponent(locationQuery);
     const mapEmbedUrl =
-        typeof workshop.latitude === "number" && typeof workshop.longitude === "number"
+        typeof workshop.latitude === "number" &&
+        typeof workshop.longitude === "number" &&
+        !Number.isNaN(workshop.latitude) &&
+        !Number.isNaN(workshop.longitude)
             ? `https://www.google.com/maps?q=${workshop.latitude},${workshop.longitude}&output=embed`
             : `https://www.google.com/maps?q=${encodedLocationQuery}&output=embed`;
     const mapOpenUrl =
-        typeof workshop.latitude === "number" && typeof workshop.longitude === "number"
+        typeof workshop.latitude === "number" &&
+        typeof workshop.longitude === "number" &&
+        !Number.isNaN(workshop.latitude) &&
+        !Number.isNaN(workshop.longitude)
             ? `https://www.google.com/maps/search/?api=1&query=${workshop.latitude},${workshop.longitude}`
             : `https://www.google.com/maps/search/?api=1&query=${encodedLocationQuery}`;
     const workshopPath = `/workshop/${workshop.id}`;

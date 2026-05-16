@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { handleApiError, parseBody } from "@/lib/api-route";
 import type { TablesUpdate } from "@/lib/database.types";
 import { requireSupabaseService } from "@/lib/api-helpers";
@@ -7,6 +8,7 @@ import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import { workshopUpdateSchema } from "@/lib/validators";
+import { isMissingColumnError, withoutNewColumns } from "@/lib/workshop-approval-compat";
 import {
     normalizeWorkshopImageUrlInput,
     normalizeWorkshopVideoUrlInput,
@@ -184,16 +186,30 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             patch.seats_remaining = input.maxSeats - bookedSeats;
         }
 
-        const { data, error } = await serviceClient
+        let { data, error } = await serviceClient
             .from("workshops")
             .update(patch)
             .eq("id", params.id)
             .select("*")
             .single();
 
+        if (error && isMissingColumnError(error)) {
+            ({ data, error } = await serviceClient
+                .from("workshops")
+                .update(withoutNewColumns(patch))
+                .eq("id", params.id)
+                .select("*")
+                .single());
+        }
+
         if (error) {
             throw error;
         }
+
+        revalidatePath(`/admin/workshops`);
+        revalidatePath(`/admin/workshops/${params.id}`);
+        revalidatePath(`/workshops`);
+        revalidatePath(`/workshops/${params.id}`);
 
         return NextResponse.json({
             workshop: mapWorkshopRowToWorkshop(data),
@@ -236,6 +252,11 @@ export async function DELETE(request: NextRequest, { params }: Params) {
         if (!data) {
             return jsonError("Workshop not found.", 404);
         }
+
+        revalidatePath(`/admin/workshops`);
+        revalidatePath(`/admin/workshops/${params.id}`);
+        revalidatePath(`/workshops`);
+        revalidatePath(`/workshops/${params.id}`);
 
         return NextResponse.json({ success: true });
     } catch (error) {

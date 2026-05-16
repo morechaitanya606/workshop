@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { handleApiError } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError, requireAdminUser } from "@/lib/api-auth";
@@ -54,6 +55,11 @@ export async function POST(request: NextRequest, { params }: Params) {
                     return jsonError("Workshop not found.", 404);
                 }
 
+                revalidatePath(`/admin/workshops`);
+                revalidatePath(`/admin/workshops/${params.id}`);
+                revalidatePath(`/workshops`);
+                revalidatePath(`/workshops/${params.id}`);
+
                 return NextResponse.json({
                     workshop: mapWorkshopRowToWorkshop(fallback.data),
                     message:
@@ -65,6 +71,11 @@ export async function POST(request: NextRequest, { params }: Params) {
         if (!data) {
             return jsonError("Workshop not found.", 404);
         }
+
+        revalidatePath(`/admin/workshops`);
+        revalidatePath(`/admin/workshops/${params.id}`);
+        revalidatePath(`/workshops`);
+        revalidatePath(`/workshops/${params.id}`);
 
         return NextResponse.json({
             workshop: mapWorkshopRowToWorkshop(data),
