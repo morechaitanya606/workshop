@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { handleApiError, parseQuery } from "@/lib/api-route";
 import { workshopQuerySchema } from "@/lib/validators";
 import { mapWorkshopRowToWorkshop, queryMockWorkshops } from "@/lib/workshop-utils";
-import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
+import { isMissingColumnError } from "@/lib/workshop-approval-compat";
 import { normalizeFilterCategoryLabel } from "@/lib/data";
 import { createSupabaseAnonServerClient, isSupabasePublicConfigured } from "@/lib/supabase-server";
 
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
             to
         );
 
-        if (error && isMissingApprovalStatusColumnError(error)) {
+        if (error && isMissingColumnError(error)) {
             ({ data, error, count } = await buildWorkshopListQuery(
                 supabase,
                 query,

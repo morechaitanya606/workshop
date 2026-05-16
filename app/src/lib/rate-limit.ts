@@ -83,25 +83,38 @@ async function runUpstashCommand(args: string[]) {
     }
 
     const encodedPath = args.map((arg) => encodeURIComponent(arg)).join("/");
-    const response = await fetch(`${upstashRedisRestUrl}/${encodedPath}`, {
-        method: "POST",
-        headers: {
-            Authorization: `Bearer ${upstashRedisRestToken}`,
-        },
-        cache: "no-store",
-    });
-    const payload = (await response.json().catch(() => null)) as {
-        result?: unknown;
-        error?: string;
-    } | null;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
 
-    if (!response.ok || payload?.error) {
-        throw new Error(
-            payload?.error || `Upstash rate-limit command failed with status ${response.status}.`
-        );
+    try {
+        const response = await fetch(`${upstashRedisRestUrl}/${encodedPath}`, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${upstashRedisRestToken}`,
+            },
+            cache: "no-store",
+            signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        const payload = (await response.json().catch(() => null)) as {
+            result?: unknown;
+            error?: string;
+        } | null;
+
+        if (!response.ok || payload?.error) {
+            throw new Error(
+                payload?.error ||
+                    `Upstash rate-limit command failed with status ${response.status}.`
+            );
+        }
+
+        return payload?.result;
+    } catch (error) {
+        clearTimeout(timeout);
+        throw error;
     }
-
-    return payload?.result;
 }
 
 async function consumeRateLimitInUpstash(key: string, windowMs: number) {
