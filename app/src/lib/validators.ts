@@ -421,3 +421,24 @@ export const communityJoinSchema = z.object({
 });
 
 export type CommunityJoinInput = z.infer<typeof communityJoinSchema>;
+
+export const communityPhotoCreateSchema = z.object({
+    imageUrl,
+    altText: z.string().trim().max(180).optional().default(""),
+    sortOrder: z.coerce.number().int().min(0).max(1000).optional().default(0),
+    isActive: z.boolean().optional().default(true),
+});
+
+export type CommunityPhotoCreateInput = z.infer<typeof communityPhotoCreateSchema>;
+
+export const communityPhotoUpdateSchema = z
+    .object({
+        altText: z.string().trim().max(180).optional(),
+        sortOrder: z.coerce.number().int().min(0).max(1000).optional(),
+        isActive: z.boolean().optional(),
+    })
+    .refine((value) => Object.keys(value).length > 0, {
+        message: "Provide at least one photo field to update.",
+    });
+
+export type CommunityPhotoUpdateInput = z.infer<typeof communityPhotoUpdateSchema>;

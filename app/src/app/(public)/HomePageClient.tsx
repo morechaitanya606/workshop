@@ -18,6 +18,7 @@ import SpecialEventBanner from "@/components/home/SpecialEventBanner";
 import ScrollReveal from "@/components/ui/ScrollReveal";
 import { categories, PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
+import type { CommunityPhoto } from "@/lib/community-photos";
 import { toApiErrorMessage, updateWorkshopNotifications } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { getRecentlyViewed } from "@/lib/recently-viewed";
@@ -26,10 +27,12 @@ const OTHER_CATEGORY_VALUE = "__other__";
 
 export default function HomePageClient({
     initialWorkshops,
+    communityPhotos,
     source,
     todayIso,
 }: {
     initialWorkshops: Workshop[];
+    communityPhotos: CommunityPhoto[];
     source: "supabase" | "mock" | "error";
     todayIso: string;
 }) {
@@ -274,6 +277,7 @@ export default function HomePageClient({
                     <CommunityGallerySection
                         shouldReduceMotion={shouldReduceMotion}
                         sectionClassName="mt-0"
+                        photos={communityPhotos}
                     />
                 </ScrollReveal>
             </section>

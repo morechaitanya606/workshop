@@ -277,6 +277,47 @@ export type Database = {
                     },
                 ];
             };
+            community_photos: {
+                Row: {
+                    alt_text: string;
+                    created_at: string;
+                    created_by: string | null;
+                    id: string;
+                    image_url: string;
+                    is_active: boolean;
+                    sort_order: number;
+                    updated_at: string;
+                };
+                Insert: {
+                    alt_text?: string;
+                    created_at?: string;
+                    created_by?: string | null;
+                    id?: string;
+                    image_url: string;
+                    is_active?: boolean;
+                    sort_order?: number;
+                    updated_at?: string;
+                };
+                Update: {
+                    alt_text?: string;
+                    created_at?: string;
+                    created_by?: string | null;
+                    id?: string;
+                    image_url?: string;
+                    is_active?: boolean;
+                    sort_order?: number;
+                    updated_at?: string;
+                };
+                Relationships: [
+                    {
+                        foreignKeyName: "community_photos_created_by_fkey";
+                        columns: ["created_by"];
+                        isOneToOne: false;
+                        referencedRelation: "users";
+                        referencedColumns: ["id"];
+                    },
+                ];
+            };
             coupons: {
                 Row: {
                     applicable_categories: string[] | null;

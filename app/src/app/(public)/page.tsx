@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getAbsoluteUrl } from "@/lib/env";
+import { loadHomepageCommunityPhotos } from "@/lib/community-photos";
 import { loadHomeWorkshops } from "@/lib/workshop-page-data";
 import HomePageClient from "./HomePageClient";
 
@@ -49,7 +50,10 @@ const organizationStructuredData = {
 };
 
 export default async function HomePage() {
-    const { data, source } = await loadHomeWorkshops();
+    const [{ data, source }, communityPhotos] = await Promise.all([
+        loadHomeWorkshops(),
+        loadHomepageCommunityPhotos(12),
+    ]);
     const todayIso = new Date().toISOString().slice(0, 10);
 
     return (
@@ -60,7 +64,12 @@ export default async function HomePage() {
                     __html: JSON.stringify(organizationStructuredData),
                 }}
             />
-            <HomePageClient initialWorkshops={data} source={source} todayIso={todayIso} />
+            <HomePageClient
+                initialWorkshops={data}
+                communityPhotos={communityPhotos}
+                source={source}
+                todayIso={todayIso}
+            />
         </>
     );
 }

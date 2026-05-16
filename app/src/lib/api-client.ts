@@ -768,6 +768,65 @@ export function deleteAdminFeedback(accessToken: string, feedbackId: string) {
     });
 }
 
+export type AdminCommunityPhoto = {
+    id: string;
+    imageUrl: string;
+    altText: string;
+    sortOrder: number;
+    isActive: boolean;
+    createdAt: string;
+};
+
+export type AdminCommunityPhotosResponse = {
+    photos: AdminCommunityPhoto[];
+};
+
+export function getAdminCommunityPhotos(accessToken: string) {
+    return apiRequest<AdminCommunityPhotosResponse>("/api/admin/community-photos", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function createAdminCommunityPhoto(
+    accessToken: string,
+    payload: {
+        imageUrl: string;
+        altText?: string;
+        sortOrder?: number;
+        isActive?: boolean;
+    }
+) {
+    return apiRequest<{ photo: AdminCommunityPhoto }>("/api/admin/community-photos", {
+        method: "POST",
+        accessToken,
+        body: payload,
+    });
+}
+
+export function updateAdminCommunityPhoto(
+    accessToken: string,
+    photoId: string,
+    payload: {
+        altText?: string;
+        sortOrder?: number;
+        isActive?: boolean;
+    }
+) {
+    return apiRequest<{ photo: AdminCommunityPhoto }>(`/api/admin/community-photos/${photoId}`, {
+        method: "PATCH",
+        accessToken,
+        body: payload,
+    });
+}
+
+export function deleteAdminCommunityPhoto(accessToken: string, photoId: string) {
+    return apiRequest<{ success: boolean }>(`/api/admin/community-photos/${photoId}`, {
+        method: "DELETE",
+        accessToken,
+    });
+}
+
 export type AdminWorkshopsResponse = {
     data: Workshop[];
 };
