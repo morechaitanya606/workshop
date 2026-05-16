@@ -19,8 +19,22 @@ export function isMissingColumnError(error: unknown) {
     );
 }
 
+export function isMissingApprovalStatusColumnError(error: unknown) {
+    return (
+        getErrorMessage(error).toLowerCase().includes("approval_status") &&
+        isMissingColumnError(error)
+    );
+}
+
 export function getWorkshopApprovalStatus(value: unknown): WorkshopApprovalStatus {
     return value === "pending" || value === "rejected" || value === "approved" ? value : "approved";
+}
+
+export function withoutApprovalStatus<T extends Record<string, unknown>>(
+    value: T
+): Omit<T, "approval_status"> {
+    const { approval_status: _approvalStatus, ...rest } = value;
+    return rest;
 }
 
 export function withoutNewColumns<T extends Record<string, unknown>>(value: T): any {
