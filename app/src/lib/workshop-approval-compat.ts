@@ -8,27 +8,34 @@ function getErrorMessage(error: unknown) {
     return "";
 }
 
-export function isMissingApprovalStatusColumnError(error: unknown) {
+export function isMissingColumnError(error: unknown) {
     const message = getErrorMessage(error).toLowerCase();
 
     return (
-        message.includes("approval_status") &&
-        (message.includes("schema cache") ||
-            (message.includes("column") && message.includes("does not exist")) ||
-            (message.includes("could not find") && message.includes("column")) ||
-            (message.includes("relation") && message.includes("does not exist")))
+        message.includes("schema cache") ||
+        (message.includes("column") && message.includes("does not exist")) ||
+        (message.includes("could not find") && message.includes("column")) ||
+        (message.includes("relation") && message.includes("does not exist"))
     );
 }
 
 export function getWorkshopApprovalStatus(value: unknown): WorkshopApprovalStatus {
-    return value === "pending" || value === "rejected" || value === "approved"
-        ? value
-        : "approved";
+    return value === "pending" || value === "rejected" || value === "approved" ? value : "approved";
 }
 
-export function withoutApprovalStatus<T extends Record<string, unknown>>(
-    value: T
-): Omit<T, "approval_status"> {
-    const { approval_status: _approvalStatus, ...rest } = value;
+export function withoutNewColumns<T extends Record<string, unknown>>(value: T): any {
+    const {
+        approval_status,
+        badge_labels,
+        event_address,
+        latitude,
+        longitude,
+        location_images,
+        early_bird_enabled,
+        early_bird_discount_type,
+        early_bird_discount_value,
+        early_bird_days_after_listing,
+        ...rest
+    } = value as any;
     return rest;
 }

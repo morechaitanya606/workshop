@@ -6,10 +6,7 @@ import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { workshopCreateSchema } from "@/lib/validators";
 import { buildWorkshopInsertPayload, mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
-import {
-    isMissingApprovalStatusColumnError,
-    withoutApprovalStatus,
-} from "@/lib/workshop-approval-compat";
+import { isMissingColumnError, withoutNewColumns } from "@/lib/workshop-approval-compat";
 
 export async function GET(request: NextRequest) {
     const auth = await requireAdminUser(request);
@@ -78,10 +75,10 @@ export async function POST(request: NextRequest) {
             .select("*")
             .single();
 
-        if (error && isMissingApprovalStatusColumnError(error)) {
+        if (error && isMissingColumnError(error)) {
             ({ data, error } = await serviceClient
                 .from("workshops")
-                .insert(withoutApprovalStatus(payload))
+                .insert(withoutNewColumns(payload))
                 .select("*")
                 .single());
         }
