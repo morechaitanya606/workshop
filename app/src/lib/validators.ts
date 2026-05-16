@@ -37,6 +37,16 @@ const videoUrlOrEmpty = z
         "Must be a valid URL."
     );
 
+const optionalLatitude = z.preprocess(
+    (value) => (value === "" || value === null || Number.isNaN(value) ? undefined : value),
+    z.coerce.number().min(-90).max(90).optional()
+);
+
+const optionalLongitude = z.preprocess(
+    (value) => (value === "" || value === null || Number.isNaN(value) ? undefined : value),
+    z.coerce.number().min(-180).max(180).optional()
+);
+
 export const socialLinksSchema = z.object({
     instagram: urlOrEmpty,
     youtube: urlOrEmpty,
@@ -74,14 +84,8 @@ export const workshopCreateSchema = z.object({
     materialsProvided: z.array(z.string().trim().min(1).max(240)).min(1).max(20),
     badgeLabels: z.array(z.string().trim().min(1).max(120)).max(8).optional().default([]),
     eventAddress: z.string().trim().max(300).optional().default(""),
-    latitude: z.preprocess(
-        (v) => (v === "" ? undefined : v),
-        z.coerce.number().min(-90).max(90).optional()
-    ),
-    longitude: z.preprocess(
-        (v) => (v === "" ? undefined : v),
-        z.coerce.number().min(-180).max(180).optional()
-    ),
+    latitude: optionalLatitude,
+    longitude: optionalLongitude,
     locationImages: z.array(imageUrl).max(10).optional().default([]),
     earlyBirdEnabled: z.boolean().optional().default(false),
     earlyBirdDiscountType: z.enum(["percentage", "fixed"]).optional().default("percentage"),
@@ -115,14 +119,8 @@ export const workshopUpdateSchema = z
         materialsProvided: z.array(z.string().trim().min(1).max(240)).min(1).max(20).optional(),
         badgeLabels: z.array(z.string().trim().min(1).max(120)).max(8).optional(),
         eventAddress: z.string().trim().max(300).optional(),
-        latitude: z.preprocess(
-            (v) => (v === "" ? undefined : v),
-            z.coerce.number().min(-90).max(90).optional()
-        ),
-        longitude: z.preprocess(
-            (v) => (v === "" ? undefined : v),
-            z.coerce.number().min(-180).max(180).optional()
-        ),
+        latitude: optionalLatitude,
+        longitude: optionalLongitude,
         locationImages: z.array(imageUrl).max(10).optional(),
         earlyBirdEnabled: z.boolean().optional(),
         earlyBirdDiscountType: z.enum(["percentage", "fixed"]).optional(),

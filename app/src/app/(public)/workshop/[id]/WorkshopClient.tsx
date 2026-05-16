@@ -472,22 +472,22 @@ export default function WorkshopClient({
         };
     }, [showVideo, showWaitlistModal]);
 
-    const locationQuery = `${workshop.location}, ${workshop.city}`.trim();
+    const locationQuery = [workshop.location, workshop.eventAddress, workshop.city]
+        .map((part) => part?.trim())
+        .filter(Boolean)
+        .join(", ");
     const encodedLocationQuery = encodeURIComponent(locationQuery);
-    const mapEmbedUrl =
+    const hasValidCoordinates =
         typeof workshop.latitude === "number" &&
         typeof workshop.longitude === "number" &&
-        !Number.isNaN(workshop.latitude) &&
-        !Number.isNaN(workshop.longitude)
-            ? `https://www.google.com/maps?q=${workshop.latitude},${workshop.longitude}&output=embed`
-            : `https://www.google.com/maps?q=${encodedLocationQuery}&output=embed`;
-    const mapOpenUrl =
-        typeof workshop.latitude === "number" &&
-        typeof workshop.longitude === "number" &&
-        !Number.isNaN(workshop.latitude) &&
-        !Number.isNaN(workshop.longitude)
-            ? `https://www.google.com/maps/search/?api=1&query=${workshop.latitude},${workshop.longitude}`
-            : `https://www.google.com/maps/search/?api=1&query=${encodedLocationQuery}`;
+        Number.isFinite(workshop.latitude) &&
+        Number.isFinite(workshop.longitude);
+    const mapEmbedUrl = hasValidCoordinates
+        ? `https://www.google.com/maps?q=${workshop.latitude},${workshop.longitude}&output=embed`
+        : `https://www.google.com/maps?q=${encodedLocationQuery}&output=embed`;
+    const mapOpenUrl = hasValidCoordinates
+        ? `https://www.google.com/maps/search/?api=1&query=${workshop.latitude},${workshop.longitude}`
+        : `https://www.google.com/maps/search/?api=1&query=${encodedLocationQuery}`;
     const workshopPath = `/workshop/${workshop.id}`;
     const loginRedirectHref = `/auth/login?redirect=${encodeURIComponent(workshopPath)}`;
     const MAX_FEEDBACK_PHOTOS = 4;

@@ -91,8 +91,12 @@ export async function POST(request: NextRequest) {
                 error.message
             );
         }
+        if (!data) {
+            return jsonError("Unable to create workshop. No workshop was returned.", 500);
+        }
 
         revalidatePath("/admin/workshops");
+        revalidatePath(`/workshop/${data.id}`);
         revalidatePath("/workshops");
 
         return NextResponse.json(

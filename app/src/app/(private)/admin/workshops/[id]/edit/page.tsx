@@ -1,10 +1,11 @@
 "use client";
 
-import { type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Check, Upload } from "lucide-react";
-import { categories, PAST_EVENTS_CATEGORY_ID } from "@/lib/data";
+import { categories, PAST_EVENTS_CATEGORY_ID, type Workshop } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import AdminShell from "@/components/admin/AdminShell";
 import {
@@ -58,8 +59,59 @@ type WorkshopEditForm = {
     earlyBirdDaysAfterListing: string;
 };
 
+function workshopToFormValues(workshop: Workshop): WorkshopEditForm {
+    return {
+        title: workshop.title || "",
+        description: workshop.description || "",
+        category: workshop.category || "",
+        price: String(workshop.price || ""),
+        location: workshop.location || "",
+        city: workshop.city || "",
+        duration: workshop.duration || "",
+        date: workshop.date || "",
+        time: workshop.time || "",
+        maxSeats: String(workshop.maxSeats || ""),
+        coverImage: workshop.coverImage || "",
+        galleryImages: Array.isArray(workshop.galleryImages)
+            ? workshop.galleryImages.join("\n")
+            : "",
+        videoUrl: workshop.videoUrl || "",
+        instagramLink: workshop.socialLinks?.instagram || "",
+        youtubeLink: workshop.socialLinks?.youtube || "",
+        websiteLink: workshop.socialLinks?.website || "",
+        hostName: workshop.hostName || "",
+        hostBio: workshop.hostBio || "",
+        hostExperience: workshop.hostExperience || "",
+        hostInstagram: workshop.hostSocialLinks?.instagram || "",
+        hostYoutube: workshop.hostSocialLinks?.youtube || "",
+        hostWebsite: workshop.hostSocialLinks?.website || "",
+        whatYouLearn: Array.isArray(workshop.whatYouLearn) ? workshop.whatYouLearn.join("\n") : "",
+        materialsProvided: Array.isArray(workshop.materialsProvided)
+            ? workshop.materialsProvided.join("\n")
+            : "",
+        badgeLabels: Array.isArray(workshop.badgeLabels) ? workshop.badgeLabels.join("\n") : "",
+        eventAddress: workshop.eventAddress || "",
+        latitude:
+            typeof workshop.latitude === "number" && Number.isFinite(workshop.latitude)
+                ? String(workshop.latitude)
+                : "",
+        longitude:
+            typeof workshop.longitude === "number" && Number.isFinite(workshop.longitude)
+                ? String(workshop.longitude)
+                : "",
+        locationImages: Array.isArray(workshop.locationImages)
+            ? workshop.locationImages.join("\n")
+            : "",
+        earlyBirdEnabled: workshop.earlyBirdEnabled ? "true" : "false",
+        earlyBirdDiscountType: workshop.earlyBirdDiscountType || "percentage",
+        earlyBirdDiscountValue: String(workshop.earlyBirdDiscountValue || ""),
+        earlyBirdDaysAfterListing: String(workshop.earlyBirdDaysAfterListing || ""),
+    };
+}
+
 export default function AdminEditWorkshopPage() {
     const params = useParams<{ id: string }>();
+    const router = useRouter();
     const { session } = useAuth();
     const workshopId = params?.id;
     const categoryOptions = useMemo(
@@ -118,6 +170,29 @@ export default function AdminEditWorkshopPage() {
     });
     const [categorySelection, setCategorySelection] = useState("");
     const [customCategory, setCustomCategory] = useState("");
+    const coverPreview = form.coverImage.trim();
+    const galleryPreviews = toList(form.galleryImages);
+    const locationPreviews = toList(form.locationImages);
+
+    const syncWorkshopForm = useCallback(
+        (workshop: Workshop) => {
+            const nextCategory = workshop.category || "";
+            const isKnownCategory = categoryOptions.some((item) => item.label === nextCategory);
+
+            setForm(workshopToFormValues(workshop));
+            setCategorySelection(
+                nextCategory ? (isKnownCategory ? nextCategory : "__other__") : ""
+            );
+            setCustomCategory(isKnownCategory ? "" : nextCategory);
+        },
+        [categoryOptions]
+    );
+
+    const renderImagePreview = (src: string, alt: string) => (
+        <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-gray-200 bg-cream-100">
+            <Image src={src} alt={alt} fill className="object-cover" sizes="160px" />
+        </div>
+    );
 
     const update = (field: keyof WorkshopEditForm, value: string) => {
         setForm((prev) => ({ ...prev, [field]: value }));
@@ -238,63 +313,7 @@ export default function AdminEditWorkshopPage() {
                 const result = await getAdminWorkshop(session.access_token, workshopId);
                 const workshop = result.workshop;
                 if (!cancelled && workshop) {
-                    const nextCategory = workshop.category || "";
-                    const isKnownCategory = categoryOptions.some(
-                        (item) => item.label === nextCategory
-                    );
-                    setForm({
-                        title: workshop.title || "",
-                        description: workshop.description || "",
-                        category: nextCategory,
-                        price: String(workshop.price || ""),
-                        location: workshop.location || "",
-                        city: workshop.city || "",
-                        duration: workshop.duration || "",
-                        date: workshop.date || "",
-                        time: workshop.time || "",
-                        maxSeats: String(workshop.maxSeats || ""),
-                        coverImage: workshop.coverImage || "",
-                        galleryImages: Array.isArray(workshop.galleryImages)
-                            ? workshop.galleryImages.join("\n")
-                            : "",
-                        videoUrl: workshop.videoUrl || "",
-                        instagramLink: workshop.socialLinks?.instagram || "",
-                        youtubeLink: workshop.socialLinks?.youtube || "",
-                        websiteLink: workshop.socialLinks?.website || "",
-                        hostName: workshop.hostName || "",
-                        hostBio: workshop.hostBio || "",
-                        hostExperience: workshop.hostExperience || "",
-                        hostInstagram: workshop.hostSocialLinks?.instagram || "",
-                        hostYoutube: workshop.hostSocialLinks?.youtube || "",
-                        hostWebsite: workshop.hostSocialLinks?.website || "",
-                        whatYouLearn: Array.isArray(workshop.whatYouLearn)
-                            ? workshop.whatYouLearn.join("\n")
-                            : "",
-                        materialsProvided: Array.isArray(workshop.materialsProvided)
-                            ? workshop.materialsProvided.join("\n")
-                            : "",
-                        badgeLabels: Array.isArray(workshop.badgeLabels)
-                            ? workshop.badgeLabels.join("\n")
-                            : "",
-                        eventAddress: workshop.eventAddress || "",
-                        latitude:
-                            typeof workshop.latitude === "number" ? String(workshop.latitude) : "",
-                        longitude:
-                            typeof workshop.longitude === "number"
-                                ? String(workshop.longitude)
-                                : "",
-                        locationImages: Array.isArray(workshop.locationImages)
-                            ? workshop.locationImages.join("\n")
-                            : "",
-                        earlyBirdEnabled: workshop.earlyBirdEnabled ? "true" : "false",
-                        earlyBirdDiscountType: workshop.earlyBirdDiscountType || "percentage",
-                        earlyBirdDiscountValue: String(workshop.earlyBirdDiscountValue || ""),
-                        earlyBirdDaysAfterListing: String(workshop.earlyBirdDaysAfterListing || ""),
-                    });
-                    setCategorySelection(
-                        nextCategory ? (isKnownCategory ? nextCategory : "__other__") : ""
-                    );
-                    setCustomCategory(isKnownCategory ? "" : nextCategory);
+                    syncWorkshopForm(workshop);
                 }
             } catch (fetchError) {
                 if (!cancelled) {
@@ -311,7 +330,7 @@ export default function AdminEditWorkshopPage() {
         return () => {
             cancelled = true;
         };
-    }, [session, workshopId, categoryOptions]);
+    }, [session, workshopId, syncWorkshopForm]);
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -405,8 +424,16 @@ export default function AdminEditWorkshopPage() {
         setError(null);
         setFieldErrors({});
         try {
-            await updateAdminWorkshop(session.access_token, workshopId, validation.data);
+            const result = await updateAdminWorkshop(
+                session.access_token,
+                workshopId,
+                validation.data
+            );
+            if (result.workshop) {
+                syncWorkshopForm(result.workshop);
+            }
             setSaved(true);
+            router.refresh();
         } catch (submitError) {
             setError(toApiErrorMessage(submitError, "Unable to update workshop."));
         } finally {
@@ -555,6 +582,20 @@ export default function AdminEditWorkshopPage() {
                                 className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                             />
                             {renderFieldError("eventAddress")}
+                            {(form.eventAddress || form.latitude || form.longitude) && (
+                                <div className="mt-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs font-inter text-dark-muted">
+                                    <p className="font-semibold text-dark">Saved location</p>
+                                    {form.eventAddress && (
+                                        <p className="mt-1">{form.eventAddress}</p>
+                                    )}
+                                    {(form.latitude || form.longitude) && (
+                                        <p className="mt-1">
+                                            {form.latitude || "No latitude"},{" "}
+                                            {form.longitude || "No longitude"}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         <div>
@@ -695,6 +736,11 @@ export default function AdminEditWorkshopPage() {
                                     You can also paste a public Google Drive image link.
                                 </p>
                             </div>
+                            {coverPreview && (
+                                <div className="mt-3 max-w-xs">
+                                    {renderImagePreview(coverPreview, "Saved cover image")}
+                                </div>
+                            )}
                         </div>
 
                         <div className="md:col-span-2">
@@ -730,6 +776,18 @@ export default function AdminEditWorkshopPage() {
                                     You can also paste public Google Drive image links.
                                 </p>
                             </div>
+                            {galleryPreviews.length > 0 && (
+                                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                                    {galleryPreviews.map((src, index) => (
+                                        <div key={`${src}-${index}`}>
+                                            {renderImagePreview(
+                                                src,
+                                                `Saved gallery image ${index + 1}`
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <div className="md:col-span-2">
@@ -761,6 +819,18 @@ export default function AdminEditWorkshopPage() {
                                     />
                                 </label>
                             </div>
+                            {locationPreviews.length > 0 && (
+                                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                                    {locationPreviews.map((src, index) => (
+                                        <div key={`${src}-${index}`}>
+                                            {renderImagePreview(
+                                                src,
+                                                `Saved location image ${index + 1}`
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <div className="md:col-span-2">

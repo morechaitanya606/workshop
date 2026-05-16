@@ -74,6 +74,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
         revalidatePath(`/admin/workshops`);
         revalidatePath(`/admin/workshops/${params.id}`);
+        revalidatePath(`/workshop/${params.id}`);
         revalidatePath(`/workshops`);
         revalidatePath(`/workshops/${params.id}`);
 

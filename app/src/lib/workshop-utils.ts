@@ -49,6 +49,12 @@ function cleanStringList(value: unknown) {
     );
 }
 
+function cleanNumberValue(value: unknown) {
+    if (value === null || value === undefined || value === "") return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 type WorkshopLinks = {
     instagram?: string | null;
     youtube?: string | null;
@@ -113,8 +119,8 @@ export function mapWorkshopRowToWorkshop(row: any): Workshop {
         isNew: row.is_new,
         isBestseller: row.is_bestseller,
         eventAddress: (row as any).event_address || undefined,
-        latitude: (row as any).latitude != null ? Number((row as any).latitude) : undefined,
-        longitude: (row as any).longitude != null ? Number((row as any).longitude) : undefined,
+        latitude: cleanNumberValue((row as any).latitude),
+        longitude: cleanNumberValue((row as any).longitude),
         locationImages,
         earlyBirdEnabled: Boolean(row.early_bird_enabled),
         earlyBirdDiscountType: row.early_bird_discount_type || "percentage",

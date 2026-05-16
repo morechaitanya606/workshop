@@ -33,6 +33,20 @@ export default function WorkshopGallery({
     const videoModalRef = useRef<HTMLDivElement | null>(null);
     const isDirectVideoFile = isDirectVideoFileUrl(workshop.videoUrl);
     const closeVideoModal = () => setShowVideo(false);
+    const galleryImages = Array.from(
+        new Set(
+            [workshop.coverImage, ...(workshop.galleryImages || [])]
+                .map((image) => image?.trim())
+                .filter((image): image is string => Boolean(image))
+        )
+    );
+    const activeImageIndex = Math.min(Math.max(activeImage, 0), galleryImages.length - 1);
+    const activeImageSrc = galleryImages[activeImageIndex] || workshop.coverImage;
+    const hasThumbnails = galleryImages.length > 1;
+    const visibleThumbnails = galleryImages
+        .map((src, index) => ({ src, index }))
+        .filter((item) => item.index !== activeImageIndex)
+        .slice(0, 2);
 
     return (
         <>
@@ -44,10 +58,14 @@ export default function WorkshopGallery({
                 className="relative"
             >
                 <div className="bg-white/90 rounded-3xl shadow-card border border-white/40 backdrop-blur-sm p-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-[2fr,1fr] gap-2 rounded-2xl overflow-hidden">
-                        <div className="relative aspect-[4/3] sm:aspect-auto sm:row-span-2 ring-1 ring-white/50">
+                    <div
+                        className={`grid grid-cols-1 gap-2 rounded-2xl overflow-hidden ${
+                            hasThumbnails ? "sm:grid-cols-[2fr,1fr]" : ""
+                        }`}
+                    >
+                        <div className="relative aspect-[16/9] min-h-[240px] sm:row-span-2 sm:min-h-[420px] ring-1 ring-white/50">
                             <Image
-                                src={workshop.galleryImages[activeImage]}
+                                src={activeImageSrc}
                                 alt={workshop.title}
                                 fill
                                 priority
@@ -70,23 +88,17 @@ export default function WorkshopGallery({
                                 </button>
                             )}
                         </div>
-                        {workshop.galleryImages.slice(1, 3).map((img, i) => {
-                            const thumbIndex = i + 1;
-                            const isActive = activeImage === thumbIndex;
+                        {visibleThumbnails.map((item, i) => {
                             return (
                                 <div
-                                    key={i}
-                                    className={`hidden sm:block cursor-pointer rounded-xl bg-cream-100 border border-clay/40 p-1 transition-all ${
-                                        isActive
-                                            ? "ring-2 ring-terracotta/50"
-                                            : "hover:ring-2 hover:ring-terracotta/30"
-                                    }`}
-                                    onClick={() => setActiveImage(thumbIndex)}
+                                    key={`${item.src}-${item.index}`}
+                                    className="hidden cursor-pointer rounded-xl border border-clay/40 bg-cream-100 p-1 transition-all hover:ring-2 hover:ring-terracotta/30 sm:block"
+                                    onClick={() => setActiveImage(item.index)}
                                 >
                                     <div className="relative aspect-[4/3] overflow-hidden rounded-lg">
                                         <Image
-                                            src={img}
-                                            alt={`${workshop.title} ${i + 2}`}
+                                            src={item.src}
+                                            alt={`${workshop.title} ${item.index + 1}`}
                                             fill
                                             className="object-cover hover:opacity-90 transition-opacity"
                                             sizes="20vw"
