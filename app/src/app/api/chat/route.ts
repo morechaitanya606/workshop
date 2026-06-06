@@ -1,6 +1,11 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { DEFAULT_CHATBOT_FAQS, generateChatbotReply, tokenizeChatText } from "@/lib/chatbot";
+import {
+    DEFAULT_CHATBOT_FAQS,
+    generateChatbotReply,
+    tokenizeChatText,
+    type ChatbotFaq,
+} from "@/lib/chatbot";
 import { resolveChatbotClient } from "@/lib/chatbot-clients";
 import { isChatbotMatchBelowThreshold, searchChatbotFaqs } from "@/lib/chatbot-vector-search";
 import { getGroqConfig, getHuggingFaceEmbeddingConfig } from "@/lib/env";
@@ -11,40 +16,31 @@ import { handleApiError, parseBody } from "@/lib/api-route";
 import { jsonError } from "@/lib/api-auth";
 import { chatbotRequestSchema } from "@/lib/validators";
 
-const DEFAULT_ROUTE_FAQS = DEFAULT_CHATBOT_FAQS.map((faq, index) => ({
-    id: `default-faq-${index + 1}`,
+const defaultChatbotFaqs: ChatbotFaq[] = DEFAULT_CHATBOT_FAQS.map((faq, index) => ({
+    id: `default-${index + 1}`,
     question: faq.question,
     answer: faq.answer,
 }));
 
-function findFallbackRouteFaqs(message: string) {
-    const messageTokens = tokenizeChatText(message, { includeLowSignal: true });
-    if (messageTokens.length === 0) {
-        return DEFAULT_ROUTE_FAQS;
+function searchDefaultChatbotFaqs(message: string) {
+    const messageTokens = new Set(tokenizeChatText(message));
+    if (messageTokens.size === 0) {
+        return [];
     }
 
-    const matches = DEFAULT_ROUTE_FAQS.map((faq) => {
-        const faqTokens = new Set(
-            tokenizeChatText(`${faq.question} ${faq.answer}`, {
-                includeLowSignal: true,
-            })
-        );
-        const score = messageTokens.reduce(
-            (total, token) => total + (faqTokens.has(token) ? 1 : 0),
-            0
-        );
+    return defaultChatbotFaqs
+        .map((faq) => {
+            const faqTokens = new Set(tokenizeChatText(`${faq.question} ${faq.answer}`));
+            const score = Array.from(messageTokens).reduce(
+                (total, token) => total + (faqTokens.has(token) ? 1 : 0),
+                0
+            );
 
-        return {
-            faq,
-            score,
-        };
-    })
-        .filter((entry) => entry.score > 0)
+            return { faq, score };
+        })
+        .filter((match) => match.score > 0)
         .sort((left, right) => right.score - left.score)
-        .slice(0, 3)
-        .map((entry) => entry.faq);
-
-    return matches.length > 0 ? matches : DEFAULT_ROUTE_FAQS;
+        .map((match) => match.faq);
 }
 
 async function persistLead(clientId: string | null, name: string, phone: string, query: string) {
@@ -165,7 +161,7 @@ export async function POST(request: NextRequest) {
             message: parsed.data.message,
             stage: parsed.data.stage,
             lead: parsed.data.lead,
-            faqs: DEFAULT_ROUTE_FAQS,
+            faqs: [],
             workshops,
             contextWorkshopId: parsed.data.contextWorkshopId,
             groq,
@@ -173,7 +169,7 @@ export async function POST(request: NextRequest) {
                 if (
                     !(canUseTenantRag && serviceClient && embeddingConfig && resolvedClient.client)
                 ) {
-                    return findFallbackRouteFaqs(message);
+                    return searchDefaultChatbotFaqs(message);
                 }
 
                 try {
@@ -189,7 +185,7 @@ export async function POST(request: NextRequest) {
 
                     return matches;
                 } catch {
-                    return findFallbackRouteFaqs(message);
+                    return searchDefaultChatbotFaqs(message);
                 }
             },
             onLeadCaptured: async (lead) => {

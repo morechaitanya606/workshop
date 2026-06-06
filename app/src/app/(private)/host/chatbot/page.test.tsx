@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import HostChatbotPage from "./page";
@@ -13,7 +14,7 @@ import {
 } from "@/lib/api-client";
 
 vi.mock("@/components/host/HostShell", () => ({
-    default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
 vi.mock("@/lib/auth-context", () => ({
@@ -95,8 +96,8 @@ describe("HostChatbotPage", () => {
         const questionInput = faqFields[0];
         const answerInput = faqFields[1];
 
-        await user.type(questionInput, "Fee kya hai?");
-        await user.type(answerInput, "Fee 999 hai.");
+        fireEvent.change(questionInput, { target: { value: "Fee kya hai?" } });
+        fireEvent.change(answerInput, { target: { value: "Fee 999 hai." } });
         await user.click(screen.getByRole("button", { name: "Add FAQ" }));
 
         await waitFor(() => {

@@ -42,8 +42,6 @@ export const routeExitTransition: Transition = {
     ease: EASE_IN,
 };
 
-export const routeTransition = routeEnterTransition;
-
 export const fadeIn: Variants = {
     hidden: { opacity: 0 },
     visible: { opacity: 1 },
@@ -54,14 +52,10 @@ export const fadeInUp: Variants = {
     visible: { opacity: 1, y: 0 },
 };
 
-export const fadeUp = fadeInUp;
-
 export const scaleIn: Variants = {
     hidden: { opacity: 0, scale: 0.95 },
     visible: { opacity: 1, scale: 1 },
 };
-
-export const zoomIn = scaleIn;
 
 export const cardReveal: Variants = {
     hidden: { opacity: 0, y: 18, scale: 0.98 },
@@ -113,8 +107,6 @@ export const staggerRelaxed: Variants = {
     },
 };
 
-export const staggerItem: Variants = cardReveal;
-
 export const revealViewport: ViewportOptions = {
     once: true,
     amount: 0.18,
@@ -130,13 +122,12 @@ const revealPresets: Record<RevealPreset, Variants> = {
     "fade-up": fadeInUp,
     "slide-left": slideInLeft,
     "slide-right": slideInRight,
-    zoom: zoomIn,
+    zoom: scaleIn,
 };
 
 export function getRevealVariants(preset: RevealPreset = "fade-up") {
     return revealPresets[preset];
 }
-
 type MotionPropsOptions = {
     whileInView?: boolean;
     delay?: number;
@@ -173,6 +164,3 @@ export function useMotionProps(
         transition: { ...transition, delay },
     };
 }
-
-// Backward-compatible alias for existing imports.
-export const getMotionProps = useMotionProps;

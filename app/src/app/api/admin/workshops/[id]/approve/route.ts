@@ -9,10 +9,11 @@ import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
 
 type Params = {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 };
 
 export async function POST(request: NextRequest, { params }: Params) {
+    const { id } = await params;
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         const { data, error } = await serviceClient
             .from("workshops")
             .update({ approval_status: "approved" })
-            .eq("id", params.id)
+            .eq("id", id)
             .select("*")
             .maybeSingle();
 
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest, { params }: Params) {
                 const fallback = await serviceClient
                     .from("workshops")
                     .select("*")
-                    .eq("id", params.id)
+                    .eq("id", id)
                     .maybeSingle();
 
                 if (fallback.error) {
@@ -56,9 +57,9 @@ export async function POST(request: NextRequest, { params }: Params) {
                 }
 
                 revalidatePath(`/admin/workshops`);
-                revalidatePath(`/admin/workshops/${params.id}`);
+                revalidatePath(`/admin/workshops/${id}`);
                 revalidatePath(`/workshops`);
-                revalidatePath(`/workshops/${params.id}`);
+                revalidatePath(`/workshops/${id}`);
 
                 return NextResponse.json({
                     workshop: mapWorkshopRowToWorkshop(fallback.data),
@@ -73,10 +74,10 @@ export async function POST(request: NextRequest, { params }: Params) {
         }
 
         revalidatePath(`/admin/workshops`);
-        revalidatePath(`/admin/workshops/${params.id}`);
-        revalidatePath(`/workshop/${params.id}`);
+        revalidatePath(`/admin/workshops/${id}`);
+        revalidatePath(`/workshop/${id}`);
         revalidatePath(`/workshops`);
-        revalidatePath(`/workshops/${params.id}`);
+        revalidatePath(`/workshops/${id}`);
 
         return NextResponse.json({
             workshop: mapWorkshopRowToWorkshop(data),

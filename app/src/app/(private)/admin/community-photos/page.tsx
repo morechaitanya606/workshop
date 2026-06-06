@@ -67,6 +67,15 @@ export default function AdminCommunityPhotosPage() {
         }));
     };
 
+    const updatePhotoDraft = (
+        photoId: string,
+        updates: Partial<Pick<AdminCommunityPhoto, "altText" | "sortOrder">>
+    ) => {
+        setPhotos((current) =>
+            current.map((photo) => (photo.id === photoId ? { ...photo, ...updates } : photo))
+        );
+    };
+
     const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         event.target.value = "";
@@ -130,6 +139,58 @@ export default function AdminCommunityPhotosPage() {
             setMessage(result.photo.isActive ? "Photo is visible." : "Photo is hidden.");
         } catch (updateError) {
             setError(toApiErrorMessage(updateError, "Unable to update community photo."));
+        } finally {
+            setUpdatingId(null);
+        }
+    };
+
+    const handleInlineUpdate = async (
+        photo: AdminCommunityPhoto,
+        payload: Parameters<typeof updateAdminCommunityPhoto>[2],
+        successMessage: string
+    ) => {
+        if (!accessToken) return;
+        setUpdatingId(photo.id);
+        setError(null);
+        setMessage(null);
+
+        try {
+            const result = await updateAdminCommunityPhoto(accessToken, photo.id, payload);
+            setPhotos((current) =>
+                current.map((item) => (item.id === photo.id ? result.photo : item))
+            );
+            setMessage(successMessage);
+        } catch (updateError) {
+            setError(toApiErrorMessage(updateError, "Unable to update community photo."));
+        } finally {
+            setUpdatingId(null);
+        }
+    };
+
+    const handleReplaceUpload = async (
+        photo: AdminCommunityPhoto,
+        event: ChangeEvent<HTMLInputElement>
+    ) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file || !accessToken) return;
+
+        setUpdatingId(photo.id);
+        setError(null);
+        setMessage(null);
+
+        try {
+            const uploadResult = await uploadMedia(accessToken, file);
+            const result = await updateAdminCommunityPhoto(accessToken, photo.id, {
+                imageUrl: uploadResult.url,
+                altText: photo.altText || file.name.replace(/\.[^.]+$/, ""),
+            });
+            setPhotos((current) =>
+                current.map((item) => (item.id === photo.id ? result.photo : item))
+            );
+            setMessage("Community photo replaced.");
+        } catch (replaceError) {
+            setError(toApiErrorMessage(replaceError, "Unable to replace community photo."));
         } finally {
             setUpdatingId(null);
         }
@@ -332,15 +393,76 @@ export default function AdminCommunityPhotosPage() {
                                         </span>
                                     </div>
                                     <div className="space-y-3 p-4">
-                                        <div>
-                                            <p className="truncate text-sm font-inter font-semibold text-dark">
-                                                {photo.altText || "Community photo"}
-                                            </p>
-                                            <p className="text-xs font-inter text-dark-muted">
-                                                {photo.isActive ? "Visible" : "Hidden"}
-                                            </p>
+                                        <div className="grid grid-cols-[1fr,84px] gap-2">
+                                            <label className="block">
+                                                <span className="mb-1 block text-[11px] font-inter font-semibold uppercase tracking-wider text-dark-muted">
+                                                    Alt
+                                                </span>
+                                                <input
+                                                    type="text"
+                                                    value={photo.altText}
+                                                    onChange={(event) =>
+                                                        updatePhotoDraft(photo.id, {
+                                                            altText: event.target.value,
+                                                        })
+                                                    }
+                                                    onBlur={() =>
+                                                        void handleInlineUpdate(
+                                                            photo,
+                                                            { altText: photo.altText },
+                                                            "Alt text updated."
+                                                        )
+                                                    }
+                                                    className="w-full rounded-xl border border-clay/30 bg-white px-3 py-2 text-xs font-inter text-dark outline-none focus:border-terracotta/50"
+                                                    placeholder="Photo description"
+                                                />
+                                            </label>
+                                            <label className="block">
+                                                <span className="mb-1 block text-[11px] font-inter font-semibold uppercase tracking-wider text-dark-muted">
+                                                    Sort
+                                                </span>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    max={1000}
+                                                    value={photo.sortOrder}
+                                                    onChange={(event) =>
+                                                        updatePhotoDraft(photo.id, {
+                                                            sortOrder: Number(event.target.value),
+                                                        })
+                                                    }
+                                                    onBlur={() =>
+                                                        void handleInlineUpdate(
+                                                            photo,
+                                                            { sortOrder: photo.sortOrder },
+                                                            "Sort order updated."
+                                                        )
+                                                    }
+                                                    className="w-full rounded-xl border border-clay/30 bg-white px-3 py-2 text-xs font-inter text-dark outline-none focus:border-terracotta/50"
+                                                />
+                                            </label>
                                         </div>
-                                        <div className="flex gap-2">
+                                        <p className="text-xs font-inter text-dark-muted">
+                                            {photo.isActive ? "Visible" : "Hidden"}
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                            <label className="btn-secondary flex-1 cursor-pointer !px-3 !py-2 text-xs">
+                                                {updatingId === photo.id ? (
+                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                ) : (
+                                                    <Upload className="h-3.5 w-3.5" />
+                                                )}
+                                                Replace
+                                                <input
+                                                    type="file"
+                                                    accept="image/jpeg,image/png,image/webp"
+                                                    onChange={(event) =>
+                                                        void handleReplaceUpload(photo, event)
+                                                    }
+                                                    disabled={updatingId === photo.id}
+                                                    className="sr-only"
+                                                />
+                                            </label>
                                             <button
                                                 type="button"
                                                 onClick={() => void handleToggleActive(photo)}

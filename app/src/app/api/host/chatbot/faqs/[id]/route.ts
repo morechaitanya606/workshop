@@ -10,12 +10,13 @@ import { FAQ_ADMIN_SELECT_FIELDS } from "@/lib/faqs";
 import { faqEntryUpdateSchema } from "@/lib/validators";
 
 type RouteContext = {
-    params: {
+    params: Promise<{
         id: string;
-    };
+    }>;
 };
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
+    const { id } = await context.params;
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {
         return auth.response;
@@ -49,7 +50,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         const { data: existingFaq, error: existingFaqError } = await service.client
             .from("faq")
             .select("id, client_id, question, answer")
-            .eq("id", context.params.id)
+            .eq("id", id)
             .eq("client_id", chatbotClient.id)
             .maybeSingle();
 
@@ -75,7 +76,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
                 ...parsed.data,
                 embedding: toVectorLiteral(embedding),
             })
-            .eq("id", context.params.id)
+            .eq("id", id)
             .eq("client_id", chatbotClient.id)
             .select(FAQ_ADMIN_SELECT_FIELDS)
             .single();
@@ -91,6 +92,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
+    const { id } = await context.params;
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {
         return auth.response;
@@ -106,7 +108,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         const { error } = await service.client
             .from("faq")
             .delete()
-            .eq("id", context.params.id)
+            .eq("id", id)
             .eq("client_id", chatbotClient.id);
 
         if (error) {

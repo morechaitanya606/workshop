@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
-import * as Sentry from "@sentry/core";
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import type { Json } from "@/lib/database.types";
 import { jsonError } from "@/lib/api-auth";

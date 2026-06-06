@@ -102,7 +102,7 @@ describe("GET /api/host/workshops/[id]/attendees", () => {
         const response = await GET(
             new NextRequest("http://localhost/api/host/workshops/admin-owned-workshop/attendees"),
             {
-                params: { id: "admin-owned-workshop" },
+                params: Promise.resolve({ id: "admin-owned-workshop" }),
             }
         );
         const body = await response.json();

@@ -1,59 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { motion, useInView } from "framer-motion";
+import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { fadeInUp, standardTransition, useMotionProps } from "@/lib/motion-presets";
-
-export function AnimatedCounter({
-    value,
-    suffix = "",
-    reduceMotion = false,
-    className = "",
-}: {
-    value: number;
-    suffix?: string;
-    reduceMotion?: boolean;
-    className?: string;
-}) {
-    const [count, setCount] = useState(0);
-    const ref = useRef<HTMLDivElement>(null);
-    const isInView = useInView(ref, { once: true, margin: "-100px" });
-
-    useEffect(() => {
-        if (!isInView) return;
-        if (reduceMotion) {
-            setCount(value);
-            return;
-        }
-
-        let start = 0;
-        const duration = 2000;
-        const increment = value / (duration / 16);
-        const timer = setInterval(() => {
-            start += increment;
-            if (start >= value) {
-                setCount(value);
-                clearInterval(timer);
-            } else {
-                setCount(Math.floor(start));
-            }
-        }, 16);
-
-        return () => clearInterval(timer);
-    }, [isInView, reduceMotion, value]);
-
-    return (
-        <div
-            ref={ref}
-            className={`font-playfair text-4xl sm:text-5xl lg:text-6xl font-bold leading-none text-dark ${className}`}
-        >
-            {count.toLocaleString()}
-            {suffix}
-        </div>
-    );
-}
 
 export function SectionHeader({
     title,

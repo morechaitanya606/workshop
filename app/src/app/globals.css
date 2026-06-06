@@ -29,18 +29,6 @@
         --color-overlay: rgba(0, 0, 0, 0.5);
 
         /* ── Spacing scale ── */
-        --space-1: 0.25rem;
-        --space-2: 0.5rem;
-        --space-3: 0.75rem;
-        --space-4: 1rem;
-        --space-6: 1.5rem;
-        --space-8: 2rem;
-        --space-10: 2.5rem;
-        --space-12: 3rem;
-        --space-16: 4rem;
-        --space-20: 5rem;
-        --space-24: 6rem;
-
         /* ── Radius tokens ── */
         --radius-sm: 0.5rem;
         --radius-md: 0.75rem;
@@ -495,15 +483,6 @@
         text-wrap: balance;
     }
 
-    /* Text animation helpers */
-    .text-animate-reveal {
-        @apply overflow-hidden;
-    }
-
-    .text-animate-reveal > * {
-        @apply inline-block animate-text-reveal;
-    }
-
     .text-glow-soft {
         @apply animate-text-glow;
     }
@@ -511,10 +490,6 @@
     .mask-fade-bottom {
         mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
         -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-    }
-
-    .perspective-1000 {
-        perspective: 1000px;
     }
 
     .pulse-hover {
@@ -546,18 +521,6 @@
         .btn-animated:active {
             transform: translateY(0px) scale(0.98);
         }
-    }
-
-    /* Background animation helpers */
-    .bg-animated-gradient {
-        background-image: linear-gradient(
-            120deg,
-            rgba(248, 244, 235, 1),
-            rgba(245, 228, 138, 0.9),
-            rgba(199, 107, 79, 0.9)
-        );
-        background-size: 200% 200%;
-        animation: bgWaves 16s ease-in-out infinite;
     }
 
     /* Image hover helpers */
@@ -602,16 +565,6 @@
         100% {
             object-position: 80% 50%;
         }
-    }
-
-    /* Scroll-in helper using CSS animation (optional alternative to JS scroll observers) */
-    .scroll-fade-in {
-        opacity: 0;
-        transform: translateY(24px);
-    }
-
-    .scroll-fade-in.is-visible {
-        animation: scrollFadeIn 0.8s ease-out forwards;
     }
 
     .grain-overlay {

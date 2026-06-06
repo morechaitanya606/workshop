@@ -1,7 +1,5 @@
 import type { MetadataRoute } from "next";
 import { getAppUrl } from "@/lib/env";
-import { mockWorkshops } from "@/lib/data";
-import { mockCommunities } from "@/lib/communities";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
 
@@ -29,7 +27,6 @@ const STATIC_PATHS = [
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const siteUrl = getAppUrl().replace(/\/$/, "");
     const now = new Date();
-    const allowMockFallback = process.env.NODE_ENV !== "production";
 
     const staticEntries: MetadataRoute.Sitemap = STATIC_PATHS.map((path) => ({
         url: `${siteUrl}${path}`,
@@ -50,15 +47,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     const workshopIds = new Set<string>();
     const communitySlugs = new Set<string>();
-
-    if (allowMockFallback) {
-        for (const workshop of mockWorkshops) {
-            workshopIds.add(workshop.id);
-        }
-        for (const community of mockCommunities) {
-            communitySlugs.add(community.slug);
-        }
-    }
 
     if (isSupabaseServiceConfigured) {
         try {

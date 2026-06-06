@@ -10,14 +10,12 @@ import {
     type WorkshopAttendee,
 } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-import { isKnownMockWorkshopId } from "@/lib/data";
 
 type WorkshopAttendeesPanelProps = {
     workshopId: string;
     backHref: string;
     backLabel: string;
     scope: "admin" | "host";
-    isMockWorkshop?: boolean;
 };
 
 export default function WorkshopAttendeesPanel({
@@ -25,23 +23,14 @@ export default function WorkshopAttendeesPanel({
     backHref,
     backLabel,
     scope,
-    isMockWorkshop = false,
 }: WorkshopAttendeesPanelProps) {
     const { session } = useAuth();
     const [attendees, setAttendees] = useState<WorkshopAttendee[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null);
-    const resolvedIsMockWorkshop = isMockWorkshop || isKnownMockWorkshopId(workshopId);
 
     useEffect(() => {
-        if (resolvedIsMockWorkshop) {
-            setAttendees([]);
-            setError(null);
-            setLoading(false);
-            return;
-        }
-
         if (!session?.access_token) return;
 
         let cancelled = false;
@@ -71,7 +60,7 @@ export default function WorkshopAttendeesPanel({
         return () => {
             cancelled = true;
         };
-    }, [resolvedIsMockWorkshop, scope, session?.access_token, workshopId]);
+    }, [scope, session?.access_token, workshopId]);
 
     const toggleCheckIn = async (bookingId: string, currentStatus: boolean) => {
         if (!session?.access_token) return;
@@ -132,12 +121,6 @@ export default function WorkshopAttendeesPanel({
             ) : error ? (
                 <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
                     {error}
-                </div>
-            ) : resolvedIsMockWorkshop ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
-                    Attendee check-in is only available for live workshops managed in the dashboard.
-                    This past event is a mock showcase entry, so there is no attendee list to load
-                    here.
                 </div>
             ) : attendees.length === 0 ? (
                 <div className="rounded-2xl bg-white p-8 text-center text-dark-muted shadow-soft">

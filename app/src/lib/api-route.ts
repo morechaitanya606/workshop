@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import * as Sentry from "@sentry/core";
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 
 type ParseSuccess<T> = {

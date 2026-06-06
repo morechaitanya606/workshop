@@ -4,11 +4,7 @@ import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { parseBody } from "@/lib/api-route";
 import { z } from "zod";
-import {
-    getFallbackFeedback,
-    isMissingFeedbackTableError,
-    toFallbackWorkshopFeedbackResponse,
-} from "@/lib/feedback-fallback";
+import { isMissingFeedbackTableError } from "@/lib/feedback-fallback";
 
 const bulkFeedbackSchema = z.object({
     workshopIds: z.array(z.string()).max(100),
@@ -48,17 +44,20 @@ export async function POST(request: NextRequest) {
             .eq("user_id", auth.user.id)
             .in("workshop_id", workshopIds);
 
-        const feedbackMap: Record<string, any> = {};
+        const feedbackMap: Record<
+            string,
+            {
+                rating: number | null;
+                comment: string;
+                photos: string[];
+                video_url: string | null;
+                created_at: string;
+                updated_at: string;
+            }
+        > = {};
 
         if (isMissingFeedbackTableError(error)) {
-            // Use fallback logic
-            for (const workshopId of workshopIds) {
-                const fallback = getFallbackFeedback(auth.user.id, workshopId);
-                if (fallback) {
-                    feedbackMap[workshopId] = toFallbackWorkshopFeedbackResponse(fallback);
-                }
-            }
-            return NextResponse.json({ feedback: feedbackMap });
+            return NextResponse.json({ feedback: {} });
         }
 
         if (error) {
@@ -70,7 +69,7 @@ export async function POST(request: NextRequest) {
                 feedbackMap[row.workshop_id] = {
                     rating: row.rating,
                     comment: row.comment,
-                    photos: row.photos,
+                    photos: Array.isArray(row.photos) ? row.photos.map((item) => String(item)) : [],
                     video_url: row.video_url,
                     created_at: row.created_at,
                     updated_at: row.updated_at,

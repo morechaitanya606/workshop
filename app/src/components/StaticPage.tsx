@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import Footer from "@/components/Footer";
 import { RevealGroup, RevealItem } from "@/components/ui";
-import { fadeUp, standardTransition, revealViewport } from "@/lib/motion-presets";
+import { fadeInUp, standardTransition, revealViewport } from "@/lib/motion-presets";
 import { cn } from "@/lib/utils";
 
 interface StaticPageProps {
@@ -34,7 +34,7 @@ export default function StaticPage({
                 <div className="max-w-3xl mx-auto">
                     <motion.div
                         className={cn(isCentered && "text-center")}
-                        variants={prefersReducedMotion ? undefined : fadeUp}
+                        variants={prefersReducedMotion ? undefined : fadeInUp}
                         initial={prefersReducedMotion ? undefined : "hidden"}
                         whileInView={prefersReducedMotion ? undefined : "visible"}
                         viewport={prefersReducedMotion ? undefined : revealViewport}

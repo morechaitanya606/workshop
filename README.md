@@ -10,11 +10,12 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Next.js-14-black?logo=next.js" />
-  <img src="https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript" />
+  <img src="https://img.shields.io/badge/Next.js-15.5-black?logo=next.js" />
+  <img src="https://img.shields.io/badge/React-19.2-61dafb?logo=react" />
+  <img src="https://img.shields.io/badge/TypeScript-5.8-blue?logo=typescript" />
   <img src="https://img.shields.io/badge/TailwindCSS-3.4-38bdf8?logo=tailwindcss" />
   <img src="https://img.shields.io/badge/Supabase-Auth%20%2B%20DB-3ecf8e?logo=supabase" />
-  <img src="https://img.shields.io/badge/Framer%20Motion-11-ff69b4?logo=framer" />
+  <img src="https://img.shields.io/badge/Framer%20Motion-12-ff69b4?logo=framer" />
 </p>
 
 ---
@@ -39,16 +40,16 @@ The application is designed to be **production-ready, scalable, and visually pre
 
 | Layer              | Technology                                           |
 |--------------------|------------------------------------------------------|
-| **Framework**      | [Next.js 14](https://nextjs.org/) (App Router)       |
-| **Language**       | [TypeScript](https://www.typescriptlang.org/) 5.7    |
+| **Framework**      | [Next.js 15.5](https://nextjs.org/) (App Router) + React 19.2 |
+| **Language**       | [TypeScript](https://www.typescriptlang.org/) 5.8    |
 | **Styling**        | [Tailwind CSS](https://tailwindcss.com/) 3.4         |
-| **Animations**     | [Framer Motion](https://www.framer.com/motion/) 11 + [GSAP](https://gsap.com/) |
+| **Animations**     | [Framer Motion](https://www.framer.com/motion/) 12   |
 | **Icons**          | [Lucide React](https://lucide.dev/)                  |
 | **Auth & Database**| [Supabase](https://supabase.com/) (PostgreSQL + Auth)|
-| **State**          | [Zustand](https://zustand-demo.pmnd.rs/) 5           |
+| **State**          | React context + local component state                |
 | **Payments**       | Razorpay                                             |
 | **Observability**  | Sentry + PostHog (env-gated)                         |
-| **Media Storage**  | Cloudflare R2 *(planned)*                            |
+| **Media Storage**  | Supabase Storage, with local dev fallback under `public/uploads` |
 | **Deployment**     | Vercel *(target)*                                    |
 
 ---
@@ -61,8 +62,7 @@ app/
 │   └── images/
 │       ├── background.png          # Hero background image
 │       ├── logo-black.jpeg         # Logo (dark version)
-│       ├── logo-white.jpeg         # Logo (light version)
-│       └── workshops/              # Workshop gallery images (32 images)
+│       └── workshops/              # Workshop gallery images
 │
 ├── src/
 │   ├── app/
@@ -85,8 +85,7 @@ app/
 │   │   ├── Footer.tsx              # Site footer with links
 │   │   ├── MobileNav.tsx           # Bottom mobile navigation bar
 │   │   ├── WorkshopCard.tsx        # Workshop preview card component
-│   │   ├── CategoryFilter.tsx      # Category filter pills
-│   │   └── SearchBar.tsx           # Search input component
+│   │   └── CategoryFilter.tsx      # Category filter pills
 │   │
 │   └── lib/
 │       ├── auth-context.tsx        # Supabase Auth context provider (useAuth hook)
@@ -211,6 +210,10 @@ RAZORPAY_KEY_ID=your-razorpay-key-id
 RAZORPAY_KEY_SECRET=your-razorpay-key-secret
 RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
 
+# Optional email pipeline
+# RESEND_API_KEY=re_...
+# CAREERS_INBOX_EMAIL=hello@onlyworkshop.com
+
 # Optional internal post-payment notifications webhook
 # PAYMENT_NOTIFICATIONS_WEBHOOK_URL=https://your-domain.com/api/internal/payments/events
 # PAYMENT_NOTIFICATIONS_WEBHOOK_SECRET=shared-signing-secret
@@ -225,9 +228,24 @@ RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
 # NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
 # NEXT_PUBLIC_SENTRY_DSN=...
 # SENTRY_DSN=...
+
+# Optional distributed rate limiting for production/serverless
+# UPSTASH_REDIS_REST_URL=https://your-upstash-instance.upstash.io
+# UPSTASH_REDIS_REST_TOKEN=...
 ```
 
 > Get these from your Supabase project: **Settings → API → Project URL & anon/public key**
+
+> Uploads use the Supabase Storage `uploads` bucket when configured. Local development can fall back to `app/public/uploads` if that bucket is missing.
+
+For schema changes, keep migrations under `app/supabase/migrations`, run Supabase advisors against the target project, then regenerate generated types with:
+
+```bash
+cd app
+SUPABASE_ACCESS_TOKEN=... SUPABASE_PROJECT_ID=your-project-ref npm run gen:supabase-types
+```
+
+The type generation script uses `supabase@2.105.0` and only replaces `src/lib/database.types.ts` after successful output validation.
 
 ### 3.1 Payment Notification Receiver Template
 
@@ -357,7 +375,7 @@ interface Workshop {
 - [x] Admin dashboard and workshop creation form
 - [ ] Connect admin form to Supabase database
 - [x] Razorpay payment integration
-- [ ] Cloudflare R2 media storage with image uploads
+- [ ] Production media storage hardening for uploads
 - [ ] User reviews and ratings
 - [ ] Workshop search with filters (date, price, location)
 - [ ] Email notifications (booking confirmation, reminders)

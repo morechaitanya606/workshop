@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import {
     CalendarDays,
     Gift,
+    ImageIcon,
     IndianRupee,
     Loader2,
     Plus,
     Tag,
     ToggleLeft,
     ToggleRight,
+    Upload,
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
@@ -21,6 +23,7 @@ import {
     toApiErrorMessage,
     updateAdminCoupon,
     updatePlatformSettings,
+    uploadMedia,
     type AdminCoupon,
     type PlatformSettings,
 } from "@/lib/api-client";
@@ -93,7 +96,9 @@ export default function AdminSettingsPage() {
     const [feeInput, setFeeInput] = useState(String(DEFAULT_SERVICE_FEE));
     const [specialPageForm, setSpecialPageForm] =
         useState<SpecialPageFormState>(INITIAL_SPECIAL_PAGE_FORM);
+    const [heroImageInput, setHeroImageInput] = useState("");
     const [savingSettings, setSavingSettings] = useState(false);
+    const [uploadingHeroImage, setUploadingHeroImage] = useState(false);
     const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
 
     const [creatingCoupon, setCreatingCoupon] = useState(false);
@@ -137,6 +142,7 @@ export default function AdminSettingsPage() {
                     ctaLabel: nextSpecialPage.ctaLabel,
                     visibleUntil: nextSpecialPage.visibleUntil,
                 });
+                setHeroImageInput(nextSettings.hero_image_url || "");
                 setCoupons(
                     Array.isArray(couponsResult.coupons)
                         ? couponsResult.coupons.map(normalizeCoupon)
@@ -167,6 +173,25 @@ export default function AdminSettingsPage() {
         setReloadKey((prev) => prev + 1);
     };
 
+    const handleHeroImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file || !session?.access_token) return;
+
+        setUploadingHeroImage(true);
+        setSettingsMsg(null);
+
+        try {
+            const result = await uploadMedia(session.access_token, file);
+            setHeroImageInput(result.url);
+            setSettingsMsg("Hero image uploaded. Save platform settings to publish it.");
+        } catch (uploadError) {
+            setSettingsMsg(toApiErrorMessage(uploadError, "Unable to upload hero image."));
+        } finally {
+            setUploadingHeroImage(false);
+        }
+    };
+
     const handleSaveSettings = async () => {
         if (!session?.access_token) return;
 
@@ -193,6 +218,7 @@ export default function AdminSettingsPage() {
             cta_label: specialPageForm.ctaLabel.trim() || DEFAULT_SPECIAL_PAGE_SETTINGS.ctaLabel,
             visible_until: normalizeSpecialPageDate(specialPageForm.visibleUntil),
         };
+        const heroImageUrl = heroImageInput.trim();
 
         setSavingSettings(true);
         setSettingsMsg(null);
@@ -201,6 +227,7 @@ export default function AdminSettingsPage() {
             await updatePlatformSettings(session.access_token, {
                 settings: {
                     service_fee: fee,
+                    hero_image_url: heroImageUrl,
                     special_page: nextSpecialPage,
                 },
             });
@@ -208,6 +235,7 @@ export default function AdminSettingsPage() {
             const nextSettings = {
                 ...settings,
                 service_fee: fee,
+                hero_image_url: heroImageUrl,
                 special_page: nextSpecialPage,
             };
 
@@ -385,6 +413,66 @@ export default function AdminSettingsPage() {
                             </section>
 
                             <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-soft">
+                                <div className="flex items-start gap-3">
+                                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-terracotta/10 text-terracotta">
+                                        <ImageIcon className="h-5 w-5" />
+                                    </span>
+                                    <div>
+                                        <h2 className="text-lg font-playfair font-bold text-dark">
+                                            Homepage Hero
+                                        </h2>
+                                        <p className="mt-1 text-sm font-inter text-dark-muted">
+                                            Set the image used behind the homepage headline.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 space-y-4">
+                                    <label className="block">
+                                        <span className="mb-1 block text-xs font-inter font-semibold text-dark-muted">
+                                            Hero Image URL
+                                        </span>
+                                        <input
+                                            type="text"
+                                            placeholder="/images/background.webp or https://..."
+                                            value={heroImageInput}
+                                            onChange={(event) =>
+                                                setHeroImageInput(event.target.value)
+                                            }
+                                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
+                                        />
+                                    </label>
+
+                                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-clay/40 bg-cream px-4 py-3 text-sm font-inter font-semibold text-dark transition-colors hover:bg-white">
+                                        {uploadingHeroImage ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <Upload className="h-4 w-4" />
+                                        )}
+                                        {uploadingHeroImage ? "Uploading..." : "Upload Hero Image"}
+                                        <input
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/webp"
+                                            onChange={handleHeroImageUpload}
+                                            disabled={uploadingHeroImage || savingSettings}
+                                            className="sr-only"
+                                        />
+                                    </label>
+
+                                    {heroImageInput && (
+                                        <div className="overflow-hidden rounded-xl border border-clay/30 bg-cream">
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img
+                                                src={heroImageInput}
+                                                alt="Homepage hero preview"
+                                                className="h-36 w-full object-cover"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
+
+                            <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-soft">
                                 <div className="flex items-start justify-between gap-4">
                                     <div>
                                         <h2 className="flex items-center gap-2 text-lg font-playfair font-bold text-dark">
@@ -546,6 +634,7 @@ export default function AdminSettingsPage() {
                                     <p
                                         className={`mt-3 text-sm font-medium ${
                                             settingsMsg.toLowerCase().includes("updated")
+                                            || settingsMsg.toLowerCase().includes("uploaded")
                                                 ? "text-emerald-600"
                                                 : "text-red-500"
                                         }`}

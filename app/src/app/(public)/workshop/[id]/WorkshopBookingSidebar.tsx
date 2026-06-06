@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { Calendar, ChevronRight, Loader2, Minus, Plus, Shield, Tag, X } from "lucide-react";
@@ -50,7 +49,6 @@ export default function WorkshopBookingSidebar({
     currentPricePerGuest,
     workshopDate,
     formattedWorkshopTime,
-    workshopLocation,
     maxSeats,
     guests,
     setGuests,

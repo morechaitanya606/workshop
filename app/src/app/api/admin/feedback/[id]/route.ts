@@ -8,7 +8,7 @@ import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { adminFeedbackUpdateSchema } from "@/lib/validators";
 
 type Params = {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 };
 
 async function assertAdminFeedbackWriteLimit(request: NextRequest, userId: string) {
@@ -21,6 +21,7 @@ async function assertAdminFeedbackWriteLimit(request: NextRequest, userId: strin
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
+    const { id } = await params;
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -57,7 +58,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         let updateResult = await serviceClient
             .from("workshop_feedback")
             .update(patch)
-            .eq("id", params.id)
+            .eq("id", id)
             .select("id,user_id,workshop_id,rating,comment,photos,video_url,created_at,updated_at")
             .maybeSingle();
 
@@ -76,7 +77,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             updateResult = await serviceClient
                 .from("workshop_feedback")
                 .update(patch)
-                .eq("id", params.id)
+                .eq("id", id)
                 .select("id,user_id,workshop_id,comment,created_at,updated_at")
                 .maybeSingle();
         }
@@ -97,6 +98,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(request: NextRequest, { params }: Params) {
+    const { id } = await params;
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -115,7 +117,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
         const { data, error } = await serviceClient
             .from("workshop_feedback")
             .delete()
-            .eq("id", params.id)
+            .eq("id", id)
             .select("id")
             .maybeSingle();
 

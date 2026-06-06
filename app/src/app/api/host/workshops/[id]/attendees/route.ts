@@ -6,18 +6,14 @@ import { requireHostOrAdmin } from "@/lib/api-auth";
 import {
     getConfirmedWorkshopAttendees,
     getWorkshopOwnerLookup,
-    isMockWorkshopId,
 } from "@/lib/workshop-attendees";
 
 type Params = {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 };
 
 export async function GET(request: NextRequest, { params }: Params) {
-    if (isMockWorkshopId(params.id)) {
-        return NextResponse.json({ success: true, attendees: [] });
-    }
-
+    const { id } = await params;
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {
         return auth.response;
@@ -28,7 +24,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     const serviceClient = service.client;
 
     try {
-        const workshop = await getWorkshopOwnerLookup(serviceClient, params.id);
+        const workshop = await getWorkshopOwnerLookup(serviceClient, id);
 
         if (!workshop.exists) {
             return NextResponse.json(
@@ -44,7 +40,7 @@ export async function GET(request: NextRequest, { params }: Params) {
             );
         }
 
-        const attendees = await getConfirmedWorkshopAttendees(serviceClient, params.id);
+        const attendees = await getConfirmedWorkshopAttendees(serviceClient, id);
         return NextResponse.json({ success: true, attendees });
     } catch (error) {
         return handleApiError("Failed to fetch attendees.", error);

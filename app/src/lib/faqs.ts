@@ -1,17 +1,14 @@
-import { DEFAULT_CHATBOT_FAQS, type ChatbotFaq } from "@/lib/chatbot";
 import { getPlatformChatbotClient } from "@/lib/chatbot-clients";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 
 export const FAQ_PUBLIC_SELECT_FIELDS = "id, question, answer";
 export const FAQ_ADMIN_SELECT_FIELDS = "id, client_id, question, answer, created_at, updated_at";
 
-export function getDefaultFaqRows(): ChatbotFaq[] {
-    return DEFAULT_CHATBOT_FAQS.map((faq, index) => ({
-        id: `default-faq-${index + 1}`,
-        question: faq.question,
-        answer: faq.answer,
-    }));
-}
+export type PublicFaqRow = {
+    id: string;
+    question: string;
+    answer: string;
+};
 
 export function isMissingFaqTableError(error: unknown) {
     const message =
@@ -27,7 +24,7 @@ export function isMissingFaqTableError(error: unknown) {
 
 export async function loadFaqRows(options?: { clientId?: string | null }) {
     if (!isSupabaseServiceConfigured) {
-        return getDefaultFaqRows();
+        return [];
     }
 
     try {
@@ -36,7 +33,7 @@ export async function loadFaqRows(options?: { clientId?: string | null }) {
             options?.clientId || (await getPlatformChatbotClient(client))?.id || null;
 
         if (!resolvedClientId) {
-            return getDefaultFaqRows();
+            return [];
         }
 
         const { data, error } = await client
@@ -47,15 +44,14 @@ export async function loadFaqRows(options?: { clientId?: string | null }) {
 
         if (error) {
             if (isMissingFaqTableError(error)) {
-                return getDefaultFaqRows();
+                return [];
             }
 
             throw error;
         }
 
-        const rows = (Array.isArray(data) ? data : []) as ChatbotFaq[];
-        return rows.length > 0 ? rows : getDefaultFaqRows();
+        return (Array.isArray(data) ? data : []) as PublicFaqRow[];
     } catch {
-        return getDefaultFaqRows();
+        return [];
     }
 }

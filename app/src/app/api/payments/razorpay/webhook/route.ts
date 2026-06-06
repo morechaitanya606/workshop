@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import * as Sentry from "@sentry/core";
+import * as Sentry from "@sentry/nextjs";
 import { createHash } from "crypto";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError } from "@/lib/api-auth";

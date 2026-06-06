@@ -154,21 +154,18 @@ export default function AdminFeedbackPage() {
                 comment: editDraft.comment.trim(),
             });
 
+            const updatedFeedback = result.feedback;
             setFeedback((prev) =>
                 prev.map((item) =>
                     item.id === id
                         ? {
                               ...item,
                               rating:
-                                  typeof (result.feedback as any)?.rating === "number"
-                                      ? (result.feedback as any).rating
+                                  typeof updatedFeedback.rating === "number"
+                                      ? updatedFeedback.rating
                                       : editDraft.rating,
-                              comment: String(
-                                  (result.feedback as any)?.comment || editDraft.comment.trim()
-                              ),
-                              updatedAt: String(
-                                  (result.feedback as any)?.updated_at || new Date().toISOString()
-                              ),
+                              comment: updatedFeedback.comment || editDraft.comment.trim(),
+                              updatedAt: updatedFeedback.updated_at || new Date().toISOString(),
                           }
                         : item
                 )

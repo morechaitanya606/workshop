@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import {
-    BellRing,
     Star,
     MapPin,
     Clock,
@@ -16,9 +15,9 @@ import {
     Check,
     ChevronRight,
     ArrowRight,
-    Instagram,
-    Youtube,
     Globe,
+    MessageCircle,
+    PlayCircle,
 } from "lucide-react";
 import Footer from "@/components/Footer";
 import { useToast } from "@/components/ToastProvider";
@@ -358,7 +357,7 @@ export default function WorkshopClient({
                             setFeedbackPhotos([]);
                         }
                     }
-                } catch (error) {
+                } catch {
                     if (!cancelled) {
                         setCanLeaveFeedback(false);
                     }
@@ -1090,7 +1089,7 @@ export default function WorkshopClient({
                                                 rel="noopener noreferrer"
                                                 className="flex items-center gap-1.5 text-sm font-inter text-dark-muted hover:text-terracotta transition-colors bg-white px-3 py-1.5 rounded-lg border border-gray-100"
                                             >
-                                                <Instagram className="w-4 h-4" />
+                                                <MessageCircle className="w-4 h-4" />
                                                 <span>Instagram</span>
                                             </a>
                                         )}
@@ -1101,7 +1100,7 @@ export default function WorkshopClient({
                                                 rel="noopener noreferrer"
                                                 className="flex items-center gap-1.5 text-sm font-inter text-dark-muted hover:text-terracotta transition-colors bg-white px-3 py-1.5 rounded-lg border border-gray-100"
                                             >
-                                                <Youtube className="w-4 h-4" />
+                                                <PlayCircle className="w-4 h-4" />
                                                 <span>YouTube</span>
                                             </a>
                                         )}
@@ -1186,7 +1185,7 @@ export default function WorkshopClient({
                                                             rel="noopener noreferrer"
                                                             className="p-2 bg-cream-100 rounded-lg hover:bg-terracotta/10 transition-colors"
                                                         >
-                                                            <Instagram className="w-4 h-4 text-dark-muted" />
+                                                            <MessageCircle className="w-4 h-4 text-dark-muted" />
                                                         </a>
                                                     )}
                                                     {workshop.hostSocialLinks.youtube && (
@@ -1196,7 +1195,7 @@ export default function WorkshopClient({
                                                             rel="noopener noreferrer"
                                                             className="p-2 bg-cream-100 rounded-lg hover:bg-terracotta/10 transition-colors"
                                                         >
-                                                            <Youtube className="w-4 h-4 text-dark-muted" />
+                                                            <PlayCircle className="w-4 h-4 text-dark-muted" />
                                                         </a>
                                                     )}
                                                     {workshop.hostSocialLinks.website && (

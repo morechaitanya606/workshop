@@ -11,12 +11,13 @@ import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/
 import { communityJoinSchema } from "@/lib/validators";
 
 type Params = {
-    params: { slug: string };
+    params: Promise<{ slug: string }>;
 };
 
 export async function POST(request: NextRequest, { params }: Params) {
+    const { slug } = await params;
     const rateLimitResult = await assertRateLimit({
-        key: getRateLimitKey(request, `community-join:${params.slug}`),
+        key: getRateLimitKey(request, `community-join:${slug}`),
         limit: 12,
         windowMs: 60_000,
         message: "Too many join attempts. Please wait and try again.",
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         const { data: community, error: communityError } = await serviceClient
             .from("communities")
             .select("id")
-            .eq("slug", params.slug)
+            .eq("slug", slug)
             .maybeSingle();
 
         if (communityError) {

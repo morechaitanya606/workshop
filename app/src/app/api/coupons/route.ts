@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
         }
 
         return NextResponse.json({ coupons: data }, { status: 200 });
-    } catch (error) {
+    } catch {
         return jsonError("Internal Server Error", 500);
     }
 }
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json({ coupon: data }, { status: 201 });
-    } catch (error) {
+    } catch {
         return jsonError("Internal Server Error", 500);
     }
 }

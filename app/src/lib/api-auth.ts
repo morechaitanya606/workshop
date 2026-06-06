@@ -1,7 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import * as Sentry from "@sentry/core";
+import * as Sentry from "@sentry/nextjs";
 import type { Tables, TablesInsert } from "@/lib/database.types";
 import {
     createSupabaseAnonServerClient,

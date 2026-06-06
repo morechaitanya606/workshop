@@ -3,10 +3,23 @@ import { BookingConfirmationEmail } from "@/emails/BookingConfirmation";
 import { WorkshopReminderEmail } from "@/emails/WorkshopReminder";
 import { FeedbackRequestEmail } from "@/emails/FeedbackRequest";
 import { createSupabaseServiceClient } from "./supabase-server";
-import * as Sentry from "@sentry/core";
+import * as Sentry from "@sentry/nextjs";
 
-const resend = new Resend(process.env.RESEND_API_KEY || "re_dummy");
 const FROM_EMAIL = "Only Workshops <no-reply@updates.onlyworkshop.com>"; // Replace with verified domain
+let resendClient: Resend | null = null;
+
+function getResendClient() {
+    const apiKey = process.env.RESEND_API_KEY?.trim();
+    if (!apiKey) {
+        throw new Error("RESEND_API_KEY is not configured.");
+    }
+
+    if (!resendClient) {
+        resendClient = new Resend(apiKey);
+    }
+
+    return resendClient;
+}
 
 interface SendEmailParams {
     to: string;
@@ -45,7 +58,7 @@ async function sendEmailAndLog({ to, subject, templateName, react, referenceId }
 
     try {
         // 2. Send the email via Resend
-        const { data: resendData, error: resendError } = await resend.emails.send({
+        const { data: resendData, error: resendError } = await getResendClient().emails.send({
             from: FROM_EMAIL,
             to,
             subject,

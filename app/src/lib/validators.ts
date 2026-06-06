@@ -289,6 +289,17 @@ export const supportChatRequestSchema = z.object({
 
 export type SupportChatRequestInput = z.infer<typeof supportChatRequestSchema>;
 
+export const supportTicketStatusSchema = z.object({
+    status: z.enum(["open", "in_progress", "resolved"]),
+});
+
+export const supportTicketReplySchema = z.object({
+    message: z.string().trim().min(1).max(4000),
+});
+
+export type SupportTicketStatusInput = z.infer<typeof supportTicketStatusSchema>;
+export type SupportTicketReplyInput = z.infer<typeof supportTicketReplySchema>;
+
 export const chatbotStageSchema = z.enum(["idle", "asking_name", "asking_phone", "completed"]);
 
 export const chatbotLeadDraftSchema = z.object({
@@ -433,6 +444,7 @@ export type CommunityPhotoCreateInput = z.infer<typeof communityPhotoCreateSchem
 
 export const communityPhotoUpdateSchema = z
     .object({
+        imageUrl: imageUrl.optional(),
         altText: z.string().trim().max(180).optional(),
         sortOrder: z.coerce.number().int().min(0).max(1000).optional(),
         isActive: z.boolean().optional(),

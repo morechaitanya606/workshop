@@ -10,7 +10,6 @@ import { careersApplicationSchema } from "@/lib/validators";
 
 export const runtime = "nodejs";
 
-const resend = new Resend(process.env.RESEND_API_KEY || "re_dummy");
 const FROM_EMAIL = "Only Workshops <no-reply@updates.onlyworkshop.com>";
 const DEFAULT_CAREERS_INBOX = "hello@onlyworkshop.com";
 const MAX_RESUME_SIZE_BYTES = 5 * 1024 * 1024;
@@ -23,6 +22,15 @@ const ALLOWED_RESUME_EXTENSIONS = new Set(["pdf", "doc", "docx"]);
 
 function getCareersInboxEmail() {
     return process.env.CAREERS_INBOX_EMAIL?.trim() || DEFAULT_CAREERS_INBOX;
+}
+
+function getResendClient() {
+    const apiKey = process.env.RESEND_API_KEY?.trim();
+    if (!apiKey) {
+        throw new Error("RESEND_API_KEY is not configured.");
+    }
+
+    return new Resend(apiKey);
 }
 
 function sanitizeFileName(fileName: string) {
@@ -116,7 +124,7 @@ export async function POST(request: NextRequest) {
 
         const inboxEmail = getCareersInboxEmail();
         const subject = `Career application: ${parsed.data.fullName} - ${parsed.data.role}`;
-        const { error } = await resend.emails.send({
+        const { error } = await getResendClient().emails.send({
             from: FROM_EMAIL,
             to: inboxEmail,
             replyTo: parsed.data.email,

@@ -1,16 +1,15 @@
 import "server-only";
 
-import * as Sentry from "@sentry/core";
-import { warnDevFallback } from "@/lib/dev-warnings";
+import * as Sentry from "@sentry/nextjs";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { workshopQuerySchema } from "@/lib/validators";
-import { mapWorkshopRowToWorkshop, queryMockWorkshops } from "@/lib/workshop-utils";
+import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
 import { normalizeFilterCategoryLabel, PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
 import type { SpecialPageSettings } from "@/lib/special-page";
 
-export type WorkshopPageSource = "supabase" | "mock" | "error";
+export type WorkshopPageSource = "supabase" | "error";
 
 export type HomeWorkshopsResult = {
     data: Workshop[];
@@ -109,9 +108,6 @@ function buildExploreWorkshopQuery(
 }
 
 export async function loadHomeWorkshops(): Promise<HomeWorkshopsResult> {
-    const allowMockFallback = process.env.NODE_ENV !== "production";
-    let fallbackReason = "Supabase service is unavailable.";
-
     if (isSupabaseServiceConfigured) {
         try {
             const serviceClient = createSupabaseServiceClient({ requestTimeoutMs: 5000 });
@@ -168,7 +164,6 @@ export async function loadHomeWorkshops(): Promise<HomeWorkshopsResult> {
             }
 
             if (error) {
-                fallbackReason = error.message || "Supabase returned an error for home workshops.";
                 Sentry.captureException(error, {
                     tags: {
                         layer: "web",
@@ -177,10 +172,6 @@ export async function loadHomeWorkshops(): Promise<HomeWorkshopsResult> {
                 });
             }
         } catch (error) {
-            fallbackReason =
-                error instanceof Error
-                    ? error.message
-                    : "Unexpected error while loading home workshops.";
             Sentry.captureException(error, {
                 tags: {
                     layer: "web",
@@ -190,35 +181,15 @@ export async function loadHomeWorkshops(): Promise<HomeWorkshopsResult> {
         }
     }
 
-    if (!allowMockFallback) {
-        return {
-            data: [],
-            source: "error",
-        };
-    }
-
-    warnDevFallback("home_page", `Using mock workshops because ${fallbackReason}`);
-
     return {
-        data: queryMockWorkshops({
-            q: "",
-            category: "",
-            city: "",
-            dateFrom: "",
-            dateTo: "",
-            sort: "date_asc",
-            page: 1,
-            pageSize: 12,
-        }).data,
-        source: "mock",
+        data: [],
+        source: "error",
     };
 }
 
 export async function loadExploreWorkshops(searchParams: {
     [key: string]: string | string[] | undefined;
 }): Promise<ExploreWorkshopsResult> {
-    const allowMockFallback = process.env.NODE_ENV !== "production";
-    let fallbackReason = "Supabase service is unavailable.";
     const rawQuery = {
         q: searchParams.q ?? "",
         category: searchParams.category ?? "",
@@ -276,7 +247,6 @@ export async function loadExploreWorkshops(searchParams: {
                 };
             }
 
-            fallbackReason = error.message || "Supabase returned an error for explore workshops.";
             Sentry.captureException(error, {
                 tags: {
                     layer: "web",
@@ -284,26 +254,13 @@ export async function loadExploreWorkshops(searchParams: {
                 },
             });
         } catch (error) {
-            fallbackReason =
-                error instanceof Error
-                    ? error.message
-                    : "Unexpected error while loading explore workshops.";
             Sentry.captureException(error, {
                 tags: {
                     layer: "web",
                     route: "explore_page",
                 },
             });
-            // Fall through to fallback behavior.
         }
-    }
-
-    if (allowMockFallback) {
-        warnDevFallback("explore_page", `Using mock workshops because ${fallbackReason}`);
-        return queryMockWorkshops({
-            ...query,
-            category: normalizedCategory,
-        });
     }
 
     return {
@@ -315,6 +272,7 @@ export async function loadExploreWorkshops(searchParams: {
 
 export type PlatformSettingsType = {
     service_fee?: number;
+    hero_image_url?: string;
     early_bird_offer?: {
         enabled: boolean;
         discount_type: "percentage" | "fixed";
@@ -331,11 +289,11 @@ export async function getPlatformSettings(): Promise<PlatformSettingsType> {
             const { data, error } = await serviceClient.from("platform_settings").select("*");
 
             if (!error && data) {
-                const settings = data.reduce((acc, row) => {
+                const settings = data.reduce<Record<string, unknown>>((acc, row) => {
                     acc[row.setting_key] = row.setting_value;
                     return acc;
-                }, {} as any);
-                return settings;
+                }, {});
+                return settings as PlatformSettingsType;
             }
             if (error) {
                 Sentry.captureException(error, {

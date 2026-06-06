@@ -5,7 +5,7 @@ import Image from "next/image";
 import { getInitials } from "@/lib/utils";
 
 type ProfileSettingsPanelProps = {
-    avatarInputRef: RefObject<HTMLInputElement>;
+    avatarInputRef: RefObject<HTMLInputElement | null>;
     avatarUploading: boolean;
     onAvatarUpload: (event: ChangeEvent<HTMLInputElement>) => void;
     onRemoveAvatar: () => void;

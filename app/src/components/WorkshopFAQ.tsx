@@ -4,17 +4,10 @@ import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { getFaqs, type FaqItem } from "@/lib/api-client";
-import { DEFAULT_CHATBOT_FAQS } from "@/lib/chatbot";
-
-const FALLBACK_FAQS: FaqItem[] = DEFAULT_CHATBOT_FAQS.map((faq, index) => ({
-    id: `fallback-faq-${index + 1}`,
-    question: faq.question,
-    answer: faq.answer,
-}));
 
 export default function WorkshopFAQ() {
     const [openIndex, setOpenIndex] = useState<number | null>(null);
-    const [faqs, setFaqs] = useState<FaqItem[]>(FALLBACK_FAQS);
+    const [faqs, setFaqs] = useState<FaqItem[]>([]);
     const prefersReducedMotion = Boolean(useReducedMotion());
 
     useEffect(() => {
@@ -23,12 +16,12 @@ export default function WorkshopFAQ() {
         const loadFaqData = async () => {
             try {
                 const result = await getFaqs();
-                if (!cancelled && Array.isArray(result.faqs) && result.faqs.length > 0) {
+                if (!cancelled) {
                     setFaqs(result.faqs);
                 }
             } catch {
                 if (!cancelled) {
-                    setFaqs(FALLBACK_FAQS);
+                    setFaqs([]);
                 }
             }
         };
@@ -39,6 +32,10 @@ export default function WorkshopFAQ() {
             cancelled = true;
         };
     }, []);
+
+    if (faqs.length === 0) {
+        return null;
+    }
 
     return (
         <div className="card-section">

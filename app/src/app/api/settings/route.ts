@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase-server";
 import { requireAdminUser, jsonError } from "@/lib/api-auth";
+import type { Json } from "@/lib/database.types";
 
 export async function GET(_request: NextRequest) {
     try {
@@ -16,11 +17,11 @@ export async function GET(_request: NextRequest) {
                 acc[row.setting_key] = row.setting_value;
                 return acc;
             },
-            {} as Record<string, any>
+            {} as Record<string, Json>
         );
 
         return NextResponse.json({ settings }, { status: 200 });
-    } catch (error) {
+    } catch {
         return jsonError("Internal Server Error", 500);
     }
 }
@@ -33,15 +34,16 @@ export async function PATCH(request: NextRequest) {
         const body = await request.json();
         const { settings } = body;
 
-        if (!settings || typeof settings !== "object") {
+        if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
             return jsonError("Invalid payload. Expected { settings: object }", 400);
         }
+        const settingsRecord = settings as Record<string, Json>;
 
         const supabase = createSupabaseServiceClient();
 
-        const upserts = Object.entries(settings).map(([key, value]) => ({
+        const upserts = Object.entries(settingsRecord).map(([key, value]) => ({
             setting_key: key,
-            setting_value: value as any,
+            setting_value: value,
             updated_at: new Date().toISOString(),
         }));
 
@@ -54,7 +56,7 @@ export async function PATCH(request: NextRequest) {
         }
 
         return NextResponse.json({ success: true }, { status: 200 });
-    } catch (error) {
+    } catch {
         return jsonError("Internal Server Error", 500);
     }
 }

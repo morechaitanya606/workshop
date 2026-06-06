@@ -1,11 +1,5 @@
 import type { Workshop } from "@/lib/data";
-import {
-    mockWorkshops,
-    normalizeFilterCategoryLabel,
-    PAST_EVENTS_CATEGORY_LABEL,
-} from "@/lib/data";
-import type { TablesInsert, Json } from "@/lib/database.types";
-import type { SupabaseServerClient } from "@/lib/supabase-server";
+import type { Tables, TablesInsert, Json } from "@/lib/database.types";
 import type { WorkshopCreateInput, WorkshopQueryInput } from "@/lib/validators";
 import {
     normalizeWorkshopImageUrlInput,
@@ -75,13 +69,13 @@ function cleanLinks(value: Json | null | undefined) {
     };
 }
 
-export function mapWorkshopRowToWorkshop(row: any): Workshop {
+export function mapWorkshopRowToWorkshop(row: Tables<"workshops">): Workshop {
     const socialLinks = cleanLinks(row.social_links);
     const hostSocialLinks = cleanLinks(row.host_social_links);
     const galleryImages = cleanStringList(row.gallery_images)
         .map((img) => normalizeWorkshopImageUrl(img))
         .filter((img) => img.length > 0);
-    const locationImages = cleanStringList((row as any).location_images)
+    const locationImages = cleanStringList(row.location_images)
         .map((img) => normalizeWorkshopImageUrl(img))
         .filter((img) => img.length > 0);
 
@@ -101,12 +95,12 @@ export function mapWorkshopRowToWorkshop(row: any): Workshop {
         coverImage: normalizeWorkshopImageUrl(row.cover_image),
         galleryImages,
         videoUrl: cleanUrlValue(row.video_url),
-        rating: 4.8,
-        reviewCount: 0,
+        rating: Number(row.rating ?? 0),
+        reviewCount: Number(row.review_count ?? 0),
         hostName: String(row.host_name),
         hostAvatar:
             normalizeWorkshopImageUrl(cleanUrlValue(row.host_avatar)) ||
-            "/images/workshops/IMG-20260306-WA0006.webp",
+            "/images/icon.png",
         hostBio: String(row.host_bio),
         hostExperience: cleanUrlValue(row.host_experience),
         hostSocialLinks,
@@ -118,9 +112,9 @@ export function mapWorkshopRowToWorkshop(row: any): Workshop {
             : [],
         isNew: row.is_new,
         isBestseller: row.is_bestseller,
-        eventAddress: (row as any).event_address || undefined,
-        latitude: cleanNumberValue((row as any).latitude),
-        longitude: cleanNumberValue((row as any).longitude),
+        eventAddress: row.event_address || undefined,
+        latitude: cleanNumberValue(row.latitude),
+        longitude: cleanNumberValue(row.longitude),
         locationImages,
         earlyBirdEnabled: Boolean(row.early_bird_enabled),
         earlyBirdDiscountType: row.early_bird_discount_type || "percentage",
@@ -149,7 +143,7 @@ export function buildWorkshopInsertPayload(
 
     const id = `${slug || "workshop"}-${Date.now()}`;
     const coverImage = normalizeWorkshopImageUrlInput(input.coverImage);
-    const galleryImages = input.galleryImages.map((item: any) =>
+    const galleryImages = input.galleryImages.map((item: string) =>
         normalizeWorkshopImageUrlInput(item)
     );
     const videoUrl = input.videoUrl ? normalizeWorkshopVideoUrlInput(input.videoUrl) : "";
@@ -199,46 +193,6 @@ export function buildWorkshopInsertPayload(
     return payload;
 }
 
-function matchesWorkshopQuery(workshop: Workshop, query: WorkshopQueryInput) {
-    const q = query.q.toLowerCase().trim();
-    const category = normalizeFilterCategoryLabel(query.category).toLowerCase().trim();
-    const city = query.city.toLowerCase().trim();
-    const isPastEventsCategory = category === PAST_EVENTS_CATEGORY_LABEL.toLowerCase();
-    const today = new Date().toISOString().slice(0, 10);
-
-    const matchesText =
-        !q ||
-        workshop.title.toLowerCase().includes(q) ||
-        workshop.description.toLowerCase().includes(q) ||
-        workshop.location.toLowerCase().includes(q) ||
-        workshop.city.toLowerCase().includes(q);
-    const matchesCategory =
-        !category || isPastEventsCategory || workshop.category.toLowerCase() === category;
-    const matchesCity = !city || workshop.city.toLowerCase() === city;
-
-    const price = workshop.price;
-    const matchesMinPrice = typeof query.minPrice === "number" ? price >= query.minPrice : true;
-    const matchesMaxPrice = typeof query.maxPrice === "number" ? price <= query.maxPrice : true;
-    const matchesDateFrom = query.dateFrom ? workshop.date >= query.dateFrom : true;
-    const matchesDateTo = query.dateTo ? workshop.date <= query.dateTo : true;
-
-    const hasDateFilter = Boolean(query.dateFrom || query.dateTo);
-    const matchesDefaultUpcoming = isPastEventsCategory || hasDateFilter || workshop.date >= today;
-    const matchesPastEvents = !isPastEventsCategory || workshop.date < today;
-
-    return (
-        matchesText &&
-        matchesCategory &&
-        matchesCity &&
-        matchesMinPrice &&
-        matchesMaxPrice &&
-        matchesDateFrom &&
-        matchesDateTo &&
-        matchesDefaultUpcoming &&
-        matchesPastEvents
-    );
-}
-
 export function sortWorkshops(workshops: Workshop[], sort: WorkshopQueryInput["sort"]) {
     const items = [...workshops];
     items.sort((a, b) => {
@@ -249,89 +203,4 @@ export function sortWorkshops(workshops: Workshop[], sort: WorkshopQueryInput["s
         return a.date.localeCompare(b.date);
     });
     return items;
-}
-
-export function queryMockWorkshops(query: WorkshopQueryInput) {
-    const filtered = mockWorkshops.filter((item: any) => matchesWorkshopQuery(item, query));
-    const sorted = sortWorkshops(filtered, query.sort);
-    const total = sorted.length;
-    const start = (query.page - 1) * query.pageSize;
-    const end = start + query.pageSize;
-
-    return {
-        data: sorted.slice(start, end),
-        total,
-        page: query.page,
-        pageSize: query.pageSize,
-        source: "mock" as const,
-    };
-}
-
-export async function ensureWorkshopSeededFromMock(
-    serviceClient: SupabaseServerClient,
-    workshopId: string
-) {
-    const { data: existing } = await serviceClient
-        .from("workshops")
-        .select("id")
-        .eq("id", workshopId)
-        .maybeSingle();
-
-    if (existing?.id) return true;
-
-    const mockWorkshop = mockWorkshops.find((item: any) => item.id === workshopId);
-    if (!mockWorkshop) {
-        return false;
-    }
-
-    const insertPayload: TablesInsert<"workshops"> = {
-        id: mockWorkshop.id,
-        title: mockWorkshop.title,
-        description: mockWorkshop.description,
-        category: mockWorkshop.category,
-        price: mockWorkshop.price,
-        location: mockWorkshop.location,
-        city: mockWorkshop.city,
-        duration: mockWorkshop.duration,
-        date: mockWorkshop.date,
-        time: mockWorkshop.time,
-        max_seats: mockWorkshop.maxSeats,
-        seats_remaining: mockWorkshop.seatsRemaining,
-        cover_image: mockWorkshop.coverImage,
-        gallery_images: mockWorkshop.galleryImages,
-        video_url: mockWorkshop.videoUrl || null,
-        social_links: mockWorkshop.socialLinks || {},
-        host_name: mockWorkshop.hostName,
-        host_avatar: mockWorkshop.hostAvatar || null,
-        host_bio: mockWorkshop.hostBio,
-        host_experience: mockWorkshop.hostExperience || null,
-        host_social_links: mockWorkshop.hostSocialLinks || {},
-        what_you_learn: mockWorkshop.whatYouLearn,
-        materials_provided: mockWorkshop.materialsProvided,
-        ...(true ? {} : { badge_labels: mockWorkshop?.badgeLabels ?? null }),
-        is_bestseller: Boolean(mockWorkshop.isBestseller),
-        is_new: Boolean(mockWorkshop.isNew),
-        ...(true ? {} : { event_address: mockWorkshop?.eventAddress || null }),
-        ...(true
-            ? {}
-            : {
-                  latitude:
-                      mockWorkshop?.latitude !== undefined ? Number(mockWorkshop?.latitude) : null,
-              }),
-        ...(true
-            ? {}
-            : {
-                  longitude:
-                      mockWorkshop?.longitude !== undefined
-                          ? Number(mockWorkshop?.longitude)
-                          : null,
-              }),
-        ...(true ? {} : { location_images: mockWorkshop?.locationImages || [] }),
-    };
-
-    const { error } = await serviceClient.from("workshops").upsert(insertPayload, {
-        onConflict: "id",
-    });
-
-    return !error;
 }

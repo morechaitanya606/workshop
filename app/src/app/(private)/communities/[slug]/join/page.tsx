@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Send } from "lucide-react";
 import Footer from "@/components/Footer";
@@ -9,7 +9,7 @@ import { submitCommunityJoinRequest, toApiErrorMessage } from "@/lib/api-client"
 import { communityJoinSchema } from "@/lib/validators";
 
 type JoinPageProps = {
-    params: { slug: string };
+    params: Promise<{ slug: string }>;
 };
 
 type JoinForm = {
@@ -22,6 +22,7 @@ type JoinForm = {
 type FieldErrors = Partial<Record<keyof JoinForm, string>>;
 
 export default function JoinCommunityPage({ params }: JoinPageProps) {
+    const { slug } = use(params);
     const [form, setForm] = useState<JoinForm>({
         fullName: "",
         email: "",
@@ -68,7 +69,7 @@ export default function JoinCommunityPage({ params }: JoinPageProps) {
 
         setSubmitting(true);
         try {
-            const result = await submitCommunityJoinRequest(params.slug, validation.data);
+            const result = await submitCommunityJoinRequest(slug, validation.data);
             setSubmitted(true);
             setMessage(result.message);
         } catch (submitError) {
@@ -85,7 +86,7 @@ export default function JoinCommunityPage({ params }: JoinPageProps) {
             <section className="section-padding pt-28 pb-16">
                 <div className="mx-auto max-w-2xl">
                     <Link
-                        href={`/communities/${params.slug}`}
+                        href={`/communities/${slug}`}
                         className="interactive-link mb-6 inline-flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta"
                     >
                         <ArrowLeft className="h-4 w-4" />
@@ -111,7 +112,7 @@ export default function JoinCommunityPage({ params }: JoinPageProps) {
                                 <p className="text-sm font-inter text-dark-muted">
                                     You can close this tab or return to the community page.
                                 </p>
-                                <Link href={`/communities/${params.slug}`} className="btn-primary">
+                                <Link href={`/communities/${slug}`} className="btn-primary">
                                     Back to Community
                                 </Link>
                             </div>

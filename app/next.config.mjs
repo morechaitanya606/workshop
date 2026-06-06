@@ -2,6 +2,9 @@ import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 
 const disablePersistentWebpackCache = process.platform === "win32";
 const isProduction = process.env.NODE_ENV === "production";
+const configuredBuildCpus = Number.parseInt(process.env.NEXT_BUILD_CPUS || "1", 10);
+const buildCpus =
+    Number.isFinite(configuredBuildCpus) && configuredBuildCpus > 0 ? configuredBuildCpus : 1;
 
 const baseSecurityHeaders = [
     {
@@ -59,7 +62,7 @@ const baseConfig = {
         ],
     },
     // Limit build parallelism for more stable local builds on constrained machines.
-    experimental: isProduction ? undefined : { cpus: 1 },
+    experimental: { cpus: buildCpus },
     async headers() {
         return [
             {
@@ -97,7 +100,11 @@ export default async function configByPhase(phase) {
         distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next",
     };
 
-    if (process.env.NODE_ENV !== "production") {
+    const isSentryConfigured = Boolean(
+        process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_AUTH_TOKEN
+    );
+
+    if (process.env.NODE_ENV !== "production" || !isSentryConfigured) {
         return nextConfig;
     }
 

@@ -6,10 +6,11 @@ import { requireSupabaseService } from "@/lib/api-helpers";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 
 type Params = {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 };
 
 export async function POST(request: NextRequest, { params }: Params) {
+    const { id } = await params;
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         const { data: application, error: applicationError } = await service.client
             .from("host_applications")
             .select("*")
-            .eq("id", params.id)
+            .eq("id", id)
             .maybeSingle();
 
         if (applicationError) {
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         const { data: approvedApplication, error: approveError } = await service.client
             .from("host_applications")
             .update({ status: "approved" })
-            .eq("id", params.id)
+            .eq("id", id)
             .select("*")
             .single();
 

@@ -10,13 +10,13 @@ type ProfileRoleRow = {
     role: Tables<"profiles">["role"] | null;
 };
 
-export function createSupabaseRscClient() {
+export async function createSupabaseRscClient() {
     const config = getPublicSupabaseConfig();
     if (!config?.url || !config.key) {
         return null;
     }
 
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     return createServerClient<Database>(config.url, config.key, {
         cookies: {
             getAll() {
@@ -43,8 +43,8 @@ export function createSupabaseRscClient() {
 
 export async function requireAdminSupabaseRscClient(
     redirectPath = "/admin/dashboard"
-): Promise<NonNullable<ReturnType<typeof createSupabaseRscClient>>> {
-    const client = createSupabaseRscClient();
+): Promise<NonNullable<Awaited<ReturnType<typeof createSupabaseRscClient>>>> {
+    const client = await createSupabaseRscClient();
     if (!client) {
         redirect(`/auth/login?redirect=${encodeURIComponent(redirectPath)}`);
     }

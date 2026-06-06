@@ -1,13 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { isKnownMockWorkshopId } from "@/lib/data";
 import { handleApiError } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
-import {
-    getFallbackPublicFeedback,
-    isMissingFeedbackTableError,
-    toFallbackWorkshopFeedbackResponse,
-} from "@/lib/feedback-fallback";
+import { isMissingFeedbackTableError } from "@/lib/feedback-fallback";
 
 type PublicFeedbackRow = {
     id: string;
@@ -34,45 +29,24 @@ function formatDisplayName(fullName: string | null) {
     return `${parts[0]}${lastInitial}`;
 }
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-    const workshopId = params.id;
-    const allowMockFallback = process.env.NODE_ENV !== "production";
+export async function GET(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const { id: workshopId } = await params;
     const requestedLimit = Number(request.nextUrl.searchParams.get("limit") || DEFAULT_LIMIT);
     const limit = Number.isFinite(requestedLimit)
         ? Math.min(Math.max(requestedLimit, 1), MAX_LIMIT)
         : DEFAULT_LIMIT;
-    const formatFallbackFeedback = () => {
-        const fallback = getFallbackPublicFeedback(workshopId);
-        return NextResponse.json({
-            feedback: fallback.map((record) => {
-                const normalized = toFallbackWorkshopFeedbackResponse(record);
-                return {
-                    id: `${record.userId}-${record.workshopId}`,
-                    rating: normalized.rating,
-                    comment: normalized.comment,
-                    photos: normalized.photos || [],
-                    createdAt: normalized.created_at,
-                    userDisplayName: "Workshop attendee",
-                    avatarUrl: null,
-                };
-            }),
-        });
-    };
 
     const service = requireSupabaseService();
     if (!service.ok) {
-        if (!allowMockFallback) {
-            return service.response;
-        }
-        return formatFallbackFeedback();
+        return service.response;
     }
 
     try {
         const serviceClient = service.client;
 
-        if (allowMockFallback && isKnownMockWorkshopId(workshopId)) {
-            return formatFallbackFeedback();
-        }
 
         const { data, error } = await serviceClient
             .from("workshop_feedback")
@@ -82,7 +56,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
             .limit(limit);
 
         if (isMissingFeedbackTableError(error)) {
-            return formatFallbackFeedback();
+            return NextResponse.json({ feedback: [] });
         }
 
         if (error) {

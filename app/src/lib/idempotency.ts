@@ -1,4 +1,4 @@
-import * as Sentry from "@sentry/core";
+import * as Sentry from "@sentry/nextjs";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 
 /**

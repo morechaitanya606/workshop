@@ -1,5 +1,5 @@
 import { createHmac } from "crypto";
-import * as Sentry from "@sentry/core";
+import * as Sentry from "@sentry/nextjs";
 import { env } from "@/lib/env";
 import { claimIdempotencyKey } from "@/lib/idempotency";
 

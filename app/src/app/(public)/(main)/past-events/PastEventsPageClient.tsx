@@ -9,7 +9,6 @@ import {
     ArrowLeft,
     Calendar,
     MapPin,
-    Star,
     ChevronLeft,
     ChevronRight,
     Camera,
@@ -39,7 +38,7 @@ export default function PastEventsPageClient({
     todayIso,
 }: {
     allWorkshops: Workshop[];
-    source: "supabase" | "mock" | "error";
+    source: "supabase" | "error";
     todayIso: string;
 }) {
     const router = useRouter();
@@ -77,23 +76,8 @@ export default function PastEventsPageClient({
         });
     };
 
-    // Aggregate stats
-    const totalPhotos = workshops.reduce((sum, w) => sum + (w.galleryImages?.length || 0), 0);
-    const avgRating =
-        workshops.length > 0
-            ? (workshops.reduce((sum, w) => sum + w.rating, 0) / workshops.length).toFixed(1)
-            : "0";
-
     return (
         <div className="min-h-full bg-cream">
-            {source === "mock" && (
-                <div className="section-padding pt-24 sm:pt-28 pb-0">
-                    <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-inter text-amber-900">
-                        <Info className="h-4 w-4" />
-                        Showing sample workshops while live past-event data is unavailable.
-                    </div>
-                </div>
-            )}
             {source === "error" && (
                 <div className="section-padding pt-24 sm:pt-28 pb-0">
                     <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-inter text-red-700 sm:flex-row sm:items-center sm:justify-between">
@@ -133,27 +117,6 @@ export default function PastEventsPageClient({
                             attendees experienced, and get inspired for upcoming events.
                         </p>
 
-                        {/* Stats bar */}
-                        <div className="flex flex-wrap gap-6 mb-2">
-                            <div className="flex items-center gap-2 bg-white rounded-full px-4 py-2 shadow-sm border border-clay/30">
-                                <Camera className="w-4 h-4 text-terracotta" />
-                                <span className="text-sm font-inter font-semibold text-dark">
-                                    {totalPhotos} Photos
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-2 bg-white rounded-full px-4 py-2 shadow-sm border border-clay/30">
-                                <Calendar className="w-4 h-4 text-terracotta" />
-                                <span className="text-sm font-inter font-semibold text-dark">
-                                    {workshops.length} Events
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-2 bg-white rounded-full px-4 py-2 shadow-sm border border-clay/30">
-                                <Star className="w-4 h-4 text-amber-500" />
-                                <span className="text-sm font-inter font-semibold text-dark">
-                                    {avgRating} Avg Rating
-                                </span>
-                            </div>
-                        </div>
                     </motion.div>
                 </div>
             </section>

@@ -16,23 +16,9 @@ import BookingGuestForm from "./BookingGuestForm";
 import BookingLoadingState from "./BookingLoadingState";
 import BookingOrderSummary from "./BookingOrderSummary";
 import BookingStepIndicator from "./BookingStepIndicator";
-import type {
-    AppliedCoupon,
-    BookingFormData,
-    ConfirmedBooking,
-    FormErrors,
-    RazorpayInstance,
-    RazorpayOptions,
-    RazorpayOrderResponse,
-} from "./types";
+import type { RazorpayInstance, RazorpayOptions } from "./types";
 
 import { useBookingWorkflow } from "./useBookingWorkflow";
-
-function parseTimestamp(value: string) {
-    if (!value) return null;
-    const timestamp = Date.parse(value);
-    return Number.isNaN(timestamp) ? null : timestamp;
-}
 
 function formatRemainingTime(milliseconds: number) {
     const clamped = Math.max(0, Math.floor(milliseconds / 1000));
@@ -63,7 +49,6 @@ function BookingContent() {
         isRazorpayReady,
         setIsRazorpayReady,
         step,
-        setStep,
         submitting,
         error,
         setError,

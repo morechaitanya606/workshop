@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
-import * as Sentry from "@sentry/core";
+import * as Sentry from "@sentry/nextjs";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getUserRole } from "@/lib/api-auth";
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     const next = sanitizeRedirect(requestUrl.searchParams.get("next"));
 
     if (code) {
-        const cookieStore = cookies();
+        const cookieStore = await cookies();
         const supabasePublicConfig = getPublicSupabaseConfig();
         if (!supabasePublicConfig) {
             return NextResponse.redirect(new URL(next, request.url));
@@ -41,14 +41,14 @@ export async function GET(request: Request) {
                     set(name: string, value: string, options: any) {
                         try {
                             cookieStore.set({ name, value, ...options });
-                        } catch (error) {
+                        } catch {
                             // Ignored due to middleware refreshing session
                         }
                     },
                     remove(name: string, options: any) {
                         try {
                             cookieStore.set({ name, value: "", ...options });
-                        } catch (error) {
+                        } catch {
                             // Ignored due to middleware refreshing session
                         }
                     },

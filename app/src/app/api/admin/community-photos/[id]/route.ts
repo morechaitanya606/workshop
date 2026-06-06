@@ -8,12 +8,13 @@ import { isMissingCommunityPhotosTableError, mapCommunityPhotoRow } from "@/lib/
 import { communityPhotoUpdateSchema } from "@/lib/validators";
 
 type RouteContext = {
-    params: {
+    params: Promise<{
         id: string;
-    };
+    }>;
 };
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
+    const { id } = await context.params;
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -36,6 +37,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     try {
         const updates = {
+            ...(parsed.data.imageUrl !== undefined ? { image_url: parsed.data.imageUrl } : {}),
             ...(parsed.data.altText !== undefined ? { alt_text: parsed.data.altText } : {}),
             ...(parsed.data.sortOrder !== undefined ? { sort_order: parsed.data.sortOrder } : {}),
             ...(parsed.data.isActive !== undefined ? { is_active: parsed.data.isActive } : {}),
@@ -44,7 +46,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         const { data, error } = await service.client
             .from("community_photos")
             .update(updates)
-            .eq("id", context.params.id)
+            .eq("id", id)
             .select("*")
             .single();
 
@@ -68,6 +70,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
+    const { id } = await context.params;
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -82,7 +85,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         const { error } = await service.client
             .from("community_photos")
             .delete()
-            .eq("id", context.params.id);
+            .eq("id", id);
 
         if (error) {
             if (isMissingCommunityPhotosTableError(error)) {

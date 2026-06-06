@@ -4,7 +4,6 @@ import { useState } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { galleryImages } from "@/lib/data";
 import type { CommunityPhoto } from "@/lib/community-photos";
 import { Dialog } from "@/components/ui/dialog";
 import {
@@ -27,14 +26,11 @@ export default function CommunityGallerySection({
 }) {
     const [activeGalleryIndex, setActiveGalleryIndex] = useState<number | null>(null);
     const galleryMotionProps = useMotionProps(shouldReduceMotion, fadeIn, quickTransition);
-    const visiblePhotos =
-        photos && photos.length > 0
-            ? photos.slice(0, 12)
-            : galleryImages.slice(0, 12).map((imageUrl, index) => ({
-                  id: `fallback-gallery-${index + 1}`,
-                  imageUrl,
-                  altText: `Community workshop ${index + 1}`,
-              }));
+    const visiblePhotos = photos && photos.length > 0 ? photos.slice(0, 12) : [];
+
+    if (visiblePhotos.length === 0) {
+        return null;
+    }
 
     return (
         <>

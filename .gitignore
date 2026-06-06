@@ -30,7 +30,13 @@ yarn-error.log*
 .husky/_
 
 # local env files
+.env
+.env.*
 .env*.local
+app/.env
+app/.env.*
+!.env.example
+!app/.env.example
 
 # vercel
 .vercel
@@ -42,6 +48,7 @@ yarn-error.log*
 # temp files
 *.tmp
 app/.local-data/
+app/supabase/.temp/
 
 # test artifacts
 test-results/

@@ -1,17 +1,15 @@
 import "server-only";
 
-import * as Sentry from "@sentry/core";
+import * as Sentry from "@sentry/nextjs";
 import {
     getCommunityBySlug,
     listCommunities,
-    mockCommunities,
     normalizeCommunitySlug,
     type Community,
 } from "@/lib/communities";
-import { warnDevFallback } from "@/lib/dev-warnings";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 
-export type CommunityPageSource = "supabase" | "mock" | "error";
+export type CommunityPageSource = "supabase" | "error";
 
 export type PublicCommunitiesResult = {
     data: Community[];
@@ -22,10 +20,6 @@ export type PublicCommunityResult = {
     community: Community | null;
     source: CommunityPageSource;
 };
-
-function allowMockFallback() {
-    return process.env.NODE_ENV !== "production";
-}
 
 function rankRelatedCommunities(current: Community, communities: Community[], limit: number) {
     const others = communities.filter((community) => community.slug !== current.slug);
@@ -71,17 +65,13 @@ export async function loadPublicCommunities(limit = 24): Promise<PublicCommuniti
         }
     }
 
-    if (!allowMockFallback()) {
-        return {
-            data: [],
-            source: "error",
-        };
+    if (process.env.NODE_ENV !== "production") {
+        console.warn(`Communities unavailable: ${fallbackReason}`);
     }
 
-    warnDevFallback("communities_page", `Using mock communities because ${fallbackReason}`);
     return {
-        data: mockCommunities.slice(0, limit),
-        source: "mock",
+        data: [],
+        source: "error",
     };
 }
 
@@ -113,20 +103,13 @@ export async function loadPublicCommunityBySlug(slug: string): Promise<PublicCom
         }
     }
 
-    if (!allowMockFallback()) {
-        return {
-            community: null,
-            source: "error",
-        };
+    if (process.env.NODE_ENV !== "production") {
+        console.warn(`Community unavailable: ${fallbackReason}`);
     }
 
-    warnDevFallback("community_detail_page", `Using mock community because ${fallbackReason}`);
     return {
-        community:
-            mockCommunities.find(
-                (community) => normalizeCommunitySlug(community.slug) === normalizedSlug
-            ) || null,
-        source: "mock",
+        community: null,
+        source: "error",
     };
 }
 

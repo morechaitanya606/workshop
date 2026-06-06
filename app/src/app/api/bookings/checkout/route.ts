@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import * as Sentry from "@sentry/core";
+import * as Sentry from "@sentry/nextjs";
 import { handleApiError, parseBody } from "@/lib/api-route";
 import { bookingCheckoutSchema } from "@/lib/validators";
 import { requireSupabaseService } from "@/lib/api-helpers";
@@ -34,6 +34,7 @@ type HoldWithWorkshop = {
     workshop: {
         id: string;
         title: string;
+        category?: string | null;
         price: number;
         seats_remaining: number;
         approval_status?: "pending" | "approved" | "rejected" | null;
@@ -122,6 +123,7 @@ async function loadHoldWithWorkshop(
                 workshop:workshops (
                     id,
                     title,
+                    category,
                     price,
                     seats_remaining,
                     approval_status,
@@ -155,6 +157,7 @@ async function loadHoldWithWorkshop(
                 workshop:workshops (
                     id,
                     title,
+                    category,
                     price,
                     seats_remaining,
                     date,
@@ -349,14 +352,29 @@ export async function POST(request: NextRequest) {
                     (!coupon.valid_until || new Date(coupon.valid_until) >= now);
                 const validUses =
                     coupon.max_uses === null || (coupon.used_count || 0) < coupon.max_uses;
+                const validMinimum =
+                    !coupon.min_order_amount || subtotalOriginal >= coupon.min_order_amount;
+                const validWorkshop =
+                    !Array.isArray(coupon.applicable_workshop_ids) ||
+                    coupon.applicable_workshop_ids.length === 0 ||
+                    coupon.applicable_workshop_ids.includes(payload.workshopId);
+                const validCategory =
+                    !Array.isArray(coupon.applicable_categories) ||
+                    coupon.applicable_categories.length === 0 ||
+                    Boolean(
+                        workshop.category && coupon.applicable_categories.includes(workshop.category)
+                    );
 
-                if (validTime && validUses) {
+                if (validTime && validUses && validMinimum && validWorkshop && validCategory) {
                     appliedCouponId = coupon.id;
-                    if (coupon.discount_type === "percentage") {
-                        discountAmount = subtotalOriginal * (coupon.discount_value / 100);
-                    } else {
-                        discountAmount = coupon.discount_value;
-                    }
+                    const rawDiscount =
+                        coupon.discount_type === "percentage"
+                            ? subtotalOriginal * (coupon.discount_value / 100)
+                            : coupon.discount_value;
+                    discountAmount = Math.min(
+                        subtotalOriginal,
+                        Math.max(0, Math.round(rawDiscount))
+                    );
                 }
             }
         }
@@ -371,7 +389,7 @@ export async function POST(request: NextRequest) {
 
         if (settings?.setting_value !== undefined) {
             const parsed = parseFloat(String(settings.setting_value));
-            if (!isNaN(parsed)) serviceFee = parsed;
+            if (!isNaN(parsed)) serviceFee = Math.max(0, Math.round(parsed));
         }
 
         const subtotal = Math.max(0, subtotalOriginal - discountAmount);
@@ -555,6 +573,10 @@ export async function POST(request: NextRequest) {
                 p_phone: payload.phone,
                 p_notes: payload.notes,
                 p_service_fee: serviceFee,
+                p_subtotal: subtotal,
+                p_total: total,
+                p_coupon_id: appliedCouponId,
+                p_discount_applied: discountAmount,
             }
         );
 
@@ -563,117 +585,18 @@ export async function POST(request: NextRequest) {
         }
 
         if (!bookingId) {
-            // Fallback path if RPC migration has not been applied.
-            // Use SQL arithmetic to avoid stale-read race conditions.
-            const { data: seatUpdated, error: seatUpdateError } = await serviceClient
-                .rpc("decrement_seats" as any, {
-                    p_workshop_id: payload.workshopId,
-                    p_count: Number(hold.guests || 0),
-                })
-                .maybeSingle();
-
-            // If the RPC doesn't exist yet, try the direct update with a guard.
-            let seatOk: boolean = !seatUpdateError && !!seatUpdated;
-            if (
-                seatUpdateError?.message?.includes("function") ||
-                seatUpdateError?.code === "42883"
-            ) {
-                const { data: directUpdate, error: directError } = await serviceClient
-                    .from("workshops")
-                    .update({
-                        seats_remaining: Math.max(
-                            0,
-                            Number(hold.workshop?.seats_remaining || 0) - Number(hold.guests || 0)
-                        ),
-                    })
-                    .eq("id", payload.workshopId)
-                    .gte("seats_remaining", Number(hold.guests || 0))
-                    .select("id")
-                    .single();
-                seatOk = !directError && !!directUpdate;
-            }
-
-            if (!seatOk) {
-                return paymentError(
-                    "Payment succeeded, but seat reservation failed. Contact support immediately.",
-                    500,
-                    {
-                        userId: auth.user.id,
-                        holdId: payload.holdId,
-                        workshopId: payload.workshopId,
-                        paymentId: payload.razorpayPaymentId,
-                        details: seatUpdateError?.message || rpcError?.message || null,
-                    }
-                );
-            }
-
-            const { data: insertedBooking, error: bookingError } = await serviceClient
-                .from("bookings")
-                .insert({
-                    user_id: auth.user.id,
-                    workshop_id: payload.workshopId,
-                    hold_id: payload.holdId,
-                    guests: hold.guests,
-                    subtotal,
-                    service_fee: serviceFee,
-                    total,
-                    status: "confirmed",
-                    payment_provider: PAYMENT_PROVIDER,
-                    payment_intent_id: payload.razorpayPaymentId!,
-                    first_name: payload.firstName,
-                    last_name: payload.lastName,
-                    email: payload.email,
-                    phone: payload.phone,
-                    notes: payload.notes,
-                })
-                .select("id")
-                .single();
-
-            if (bookingError || !insertedBooking?.id) {
-                return paymentError(
-                    "Payment succeeded, but booking write failed. Contact support immediately.",
-                    500,
-                    {
-                        userId: auth.user.id,
-                        holdId: payload.holdId,
-                        workshopId: payload.workshopId,
-                        paymentId: payload.razorpayPaymentId,
-                        details: bookingError?.message || null,
-                    }
-                );
-            }
-
-            await serviceClient
-                .from("booking_holds")
-                .update({ status: "confirmed" })
-                .eq("id", payload.holdId);
-
-            bookingId = insertedBooking.id;
-        }
-
-        if (!bookingId) {
-            return paymentError("Booking confirmation failed after payment capture.", 500, {
-                userId: auth.user.id,
-                holdId: payload.holdId,
-                workshopId: payload.workshopId,
-                paymentId: payload.razorpayPaymentId,
-            });
-        }
-
-        // BUG-1 fix: Increment coupon used_count after successful booking
-        if (appliedCouponId) {
-            try {
-                const { error: rpcErr } = await serviceClient.rpc("increment_coupon_usage" as any, {
-                    p_coupon_id: appliedCouponId,
-                });
-                if (rpcErr) throw rpcErr;
-            } catch (err) {
-                // Fallback if RPC doesn't exist: direct update
-                await serviceClient
-                    .from("coupons")
-                    .update({ used_count: discountAmount > 0 ? 1 : 0 })
-                    .eq("id", appliedCouponId!);
-            }
+            return paymentError(
+                "Payment succeeded, but atomic booking confirmation failed. Contact support immediately.",
+                500,
+                {
+                    userId: auth.user.id,
+                    holdId: payload.holdId,
+                    workshopId: payload.workshopId,
+                    paymentId: payload.razorpayPaymentId,
+                    couponId: appliedCouponId,
+                    details: rpcError?.message || null,
+                }
+            );
         }
 
         const booking = await loadBookingById(serviceClient, bookingId);

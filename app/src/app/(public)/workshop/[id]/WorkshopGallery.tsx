@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { motion, useReducedMotion } from "framer-motion";
-import { Play, Grid3X3, Share2, Heart, X } from "lucide-react";
+import { Play, Grid3X3, Share2, Heart } from "lucide-react";
 import { useRef } from "react";
 import { fadeIn, fadeInUp, quickTransition, standardTransition } from "@/lib/motion-presets";
 import { isDirectVideoFileUrl } from "@/lib/workshop-media";

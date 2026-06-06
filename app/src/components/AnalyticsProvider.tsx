@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { publicEnv } from "@/lib/env";
@@ -23,11 +23,14 @@ function initPostHog() {
 }
 
 export default function AnalyticsProvider({ children }: { children: React.ReactNode }) {
+    const [isReady, setIsReady] = useState(!publicEnv.NEXT_PUBLIC_POSTHOG_KEY);
+
     useEffect(() => {
         initPostHog();
+        setIsReady(true);
     }, []);
 
-    if (!publicEnv.NEXT_PUBLIC_POSTHOG_KEY) {
+    if (!publicEnv.NEXT_PUBLIC_POSTHOG_KEY || !isReady) {
         return <>{children}</>;
     }
 

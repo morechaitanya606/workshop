@@ -7,6 +7,7 @@ const publicEnvSchema = z.object({
     NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: nonEmpty.optional(),
     NEXT_PUBLIC_SUPABASE_ANON_KEY: nonEmpty.optional(),
+    NEXT_PUBLIC_RAZORPAY_KEY_ID: nonEmpty.optional(),
     NEXT_PUBLIC_MAPPLS_API_KEY: nonEmpty.optional(),
     NEXT_PUBLIC_POSTHOG_KEY: nonEmpty.optional(),
     NEXT_PUBLIC_POSTHOG_HOST: z.string().url().optional(),
@@ -26,6 +27,10 @@ const serverEnvSchema = z.object({
     RAZORPAY_WEBHOOK_SECRET: nonEmpty.optional(),
     PAYMENT_NOTIFICATIONS_WEBHOOK_URL: z.string().url().optional(),
     PAYMENT_NOTIFICATIONS_WEBHOOK_SECRET: nonEmpty.optional(),
+    RESEND_API_KEY: nonEmpty.optional(),
+    CAREERS_INBOX_EMAIL: z.string().email().optional(),
+    UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+    UPSTASH_REDIS_REST_TOKEN: nonEmpty.optional(),
     SENTRY_DSN: z.string().url().optional(),
 });
 
@@ -47,6 +52,7 @@ export const publicEnv = parseOrThrow(
         NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
         NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        NEXT_PUBLIC_RAZORPAY_KEY_ID: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         NEXT_PUBLIC_MAPPLS_API_KEY: process.env.NEXT_PUBLIC_MAPPLS_API_KEY,
         NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
         NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
@@ -71,10 +77,39 @@ export const env = parseOrThrow(
         RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
         PAYMENT_NOTIFICATIONS_WEBHOOK_URL: process.env.PAYMENT_NOTIFICATIONS_WEBHOOK_URL,
         PAYMENT_NOTIFICATIONS_WEBHOOK_SECRET: process.env.PAYMENT_NOTIFICATIONS_WEBHOOK_SECRET,
+        RESEND_API_KEY: process.env.RESEND_API_KEY,
+        CAREERS_INBOX_EMAIL: process.env.CAREERS_INBOX_EMAIL,
+        UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
+        UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
         SENTRY_DSN: process.env.SENTRY_DSN,
     },
     "server env"
 );
+
+function getVercelAppUrl() {
+    const vercelUrl =
+        process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim() || process.env.VERCEL_URL?.trim();
+    if (!vercelUrl) {
+        return null;
+    }
+
+    return /^https?:\/\//i.test(vercelUrl) ? vercelUrl : `https://${vercelUrl}`;
+}
+
+function isLocalProductionRuntime() {
+    return (
+        process.env.NODE_ENV === "production" &&
+        process.env.CI !== "true" &&
+        (process.env.NEXT_PHASE === "phase-production-build" ||
+            process.env.NEXT_PHASE === "phase-production-server" ||
+            process.env.npm_lifecycle_event === "build" ||
+            process.env.npm_lifecycle_event === "start")
+    );
+}
+
+function getLocalAppUrl() {
+    return `http://localhost:${process.env.PORT || "3000"}`;
+}
 
 function required(name: keyof typeof env): string {
     const value = env[name];
@@ -102,11 +137,16 @@ export function getAppUrl() {
         return configuredUrl.replace(/\/$/, "");
     }
 
-    if (process.env.NODE_ENV === "production") {
+    const vercelUrl = getVercelAppUrl();
+    if (vercelUrl) {
+        return vercelUrl.replace(/\/$/, "");
+    }
+
+    if (process.env.NODE_ENV === "production" && !isLocalProductionRuntime()) {
         throw new Error("Missing required environment variable: NEXT_PUBLIC_APP_URL");
     }
 
-    return "http://localhost:3000";
+    return getLocalAppUrl();
 }
 
 export function getAbsoluteUrl(path = "/") {
@@ -135,10 +175,6 @@ export function getMapplsClientConfig() {
 
 export function getServiceRoleKey() {
     return required("SUPABASE_SERVICE_ROLE_KEY");
-}
-
-export function getGroqApiKey() {
-    return required("GROQ_API_KEY");
 }
 
 export function getGroqConfig() {
@@ -192,7 +228,7 @@ export function getMissingProductionEnvVars() {
     const publicSupabaseKey =
         publicEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? publicEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    if (!publicEnv.NEXT_PUBLIC_APP_URL) {
+    if (!publicEnv.NEXT_PUBLIC_APP_URL && !getVercelAppUrl() && !isLocalProductionRuntime()) {
         missing.push("NEXT_PUBLIC_APP_URL");
     }
     if (!publicEnv.NEXT_PUBLIC_SUPABASE_URL) {

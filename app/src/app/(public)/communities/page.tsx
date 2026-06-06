@@ -38,13 +38,6 @@ export default async function CommunitiesPage() {
         <div className="min-h-full bg-cream text-dark">
             <section className="section-padding pb-10 pt-28">
                 <div className="mx-auto max-w-6xl">
-                    {source === "mock" && (
-                        <div className="mb-6 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-inter text-amber-900">
-                            <Info className="h-4 w-4" />
-                            Showing sample communities in development while live community data is
-                            unavailable.
-                        </div>
-                    )}
                     {source === "error" && (
                         <div className="mb-6 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-inter text-red-700">
                             <Info className="h-4 w-4" />

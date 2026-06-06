@@ -15,7 +15,9 @@ export type AdminDashboardStats = {
 
 export type AdminHostApplication = Tables<"host_applications">;
 
-type AdminDashboardSupabaseClient = NonNullable<ReturnType<typeof createSupabaseRscClient>>;
+type AdminDashboardSupabaseClient = NonNullable<
+    Awaited<ReturnType<typeof createSupabaseRscClient>>
+>;
 
 type BookingStatsRow = {
     total: Tables<"bookings">["total"] | null;

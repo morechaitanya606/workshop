@@ -422,6 +422,9 @@ export function useBookingWorkflow() {
                 },
                 modal: {
                     ondismiss: () => {
+                        const message = "Payment was cancelled before completion.";
+                        setError(message);
+                        toast.info("Payment cancelled", message);
                         setStep(1);
                         setSubmitting(false);
                     },

@@ -10,10 +10,11 @@ const waitlistSchema = z.object({
 });
 
 type Params = {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 };
 
 export async function POST(request: NextRequest, { params }: Params) {
+    const { id } = await params;
     const service = requireSupabaseService();
     if (!service.ok) return service.response;
     const serviceClient = service.client;
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         const { data: workshop, error: fetchError } = await serviceClient
             .from("workshops")
             .select("id")
-            .eq("id", params.id)
+            .eq("id", id)
             .maybeSingle();
 
         if (fetchError || !workshop) {
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         const { data: existing } = await serviceClient
             .from("waitlists")
             .select("id")
-            .eq("workshop_id", params.id)
+            .eq("workshop_id", id)
             .eq("email", email)
             .maybeSingle();
 
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         }
 
         const { error: insertError } = await serviceClient.from("waitlists").insert({
-            workshop_id: params.id,
+            workshop_id: id,
             email,
             user_id: userId || null,
         } as any);

@@ -73,7 +73,7 @@ export default function ExploreClient({
     workshops: Workshop[];
     featuredCommunities: Community[];
     total: number;
-    source: "supabase" | "mock" | "error";
+    source: "supabase" | "error";
     todayIso: string;
 }) {
     const router = useRouter();
@@ -345,7 +345,7 @@ export default function ExploreClient({
     const gridMotionProps = useMotionProps(prefersReducedMotion, fadeIn, quickTransition, {
         whileInView: false,
     });
-    const mockBannerMotionProps = useMotionProps(prefersReducedMotion, fadeIn, quickTransition, {
+    const errorBannerMotionProps = useMotionProps(prefersReducedMotion, fadeIn, quickTransition, {
         whileInView: false,
     });
 
@@ -532,7 +532,7 @@ export default function ExploreClient({
                     total={total}
                     source={source}
                     todayIso={todayIso}
-                    mockBannerMotionProps={mockBannerMotionProps}
+                    errorBannerMotionProps={errorBannerMotionProps}
                     workshops={workshops}
                     clearFilters={clearFilters}
                     onRetry={() => router.refresh()}

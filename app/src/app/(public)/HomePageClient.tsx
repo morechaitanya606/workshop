@@ -21,6 +21,7 @@ import type { Workshop } from "@/lib/data";
 import type { CommunityPhoto } from "@/lib/community-photos";
 import { toApiErrorMessage, updateWorkshopNotifications } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { usePlatformSettings } from "@/lib/platform-settings-context";
 import { getRecentlyViewed } from "@/lib/recently-viewed";
 
 const OTHER_CATEGORY_VALUE = "__other__";
@@ -33,12 +34,13 @@ export default function HomePageClient({
 }: {
     initialWorkshops: Workshop[];
     communityPhotos: CommunityPhoto[];
-    source: "supabase" | "mock" | "error";
+    source: "supabase" | "error";
     todayIso: string;
 }) {
     const router = useRouter();
     const shouldReduceMotion = Boolean(useReducedMotion());
     const { user, session } = useAuth();
+    const { settings } = usePlatformSettings();
     const [selectedCategory, setSelectedCategory] = useState("trending");
     const [notifyMessage, setNotifyMessage] = useState<string | null>(null);
     const [notifyMessageTone, setNotifyMessageTone] = useState<"success" | "error">("success");
@@ -163,14 +165,6 @@ export default function HomePageClient({
 
     return (
         <div className="min-h-screen">
-            {source === "mock" && (
-                <div className="section-padding pt-24 sm:pt-28 pb-0">
-                    <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-inter text-amber-900">
-                        <Info className="h-4 w-4" />
-                        Showing sample workshops - live data unavailable.
-                    </div>
-                </div>
-            )}
             {source === "error" && (
                 <div className="section-padding pt-24 sm:pt-28 pb-0">
                     <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-inter text-red-700">
@@ -189,7 +183,7 @@ export default function HomePageClient({
                 </div>
             )}
 
-            <HeroSection source={source} />
+            <HeroSection source={source} heroImageUrl={settings.hero_image_url || undefined} />
             <SpecialEventBanner />
             <ScrollReveal>
                 <HowItWorksSection />

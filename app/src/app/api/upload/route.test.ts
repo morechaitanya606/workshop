@@ -108,4 +108,41 @@ describe("POST /api/upload", () => {
             true
         );
     });
+
+    it("rejects unsupported upload file types before storage writes", async () => {
+        const serviceClient = {
+            storage: {
+                from: vi.fn(),
+            },
+        };
+
+        vi.mocked(requireSupabaseService).mockReturnValue({
+            ok: true,
+            client: serviceClient as any,
+        });
+
+        const request = {
+            formData: vi.fn().mockResolvedValue({
+                get(name: string) {
+                    if (name === "file") {
+                        return {
+                            name: "notes.txt",
+                            size: 4,
+                            type: "text/plain",
+                            arrayBuffer: vi.fn(),
+                        };
+                    }
+
+                    return null;
+                },
+            }),
+        } as any;
+
+        const response = await POST(request);
+        const body = await response.json();
+
+        expect(response.status).toBe(400);
+        expect(body.error).toBe("Invalid file type. Allowed: JPEG, PNG, WebP, MP4, WebM, MOV.");
+        expect(serviceClient.storage.from).not.toHaveBeenCalled();
+    });
 });

@@ -1,6 +1,5 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { mockWorkshops } from "@/lib/data";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { handleApiError } from "@/lib/api-route";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
@@ -24,60 +23,39 @@ async function loadWorkshopRow(
 
     return await query.maybeSingle();
 }
-
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
-    const workshopId = params.id;
-    const allowMockFallback = process.env.NODE_ENV !== "production";
+export async function GET(
+    _request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const { id: workshopId } = await params;
 
     const service = requireSupabaseService();
     if (!service.ok) {
-        if (!allowMockFallback) {
-            return service.response;
-        }
-    } else {
-        try {
-            const serviceClient = service.client;
-            let { data, error } = await loadWorkshopRow(serviceClient, workshopId);
-
-            if (error && isMissingApprovalStatusColumnError(error)) {
-                ({ data, error } = await loadWorkshopRow(serviceClient, workshopId, false));
-            }
-
-            if (!error && data) {
-                return NextResponse.json(
-                    {
-                        workshop: mapWorkshopRowToWorkshop(data),
-                        source: "supabase",
-                    },
-                    {
-                        headers: WORKSHOP_DETAIL_CACHE_HEADERS,
-                    }
-                );
-            }
-        } catch (error) {
-            if (!allowMockFallback) {
-                return handleApiError("Failed to load workshop.", error);
-            }
-            // Falls back to mock in non-production.
-        }
+        return service.response;
     }
 
-    if (!allowMockFallback) {
-        return NextResponse.json({ error: "Workshop not found." }, { status: 404 });
-    }
+    try {
+        const serviceClient = service.client;
+        let { data, error } = await loadWorkshopRow(serviceClient, workshopId);
 
-    const fallback = mockWorkshops.find((item) => item.id === workshopId);
-    if (!fallback) {
-        return NextResponse.json({ error: "Workshop not found." }, { status: 404 });
-    }
-
-    return NextResponse.json(
-        {
-            workshop: fallback,
-            source: "mock",
-        },
-        {
-            headers: WORKSHOP_DETAIL_CACHE_HEADERS,
+        if (error && isMissingApprovalStatusColumnError(error)) {
+            ({ data, error } = await loadWorkshopRow(serviceClient, workshopId, false));
         }
-    );
+
+        if (!error && data) {
+            return NextResponse.json(
+                {
+                    workshop: mapWorkshopRowToWorkshop(data),
+                    source: "supabase",
+                },
+                {
+                    headers: WORKSHOP_DETAIL_CACHE_HEADERS,
+                }
+            );
+        }
+    } catch (error) {
+        return handleApiError("Failed to load workshop.", error);
+    }
+
+    return NextResponse.json({ error: "Workshop not found." }, { status: 404 });
 }

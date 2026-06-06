@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { BOOKING_CUTOFF_HOURS } from "@/lib/booking-time";
 
 export interface WorkshopMobileBookingBarProps {
     isPastWorkshop: boolean;

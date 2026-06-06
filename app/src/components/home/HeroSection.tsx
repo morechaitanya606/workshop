@@ -15,7 +15,13 @@ import {
     useMotionProps,
 } from "@/lib/motion-presets";
 
-export default function HeroSection({ source }: { source: "supabase" | "mock" | "error" }) {
+export default function HeroSection({
+    source,
+    heroImageUrl,
+}: {
+    source: "supabase" | "error";
+    heroImageUrl?: string;
+}) {
     const heroRef = useRef<HTMLDivElement>(null);
     const shouldReduceMotion = Boolean(useReducedMotion());
     const { scrollYProgress } = useScroll({
@@ -35,15 +41,6 @@ export default function HeroSection({ source }: { source: "supabase" | "mock" | 
         whileInView: false,
         delay: 0.2,
     });
-    const heroHeadlineMotionProps = useMotionProps(
-        shouldReduceMotion,
-        fadeInUp,
-        standardTransition,
-        {
-            whileInView: false,
-            delay: 0.3,
-        }
-    );
     const heroBodyMotionProps = useMotionProps(shouldReduceMotion, fadeInUp, standardTransition, {
         whileInView: false,
         delay: 0.45,
@@ -58,6 +55,7 @@ export default function HeroSection({ source }: { source: "supabase" | "mock" | 
     });
 
     const headlineWords = ["A", "Better", "Weekend"];
+    const heroImageSrc = heroImageUrl?.trim() || "/images/background.webp";
 
     return (
         <section
@@ -71,7 +69,7 @@ export default function HeroSection({ source }: { source: "supabase" | "mock" | 
                 className="absolute inset-0"
             >
                 <Image
-                    src="/images/background.webp"
+                    src={heroImageSrc}
                     alt="Creative workshops collage"
                     fill
                     priority

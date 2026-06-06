@@ -17,11 +17,12 @@ export const metadata: Metadata = {
 export default async function ExplorePage({
     searchParams,
 }: {
-    searchParams: { [key: string]: string | string[] | undefined };
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+    const resolvedSearchParams = await searchParams;
     const todayIso = new Date().toISOString().slice(0, 10);
     const [{ data, total, source }, { data: featuredCommunities }] = await Promise.all([
-        loadExploreWorkshops(searchParams),
+        loadExploreWorkshops(resolvedSearchParams),
         loadPublicCommunities(3),
     ]);
 

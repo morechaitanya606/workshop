@@ -4,9 +4,10 @@ import { requireHostOrAdmin } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import type { Database } from "@/lib/database.types";
 import { createSupabaseAnonServerClient } from "@/lib/supabase-server";
-import * as Sentry from "@sentry/core";
+import * as Sentry from "@sentry/nextjs";
 
 type SupportTicketRow = Database["public"]["Tables"]["support_tickets"]["Row"];
+type SupportReplyRow = Database["public"]["Tables"]["support_ticket_replies"]["Row"];
 
 type WorkshopRow = Pick<Database["public"]["Tables"]["workshops"]["Row"], "id" | "title">;
 
@@ -17,7 +18,7 @@ function isMissingSupportTableError(error: unknown) {
             : "";
 
     return (
-        message.includes("support_tickets") &&
+        (message.includes("support_tickets") || message.includes("support_ticket_replies")) &&
         (message.includes("does not exist") || message.includes("schema cache"))
     );
 }
@@ -133,10 +134,41 @@ export async function GET(request: NextRequest) {
             );
         }
 
+        const ticketIds = tickets.map((ticket) => ticket.id);
+        let repliesByTicketId = new Map<string, SupportReplyRow[]>();
+        if (ticketIds.length > 0) {
+            const { data: replies, error: repliesError } = await service.client
+                .from("support_ticket_replies")
+                .select("id, ticket_id, message, author_role, author_user_id, created_at, updated_at")
+                .in("ticket_id", ticketIds)
+                .order("created_at", { ascending: true });
+
+            if (repliesError) {
+                if (!isMissingSupportTableError(repliesError)) {
+                    throw repliesError;
+                }
+            } else {
+                repliesByTicketId = (Array.isArray(replies) ? replies : []).reduce(
+                    (map, reply) => {
+                        const current = map.get(reply.ticket_id) || [];
+                        current.push(reply as SupportReplyRow);
+                        map.set(reply.ticket_id, current);
+                        return map;
+                    },
+                    new Map<string, SupportReplyRow[]>()
+                );
+            }
+        }
+
         return NextResponse.json({
             tickets: tickets.map((ticket) => ({
                 ...ticket,
-                replies: [],
+                replies: (repliesByTicketId.get(ticket.id) || []).map((reply) => ({
+                    id: reply.id,
+                    message: reply.message,
+                    author: reply.author_role,
+                    created_at: reply.created_at,
+                })),
                 workshop:
                     ticket.workshop_id && workshopMap.has(ticket.workshop_id)
                         ? workshopMap.get(ticket.workshop_id)

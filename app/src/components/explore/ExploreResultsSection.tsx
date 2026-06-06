@@ -32,7 +32,7 @@ export default function ExploreResultsSection({
     total,
     source,
     todayIso,
-    mockBannerMotionProps,
+    errorBannerMotionProps,
     workshops,
     clearFilters,
     onRetry,
@@ -46,9 +46,9 @@ export default function ExploreResultsSection({
 }: {
     isPending: boolean;
     total: number;
-    source: "supabase" | "mock" | "error";
+    source: "supabase" | "error";
     todayIso: string;
-    mockBannerMotionProps: MotionDivProps;
+    errorBannerMotionProps: MotionDivProps;
     workshops: Workshop[];
     clearFilters: () => void;
     onRetry: () => void;
@@ -69,18 +69,9 @@ export default function ExploreResultsSection({
                 </p>
             </div>
 
-            {source === "mock" && !isPending && (
-                <motion.div
-                    {...mockBannerMotionProps}
-                    className="mb-5 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-inter text-amber-900"
-                >
-                    <Info className="h-4 w-4" />
-                    Showing sample workshops - live data unavailable.
-                </motion.div>
-            )}
             {source === "error" && !isPending && (
                 <motion.div
-                    {...mockBannerMotionProps}
+                    {...errorBannerMotionProps}
                     className="mb-5 flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-inter text-red-700 sm:flex-row sm:items-center sm:justify-between"
                 >
                     <div className="flex items-center gap-2">

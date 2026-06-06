@@ -1,18 +1,12 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Handshake, Star, Trophy, Users } from "lucide-react";
-import { socialMetrics } from "@/lib/data";
 import {
     fadeIn,
     fadeInUp,
-    getMotionProps,
     standardTransition,
     useMotionProps,
 } from "@/lib/motion-presets";
-import { AnimatedCounter } from "@/components/home/HomeSectionShared";
-
-const METRIC_ICONS = [Users, Trophy, Handshake, Star];
 
 export default function SocialProofSection({
     shouldReduceMotion,
@@ -72,34 +66,6 @@ export default function SocialProofSection({
                         Join WhatsApp Community
                     </a>
                 </motion.div>
-
-                <div className="relative z-10 grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:gap-5 xl:grid-cols-4">
-                    {socialMetrics.map((metric, index) => (
-                        <motion.div
-                            key={metric.label}
-                            {...getMotionProps(shouldReduceMotion, fadeInUp, standardTransition, {
-                                delay: index * 0.08,
-                            })}
-                            className="flex min-h-[150px] flex-col items-center justify-center rounded-[1.4rem] border border-white/20 bg-white/[0.04] px-3.5 py-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm sm:min-h-[220px] sm:rounded-[1.75rem] sm:px-5 sm:py-6"
-                        >
-                            <div className="mb-3 flex items-center justify-center rounded-full border border-white/15 bg-white/[0.05] p-2.5 text-[#f3b8a3] sm:mb-4 sm:p-3">
-                                {(() => {
-                                    const Icon = METRIC_ICONS[index];
-                                    return Icon ? <Icon className="h-5 w-5 sm:h-7 sm:w-7" /> : null;
-                                })()}
-                            </div>
-                            <AnimatedCounter
-                                value={metric.value}
-                                suffix={metric.suffix}
-                                reduceMotion={shouldReduceMotion}
-                                className="!text-[2rem] text-white drop-shadow-[0_1px_8px_rgba(255,255,255,0.08)] sm:!text-5xl lg:!text-6xl"
-                            />
-                            <p className="mt-2 text-[12px] font-inter font-medium leading-5 text-white/80 sm:mt-3 sm:text-base sm:leading-snug">
-                                {metric.label}
-                            </p>
-                        </motion.div>
-                    ))}
-                </div>
             </motion.div>
         </section>
     );

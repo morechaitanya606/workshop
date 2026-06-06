@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError, parseBody } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
-import { requireHostOrAdmin } from "@/lib/api-auth";
+import { jsonError, requireHostOrAdmin } from "@/lib/api-auth";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { workshopCreateSchema } from "@/lib/validators";
 import { buildWorkshopInsertPayload, mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
@@ -93,6 +93,9 @@ export async function POST(request: NextRequest) {
 
         if (error) {
             throw error;
+        }
+        if (!data) {
+            return jsonError("Workshop creation did not return a row.", 500);
         }
 
         return NextResponse.json(

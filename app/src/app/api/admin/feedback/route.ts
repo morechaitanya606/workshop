@@ -4,13 +4,7 @@ import { handleApiError, parseQuery } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { adminFeedbackQuerySchema } from "@/lib/validators";
-import {
-    getFallbackFeedback,
-    getFallbackWorkshopInfo,
-    isMissingFeedbackTableError,
-    matchesFallbackFeedbackFilters,
-    SAMPLE_FEEDBACK_WORKSHOP_ID,
-} from "@/lib/feedback-fallback";
+import { isMissingFeedbackTableError } from "@/lib/feedback-fallback";
 
 type WorkshopInfo = {
     id: string;
@@ -112,52 +106,12 @@ export async function GET(request: NextRequest) {
             .range(from, to);
 
         if (isMissingFeedbackTableError(error)) {
-            const fallbackRecord = getFallbackFeedback(auth.user.id, SAMPLE_FEEDBACK_WORKSHOP_ID);
-            const filteredFallback = fallbackRecord
-                ? [fallbackRecord].filter((record) =>
-                      matchesFallbackFeedbackFilters(record, q, workshopId)
-                  )
-                : [];
-
-            const pagedFallback = filteredFallback
-                .slice(from, to + 1)
-                .map<FeedbackResponseItem>((record) => {
-                    const workshopInfo = getFallbackWorkshopInfo(record.workshopId);
-                    const fullName =
-                        typeof auth.user.user_metadata?.full_name === "string"
-                            ? auth.user.user_metadata.full_name
-                            : null;
-
-                    return {
-                        id:
-                            record.userId && record.workshopId
-                                ? `${record.userId}-${record.workshopId}`
-                                : "",
-                        userId: record.userId,
-                        workshopId: record.workshopId,
-                        rating: record.rating,
-                        comment: record.comment,
-                        photos: record.photos,
-                        videoUrl: record.videoUrl,
-                        createdAt: record.createdAt,
-                        updatedAt: record.updatedAt,
-                        workshop: workshopInfo,
-                        user: {
-                            fullName,
-                            firstName: null,
-                            lastName: null,
-                            email: auth.user.email || null,
-                        },
-                    };
-                });
-
-            const fallbackTotal = filteredFallback.length;
             return NextResponse.json({
-                feedback: pagedFallback,
-                total: fallbackTotal,
+                feedback: [],
+                total: 0,
                 page,
                 pageSize,
-                totalPages: Math.max(1, Math.ceil(fallbackTotal / pageSize)),
+                totalPages: 1,
                 filters: { q, workshopId },
             });
         }

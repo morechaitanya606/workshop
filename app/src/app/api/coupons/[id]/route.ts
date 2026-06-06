@@ -2,7 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase-server";
 import { requireAdminUser, jsonError } from "@/lib/api-auth";
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const { id } = await params;
     const auth = await requireAdminUser(request);
     if (!auth.ok) return auth.response;
 
@@ -19,7 +23,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         const { data, error } = await supabase
             .from("coupons")
             .update({ is_active, updated_at: new Date().toISOString() })
-            .eq("id", params.id)
+            .eq("id", id)
             .select()
             .single();
 
@@ -28,7 +32,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         }
 
         return NextResponse.json({ coupon: data }, { status: 200 });
-    } catch (error) {
+    } catch {
         return jsonError("Internal Server Error", 500);
     }
 }

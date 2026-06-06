@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseAnonServerClient } from "@/lib/supabase-server";
 import { requireAuthenticatedUser } from "@/lib/api-auth";
-import * as Sentry from "@sentry/core";
+import * as Sentry from "@sentry/nextjs";
 
 export async function POST(request: NextRequest) {
     const auth = await requireAuthenticatedUser(request);

@@ -1,0 +1,12 @@
+{
+    "$schema": "https://unpkg.com/knip@6/schema.json",
+    "entry": [
+        "src/app/**/*.{ts,tsx}",
+        "src/components/**/*.{ts,tsx}",
+        "src/lib/**/*.{ts,tsx}",
+        "scripts/**/*.{js,cjs,mjs,ts}"
+    ],
+    "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{js,cjs,mjs,ts}"],
+    "ignore": ["src/lib/database.types.ts", "public/chatbot.js"],
+    "ignoreDependencies": ["eslint-config-next", "sharp"]
+}

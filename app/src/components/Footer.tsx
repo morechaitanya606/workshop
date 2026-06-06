@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Phone, Instagram } from "lucide-react";
+import { MessageCircle, Phone } from "lucide-react";
 import { RevealGroup, RevealItem } from "@/components/ui";
 import { CONTACT_PAGE_HREF, CONTACT_PHONE_NUMBERS } from "@/lib/contact";
 
@@ -83,7 +83,7 @@ export default function Footer() {
                                     rel="noopener noreferrer"
                                     className="interactive-link flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta"
                                 >
-                                    <Instagram className="w-4 h-4" />
+                                    <MessageCircle className="w-4 h-4" />
                                     @only_workshops
                                 </a>
                             </div>

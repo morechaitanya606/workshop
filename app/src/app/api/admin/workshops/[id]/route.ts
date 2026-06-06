@@ -15,7 +15,7 @@ import {
 } from "@/lib/workshop-media";
 
 type Params = {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 };
 
 async function assertAdminWorkshopWriteLimit(request: NextRequest, userId: string) {
@@ -28,6 +28,7 @@ async function assertAdminWorkshopWriteLimit(request: NextRequest, userId: strin
 }
 
 export async function GET(request: NextRequest, { params }: Params) {
+    const { id } = await params;
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest, { params }: Params) {
         const { data, error } = await serviceClient
             .from("workshops")
             .select("*")
-            .eq("id", params.id)
+            .eq("id", id)
             .maybeSingle();
 
         if (error) {
@@ -60,6 +61,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
+    const { id } = await params;
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -88,7 +90,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         const { data: existing, error: existingError } = await serviceClient
             .from("workshops")
             .select("id, max_seats, seats_remaining")
-            .eq("id", params.id)
+            .eq("id", id)
             .maybeSingle();
 
         if (existingError) {
@@ -189,7 +191,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         let { data, error } = await serviceClient
             .from("workshops")
             .update(patch)
-            .eq("id", params.id)
+            .eq("id", id)
             .select("*")
             .single();
 
@@ -197,7 +199,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             ({ data, error } = await serviceClient
                 .from("workshops")
                 .update(withoutNewColumns(patch))
-                .eq("id", params.id)
+                .eq("id", id)
                 .select("*")
                 .single());
         }
@@ -205,12 +207,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         if (error) {
             throw error;
         }
+        if (!data) {
+            return jsonError("Workshop update did not return a row.", 500);
+        }
 
         revalidatePath(`/admin/workshops`);
-        revalidatePath(`/admin/workshops/${params.id}`);
-        revalidatePath(`/workshop/${params.id}`);
+        revalidatePath(`/admin/workshops/${id}`);
+        revalidatePath(`/workshop/${id}`);
         revalidatePath(`/workshops`);
-        revalidatePath(`/workshops/${params.id}`);
+        revalidatePath(`/workshops/${id}`);
 
         return NextResponse.json({
             workshop: mapWorkshopRowToWorkshop(data),
@@ -221,6 +226,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(request: NextRequest, { params }: Params) {
+    const { id } = await params;
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -239,7 +245,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
         const { data, error } = await serviceClient
             .from("workshops")
             .delete()
-            .eq("id", params.id)
+            .eq("id", id)
             .select("id")
             .maybeSingle();
 
@@ -255,10 +261,10 @@ export async function DELETE(request: NextRequest, { params }: Params) {
         }
 
         revalidatePath(`/admin/workshops`);
-        revalidatePath(`/admin/workshops/${params.id}`);
-        revalidatePath(`/workshop/${params.id}`);
+        revalidatePath(`/admin/workshops/${id}`);
+        revalidatePath(`/workshop/${id}`);
         revalidatePath(`/workshops`);
-        revalidatePath(`/workshops/${params.id}`);
+        revalidatePath(`/workshops/${id}`);
 
         return NextResponse.json({ success: true });
     } catch (error) {

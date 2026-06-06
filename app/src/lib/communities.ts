@@ -20,103 +20,7 @@ export type Community = {
     websiteUrl: string | null;
     whatsappUrl: string | null;
     createdAt: string;
-    isMock?: boolean;
 };
-
-export const mockCommunities: Community[] = [
-    {
-        id: "mock-community-1",
-        slug: "mumbai-storytellers-circle",
-        title: "Mumbai Storytellers Circle",
-        summary:
-            "A warm offline circle for writers, speakers, poets, and anyone who loves live storytelling.",
-        description:
-            "Mumbai Storytellers Circle brings together people who love to write, listen, speak, and share stories in an intimate community setting. We host guided prompt nights, live story rounds, feedback circles, and themed meetups for creatives who want to practice their voice and meet like-minded people.\n\nMembers join for the inspiration, the accountability, and the friendships that grow from regular gatherings.",
-        category: "Storytelling",
-        city: "Mumbai",
-        hostName: "Asha Mehta",
-        hostEmail: "asha@onlyworkshops.in",
-        hostPhone: "9876543210",
-        meetingFormat: "Offline",
-        meetupFrequency: "Every Saturday evening",
-        coverImage: "/images/workshops/IMG_20260306_125816.webp",
-        instagramUrl: "https://instagram.com/mumbaistorycircle",
-        websiteUrl: "https://onlyworkshops.in/communities/mumbai-storytellers-circle",
-        whatsappUrl:
-            "https://wa.me/917028478109?text=Hi%2C%20I%20want%20to%20join%20Mumbai%20Storytellers%20Circle",
-        createdAt: "2026-03-20T10:00:00.000Z",
-        isMock: true,
-    },
-    {
-        id: "mock-community-2",
-        slug: "pune-film-walk-collective",
-        title: "Pune Film Walk Collective",
-        summary:
-            "Weekend film lovers, photographers, and observers meeting for city walks and cinematic frames.",
-        description:
-            "Pune Film Walk Collective is built for people who notice the mood of a street, love films, and want to explore visual storytelling together. We organise themed photo walks, movie debrief circles, and casual meetups where members swap references, locations, and visual ideas.\n\nWhether you are into photography, direction, or just looking for a creative circle, this community is a simple way to find your people.",
-        category: "Film & Photography",
-        city: "Pune",
-        hostName: "Rohan Kulkarni",
-        hostEmail: "rohan@onlyworkshops.in",
-        hostPhone: "9921604163",
-        meetingFormat: "Hybrid",
-        meetupFrequency: "Two Sundays every month",
-        coverImage: "/images/workshops/IMG_20260306_130025.webp",
-        instagramUrl: "https://instagram.com/punefilmwalks",
-        websiteUrl: "https://onlyworkshops.in/communities/pune-film-walk-collective",
-        whatsappUrl:
-            "https://wa.me/919921604163?text=Hi%2C%20I%20want%20to%20join%20Pune%20Film%20Walk%20Collective",
-        createdAt: "2026-03-19T12:00:00.000Z",
-        isMock: true,
-    },
-    {
-        id: "mock-community-3",
-        slug: "bangalore-slow-potters-club",
-        title: "Bangalore Slow Potters Club",
-        summary:
-            "A beginner-friendly pottery community for people who want regular practice, shared studio time, and calm evenings.",
-        description:
-            "Bangalore Slow Potters Club is for hobby potters, total beginners, and anyone curious about clay as a long-term creative practice. Members meet for low-pressure studio hangs, clay play sessions, and peer-learning circles where people build consistency together.\n\nIt is less about one-off workshops and more about belonging to a creative rhythm you can return to every month.",
-        category: "Pottery",
-        city: "Bangalore",
-        hostName: "Mira Nair",
-        hostEmail: "mira@onlyworkshops.in",
-        hostPhone: "9811142233",
-        meetingFormat: "Offline",
-        meetupFrequency: "Every alternate Friday",
-        coverImage: "/images/workshops/IMG_20260306_125503.webp",
-        instagramUrl: "https://instagram.com/slowpottersclub",
-        websiteUrl: "https://onlyworkshops.in/communities/bangalore-slow-potters-club",
-        whatsappUrl:
-            "https://wa.me/919811142233?text=Hi%2C%20I%20want%20to%20join%20Bangalore%20Slow%20Potters%20Club",
-        createdAt: "2026-03-18T16:00:00.000Z",
-        isMock: true,
-    },
-    {
-        id: "mock-community-4",
-        slug: "delhi-street-photo-sundays",
-        title: "Delhi Street Photo Sundays",
-        summary:
-            "A social photo community for early-morning walks, critique sessions, and monthly public photo drops.",
-        description:
-            "Delhi Street Photo Sundays gathers curious photographers and visual storytellers for weekend shoots across markets, heritage lanes, and changing city corners. The group balances exploration with feedback, making it welcoming for both first-time shooters and experienced image-makers.\n\nMembers join to stay consistent, build a body of work, and be part of a community that looks closely at the city.",
-        category: "Photography",
-        city: "Delhi",
-        hostName: "Nidhi Arora",
-        hostEmail: "nidhi@onlyworkshops.in",
-        hostPhone: "9810081008",
-        meetingFormat: "Offline",
-        meetupFrequency: "Every Sunday morning",
-        coverImage: "/images/workshops/IMG_20260306_130143.webp",
-        instagramUrl: "https://instagram.com/delhistreetphotosundays",
-        websiteUrl: "https://onlyworkshops.in/communities/delhi-street-photo-sundays",
-        whatsappUrl:
-            "https://wa.me/919810081008?text=Hi%2C%20I%20want%20to%20join%20Delhi%20Street%20Photo%20Sundays",
-        createdAt: "2026-03-17T09:30:00.000Z",
-        isMock: true,
-    },
-];
 
 const DEFAULT_COMMUNITY_SOCIAL_PREVIEW_IMAGE = "/images/og-default.jpg";
 
@@ -154,7 +58,6 @@ export function mapCommunityRowToCommunity(row: Tables<"communities">): Communit
         websiteUrl: normalizeOptionalUrl(row.website_url),
         whatsappUrl: normalizeOptionalUrl(row.whatsapp_url),
         createdAt: row.created_at,
-        isMock: false,
     };
 }
 
@@ -265,16 +168,6 @@ export async function listCommunities(
     }
 
     return (data || []).map((row) => mapCommunityRowToCommunity(row));
-}
-
-export function getMockCommunityBySlug(slug: string) {
-    const normalizedSlug = normalizeCommunitySlug(slug);
-
-    return (
-        mockCommunities.find(
-            (community) => normalizeCommunitySlug(community.slug) === normalizedSlug
-        ) || null
-    );
 }
 
 export function mergeCommunities(primary: Community[], fallback: Community[]) {

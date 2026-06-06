@@ -110,4 +110,28 @@ describe("POST /api/careers/apply", () => {
         expect(body.error).toBe("Resume must be a PDF, DOC, or DOCX file.");
         expect(sendEmailMock).not.toHaveBeenCalled();
     });
+
+    it("rejects applications with invalid email addresses", async () => {
+        const formData = new FormData();
+        formData.append("fullName", "Aarav Sharma");
+        formData.append("email", "not-an-email");
+        formData.append("phone", "+91 99999 88888");
+        formData.append("location", "Bengaluru");
+        formData.append("role", "Photographer");
+        formData.append(
+            "coverLetter",
+            "I have spent the last four years building photo stories and campaign assets for creative brands."
+        );
+        formData.append(
+            "resume",
+            new File(["resume-body"], "aarav-resume.pdf", { type: "application/pdf" })
+        );
+
+        const response = await POST(createRequest(formData));
+        const body = await response.json();
+
+        expect(response.status).toBe(400);
+        expect(body.error).toBe("Invalid careers application payload.");
+        expect(sendEmailMock).not.toHaveBeenCalled();
+    });
 });

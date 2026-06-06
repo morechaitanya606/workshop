@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import * as Sentry from "@sentry/core";
+import * as Sentry from "@sentry/nextjs";
 
 type RateLimitEntry = {
     count: number;
@@ -176,6 +176,16 @@ export async function assertRateLimit({
     } else {
         if (process.env.NODE_ENV === "production" && !hasWarnedAboutRateLimitFallback) {
             hasWarnedAboutRateLimitFallback = true;
+            Sentry.captureMessage(
+                "Upstash rate limiting is not configured. Falling back to per-instance in-memory limits.",
+                {
+                    level: "warning",
+                    tags: {
+                        layer: "api",
+                        subsystem: "rate_limit",
+                    },
+                }
+            );
             console.warn(
                 "Upstash rate limiting is not configured. Production requests will fall back to per-instance in-memory limits."
             );

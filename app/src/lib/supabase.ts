@@ -6,8 +6,10 @@ const supabasePublicConfig = getPublicSupabaseConfig();
 
 export const isSupabaseConfigured = Boolean(supabasePublicConfig);
 
-const fallbackUrl = "https://placeholder.supabase.co";
-const fallbackAnonKey = "placeholder-anon-key";
+const developmentSupabaseConfig = {
+    url: "http://127.0.0.1:54321",
+    key: "missing-public-supabase-key",
+};
 
 if (
     !isSupabaseConfigured &&
@@ -19,9 +21,15 @@ if (
     );
 }
 
+if (!isSupabaseConfigured && process.env.NODE_ENV === "production") {
+    throw new Error(
+        "Supabase public env vars are missing. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY."
+    );
+}
+
 export const supabase = createBrowserClient<Database>(
-    isSupabaseConfigured ? supabasePublicConfig!.url : fallbackUrl,
-    isSupabaseConfigured ? supabasePublicConfig!.key : fallbackAnonKey,
+    isSupabaseConfigured ? supabasePublicConfig!.url : developmentSupabaseConfig.url,
+    isSupabaseConfigured ? supabasePublicConfig!.key : developmentSupabaseConfig.key,
     {
         auth: {
             persistSession: isSupabaseConfigured,

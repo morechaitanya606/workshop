@@ -5,7 +5,6 @@ import {
     ArrowLeft,
     ArrowRight,
     Globe,
-    Instagram,
     Mail,
     MapPin,
     MessageCircle,
@@ -25,9 +24,10 @@ export const revalidate = 60;
 export async function generateMetadata({
     params,
 }: {
-    params: { slug: string };
+    params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-    const { community } = await loadPublicCommunityBySlug(params.slug);
+    const { slug } = await params;
+    const { community } = await loadPublicCommunityBySlug(slug);
 
     if (!community) {
         return { title: "Community Not Found | Only Workshops" };
@@ -61,8 +61,13 @@ export async function generateMetadata({
     };
 }
 
-export default async function CommunityDetailPage({ params }: { params: { slug: string } }) {
-    const { community } = await loadPublicCommunityBySlug(params.slug);
+export default async function CommunityDetailPage({
+    params,
+}: {
+    params: Promise<{ slug: string }>;
+}) {
+    const { slug } = await params;
+    const { community } = await loadPublicCommunityBySlug(slug);
 
     if (!community) {
         notFound();
@@ -72,7 +77,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
 
     const socialLinks = [
         community.instagramUrl
-            ? { href: community.instagramUrl, label: "Instagram", icon: Instagram }
+            ? { href: community.instagramUrl, label: "Instagram", icon: MessageCircle }
             : null,
         community.websiteUrl ? { href: community.websiteUrl, label: "Website", icon: Globe } : null,
         community.whatsappUrl
@@ -81,7 +86,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
     ].filter(Boolean) as Array<{
         href: string;
         label: string;
-        icon: typeof Instagram;
+        icon: typeof Globe;
     }>;
 
     return (

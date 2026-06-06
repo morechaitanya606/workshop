@@ -21,7 +21,6 @@ export function addRecentlyViewed(workshopId: string): void {
         // silently fail if localStorage is unavailable
     }
 }
-
 export function getRecentlyViewed(): string[] {
     if (typeof window === "undefined") return [];
     try {
@@ -29,14 +28,5 @@ export function getRecentlyViewed(): string[] {
         return raw ? JSON.parse(raw) : [];
     } catch {
         return [];
-    }
-}
-
-export function clearRecentlyViewed(): void {
-    if (typeof window === "undefined") return;
-    try {
-        localStorage.removeItem(STORAGE_KEY);
-    } catch {
-        // silently fail
     }
 }

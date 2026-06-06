@@ -1,5 +1,4 @@
 import type { Tables } from "@/lib/database.types";
-import { galleryImages } from "@/lib/data";
 import {
     createSupabaseServiceClient,
     isSupabaseServiceConfigured,
@@ -26,17 +25,6 @@ export function mapCommunityPhotoRow(row: CommunityPhotoRow): CommunityPhoto {
         isActive: row.is_active,
         createdAt: row.created_at,
     };
-}
-
-export function getFallbackCommunityPhotos(limit = 12): CommunityPhoto[] {
-    return galleryImages.slice(0, limit).map((imageUrl, index) => ({
-        id: `fallback-community-photo-${index + 1}`,
-        imageUrl,
-        altText: `Community workshop ${index + 1}`,
-        sortOrder: index,
-        isActive: true,
-        createdAt: new Date(0).toISOString(),
-    }));
 }
 
 export function isMissingCommunityPhotosTableError(error: unknown) {
@@ -77,17 +65,15 @@ export async function listCommunityPhotos(
 
 export async function loadHomepageCommunityPhotos(limit = 12): Promise<CommunityPhoto[]> {
     if (!isSupabaseServiceConfigured) {
-        return getFallbackCommunityPhotos(limit);
+        return [];
     }
 
     try {
-        const photos = await listCommunityPhotos(createSupabaseServiceClient(), {
+        return await listCommunityPhotos(createSupabaseServiceClient(), {
             limit,
             activeOnly: true,
         });
-
-        return photos.length > 0 ? photos : getFallbackCommunityPhotos(limit);
     } catch {
-        return getFallbackCommunityPhotos(limit);
+        return [];
     }
 }

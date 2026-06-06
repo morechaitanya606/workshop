@@ -13,13 +13,19 @@ import {
     User,
 } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
-import { getSupportTickets, toApiErrorMessage, type SupportTicket } from "@/lib/api-client";
+import {
+    createSupportTicketReply,
+    getSupportTickets,
+    toApiErrorMessage,
+    updateSupportTicketStatus,
+    type SupportTicket,
+} from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 
 type Reply = {
     id: string;
     message: string;
-    author: "admin" | "user";
+    author: "admin" | "host" | "user";
     created_at: string;
 };
 
@@ -54,6 +60,8 @@ export default function SupportDashboard() {
     const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
     const [replyDraft, setReplyDraft] = useState("");
     const [statusUpdating, setStatusUpdating] = useState(false);
+    const [replySending, setReplySending] = useState(false);
+    const [mutationError, setMutationError] = useState<string | null>(null);
     const repliesEndRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
@@ -155,41 +163,68 @@ export default function SupportDashboard() {
         }
     };
 
-    const handleStatusChange = (ticketId: string, newStatus: Ticket["status"]) => {
-        setStatusUpdating(true);
-        setTimeout(() => {
-            setTickets((prev) =>
-                prev.map((ticket) =>
-                    ticket.id === ticketId ? { ...ticket, status: newStatus } : ticket
-                )
-            );
-            setStatusUpdating(false);
-        }, 400);
+    const getReplyAuthorLabel = (author: Reply["author"]) => {
+        if (author === "admin") return "Admin";
+        if (author === "host") return "Host";
+        return "Customer";
     };
 
-    const handleSendReply = () => {
+    const handleStatusChange = async (ticketId: string, newStatus: Ticket["status"]) => {
+        if (!session?.access_token) return;
+
+        setStatusUpdating(true);
+        setMutationError(null);
+
+        try {
+            const result = await updateSupportTicketStatus(
+                ticketId,
+                session.access_token,
+                newStatus
+            );
+            setTickets((prev) =>
+                prev.map((ticket) =>
+                    ticket.id === ticketId ? { ...ticket, status: result.ticket.status } : ticket
+                )
+            );
+        } catch (updateError) {
+            setMutationError(
+                toApiErrorMessage(updateError, "Unable to update this ticket status.")
+            );
+        } finally {
+            setStatusUpdating(false);
+        }
+    };
+
+    const handleSendReply = async () => {
         const trimmed = replyDraft.trim();
-        if (!trimmed || !selectedTicketId) return;
+        if (!trimmed || !selectedTicketId || !session?.access_token || replySending) return;
 
-        const newReply: Reply = {
-            id: `r-${Date.now()}`,
-            message: trimmed,
-            author: "admin",
-            created_at: new Date().toISOString(),
-        };
+        setReplySending(true);
+        setMutationError(null);
 
-        setTickets((prev) =>
-            prev.map((ticket) =>
-                ticket.id === selectedTicketId
-                    ? {
-                          ...ticket,
-                          replies: [...ticket.replies, newReply],
-                          status: ticket.status === "open" ? "in_progress" : ticket.status,
-                      }
-                    : ticket
-            )
-        );
-        setReplyDraft("");
+        try {
+            const result = await createSupportTicketReply(
+                selectedTicketId,
+                session.access_token,
+                trimmed
+            );
+            setTickets((prev) =>
+                prev.map((ticket) =>
+                    ticket.id === selectedTicketId
+                        ? {
+                              ...ticket,
+                              replies: [...ticket.replies, result.reply],
+                              status: result.ticket.status,
+                          }
+                        : ticket
+                )
+            );
+            setReplyDraft("");
+        } catch (replyError) {
+            setMutationError(toApiErrorMessage(replyError, "Unable to send this reply."));
+        } finally {
+            setReplySending(false);
+        }
     };
 
     if (loading) {
@@ -221,6 +256,11 @@ export default function SupportDashboard() {
                 </button>
 
                 <div className="rounded-2xl border border-clay/30 bg-white p-6 shadow-card">
+                    {mutationError && (
+                        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-inter text-red-700">
+                            {mutationError}
+                        </div>
+                    )}
                     <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div className="flex-1">
                             <div className="mb-2 flex items-center gap-2">
@@ -264,7 +304,7 @@ export default function SupportDashboard() {
                                     value={selectedTicket.status}
                                     disabled={statusUpdating}
                                     onChange={(event) =>
-                                        handleStatusChange(
+                                        void handleStatusChange(
                                             selectedTicket.id,
                                             event.target.value as Ticket["status"]
                                         )
@@ -302,7 +342,7 @@ export default function SupportDashboard() {
                                 <div
                                     key={reply.id}
                                     className={
-                                        reply.author === "admin"
+                                        reply.author === "admin" || reply.author === "host"
                                             ? "bg-blue-50/30 px-6 py-4"
                                             : "bg-white px-6 py-4"
                                     }
@@ -312,17 +352,19 @@ export default function SupportDashboard() {
                                             className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${
                                                 reply.author === "admin"
                                                     ? "bg-terracotta"
+                                                    : reply.author === "host"
+                                                      ? "bg-terracotta/80"
                                                     : "bg-dark/60"
                                             }`}
                                         >
-                                            {reply.author === "admin" ? (
-                                                "A"
+                                            {reply.author === "admin" || reply.author === "host" ? (
+                                                reply.author === "admin" ? "A" : "H"
                                             ) : (
                                                 <User className="h-3 w-3" />
                                             )}
                                         </div>
                                         <span className="text-xs font-inter font-semibold text-dark">
-                                            {reply.author === "admin" ? "Admin" : "Customer"}
+                                            {getReplyAuthorLabel(reply.author)}
                                         </span>
                                         <span className="text-xs text-dark-muted">
                                             {formatDateTime(reply.created_at)}
@@ -354,14 +396,14 @@ export default function SupportDashboard() {
                                 onKeyDown={(event) => {
                                     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
                                         event.preventDefault();
-                                        handleSendReply();
+                                        void handleSendReply();
                                     }
                                 }}
                                 className="flex-1 resize-none rounded-xl border border-clay/50 bg-white px-4 py-3 text-sm font-inter focus:outline-none focus:ring-1 focus:ring-terracotta/30"
                             />
                             <button
                                 onClick={handleSendReply}
-                                disabled={!replyDraft.trim()}
+                                disabled={!replyDraft.trim() || replySending}
                                 className="btn-primary self-end !px-5 !py-3 disabled:cursor-not-allowed disabled:opacity-40"
                             >
                                 <Send className="w-4 h-4" />

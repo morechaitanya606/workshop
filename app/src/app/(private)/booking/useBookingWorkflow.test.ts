@@ -2,10 +2,33 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useBookingWorkflow } from "./useBookingWorkflow";
 import * as apiClient from "@/lib/api-client";
-import { mockWorkshops } from "@/lib/data";
+import type { Workshop } from "@/lib/data";
 
 // Mock dependencies
 let mockSearchParams = "?workshop=w1&hold=h1&guests=2";
+const bookingTestWorkshop: Workshop = {
+    id: "w1",
+    title: "Booking Test Workshop",
+    description: "A realistic workshop fixture for checkout workflow tests.",
+    category: "Pottery",
+    price: 1800,
+    location: "Studio One",
+    city: "Pune",
+    duration: "2 hours",
+    date: "2026-04-05",
+    time: "11:00",
+    maxSeats: 16,
+    seatsRemaining: 6,
+    coverImage: "/images/og-default.jpg",
+    galleryImages: ["/images/og-default.jpg"],
+    rating: 0,
+    reviewCount: 0,
+    hostName: "Workshop Host",
+    hostAvatar: "/images/icon.png",
+    hostBio: "Experienced workshop host.",
+    whatYouLearn: ["Core technique"],
+    materialsProvided: ["Materials"],
+};
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
@@ -75,7 +98,7 @@ describe("useBookingWorkflow", () => {
         });
 
         vi.spyOn(apiClient, "getWorkshopById").mockResolvedValue({
-            workshop: mockWorkshops[0],
+            workshop: bookingTestWorkshop,
         } as any);
 
         // Default fetch mock for settings
@@ -160,7 +183,7 @@ describe("useBookingWorkflow", () => {
             "mock-token",
             expect.objectContaining({
                 holdId: "h1",
-                workshopId: mockWorkshops[0].id,
+                workshopId: bookingTestWorkshop.id,
                 firstName: "John",
                 phone: "9876543210",
             })

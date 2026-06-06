@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleApiError, parseQuery } from "@/lib/api-route";
 import { workshopQuerySchema } from "@/lib/validators";
-import { mapWorkshopRowToWorkshop, queryMockWorkshops } from "@/lib/workshop-utils";
+import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import { isMissingColumnError } from "@/lib/workshop-approval-compat";
 import { normalizeFilterCategoryLabel } from "@/lib/data";
 import { createSupabaseAnonServerClient, isSupabasePublicConfigured } from "@/lib/supabase-server";
@@ -72,20 +72,12 @@ export async function GET(request: NextRequest) {
     const normalizedCategory = normalizeFilterCategoryLabel(query.category);
     const from = (query.page - 1) * query.pageSize;
     const to = from + query.pageSize - 1;
-    const allowMockFallback = process.env.NODE_ENV !== "production";
 
     if (!isSupabasePublicConfigured) {
-        if (!allowMockFallback) {
-            return NextResponse.json(
-                { error: "Supabase public env vars are missing on the server." },
-                { status: 500 }
-            );
-        }
-        const fallback = queryMockWorkshops({
-            ...query,
-            category: normalizedCategory,
-        });
-        return NextResponse.json(fallback, { headers: WORKSHOP_LIST_CACHE_HEADERS });
+        return NextResponse.json(
+            { error: "Supabase public env vars are missing on the server." },
+            { status: 500 }
+        );
     }
 
     try {
@@ -126,22 +118,6 @@ export async function GET(request: NextRequest) {
             }
         );
     } catch (error) {
-        if (allowMockFallback) {
-            const fallback = queryMockWorkshops({
-                ...query,
-                category: normalizedCategory,
-            });
-            return NextResponse.json(
-                {
-                    ...fallback,
-                    warning: "Falling back to mock workshops because Supabase query failed.",
-                    error: String(error),
-                },
-                {
-                    headers: WORKSHOP_LIST_CACHE_HEADERS,
-                }
-            );
-        }
         return handleApiError("Failed to load workshops.", error);
     }
 }

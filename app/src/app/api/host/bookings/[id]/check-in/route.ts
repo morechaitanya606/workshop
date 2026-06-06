@@ -11,7 +11,7 @@ const checkInSchema = z.object({
 });
 
 type Params = {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 };
 
 function getErrorMessage(error: unknown) {
@@ -33,6 +33,7 @@ function isMissingAttendedColumnError(error: unknown) {
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
+    const { id } = await params;
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {
         return auth.response;
@@ -57,7 +58,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         const { data: booking, error: fetchError } = await serviceClient
             .from("bookings")
             .select("id, workshop_id")
-            .eq("id", params.id)
+            .eq("id", id)
             .maybeSingle();
 
         if (fetchError || !booking) {
@@ -85,7 +86,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         const { error: updateError } = await serviceClient
             .from("bookings")
             .update({ attended } as any)
-            .eq("id", params.id);
+            .eq("id", id);
 
         if (updateError) {
             if (isMissingAttendedColumnError(updateError)) {

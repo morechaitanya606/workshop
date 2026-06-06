@@ -167,7 +167,6 @@ Rules:
 * Do not make up answers.`;
 
 export const CHATBOT_FALLBACK_REPLY = "I couldn't find the exact info. Please contact support.";
-export const CHATBOT_UNANSWERED_REPLY = CHATBOT_FALLBACK_REPLY;
 export const CHATBOT_GREETING_REPLY =
     "Hi! You can ask me about workshop fees, booking, materials, parking, or cancellation.";
 export const CHATBOT_GUIDANCE_REPLY =
@@ -209,7 +208,6 @@ function containsLatin(value: string) {
 
 export function detectChatbotLanguageMode(value: string): ChatbotLanguageMode {
     const trimmed = value.trim();
-    const lower = trimmed.toLowerCase();
     const hasDevanagari = containsDevanagari(trimmed);
     const hasLatin = containsLatin(trimmed);
     const normalizedTokens = new Set(normalizeChatText(trimmed).split(" ").filter(Boolean));

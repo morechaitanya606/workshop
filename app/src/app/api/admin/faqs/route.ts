@@ -6,7 +6,7 @@ import { requireSupabaseService } from "@/lib/api-helpers";
 import { getPlatformChatbotClient } from "@/lib/chatbot-clients";
 import { generateChatbotFaqEmbedding, toVectorLiteral } from "@/lib/chatbot-vector-search";
 import { getHuggingFaceEmbeddingConfig } from "@/lib/env";
-import { FAQ_ADMIN_SELECT_FIELDS, getDefaultFaqRows, isMissingFaqTableError } from "@/lib/faqs";
+import { FAQ_ADMIN_SELECT_FIELDS, isMissingFaqTableError } from "@/lib/faqs";
 import { faqEntrySchema } from "@/lib/validators";
 
 export async function GET(request: NextRequest) {
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             if (isMissingFaqTableError(error)) {
-                return NextResponse.json({ faqs: getDefaultFaqRows() });
+                return NextResponse.json({ faqs: [] });
             }
 
             throw error;

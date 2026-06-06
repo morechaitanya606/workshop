@@ -6,13 +6,7 @@ import type { Tables } from "@/lib/database.types";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { workshopFeedbackSchema } from "@/lib/validators";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
-import {
-    getFallbackFeedback,
-    getFallbackWorkshopInfo,
-    isMissingFeedbackTableError,
-    saveFallbackFeedback,
-    toFallbackWorkshopFeedbackResponse,
-} from "@/lib/feedback-fallback";
+import { isMissingFeedbackTableError } from "@/lib/feedback-fallback";
 
 type FeedbackRow = Pick<
     Tables<"workshop_feedback">,
@@ -29,7 +23,10 @@ function isWorkshopPast(date: string, time: string | null) {
     return workshopDateTime.getTime() < Date.now();
 }
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -39,21 +36,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (!service.ok) return service.response;
     const serviceClient = service.client;
 
-    const workshopId = params.id;
-    const allowMockFallback = process.env.NODE_ENV !== "production";
-    const fallbackWorkshop = allowMockFallback ? getFallbackWorkshopInfo(workshopId) : null;
+    const { id: workshopId } = await params;
 
     try {
-        if (fallbackWorkshop) {
-            const fallbackFeedback = getFallbackFeedback(auth.user.id, workshopId);
-            return NextResponse.json({
-                feedback: fallbackFeedback
-                    ? toFallbackWorkshopFeedbackResponse(fallbackFeedback)
-                    : null,
-                canLeaveFeedback: isWorkshopPast(fallbackWorkshop.date, fallbackWorkshop.time),
-            });
-        }
-
         const { data: workshop, error: workshopError } = await serviceClient
             .from("workshops")
             .select("date, time")
@@ -93,10 +78,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
             .maybeSingle();
 
         if (isMissingFeedbackTableError(error)) {
-            const fallback = getFallbackFeedback(auth.user.id, workshopId);
             return NextResponse.json({
-                feedback: fallback ? toFallbackWorkshopFeedbackResponse(fallback) : null,
-                canLeaveFeedback: true,
+                feedback: null,
+                canLeaveFeedback: false,
+                message: "Feedback is unavailable until the workshop_feedback table is configured.",
             });
         }
 
@@ -113,7 +98,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -143,29 +131,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         return parsed.response;
     }
 
-    const workshopId = params.id;
-    const allowMockFallback = process.env.NODE_ENV !== "production";
-    const fallbackWorkshop = allowMockFallback ? getFallbackWorkshopInfo(workshopId) : null;
+    const { id: workshopId } = await params;
 
     try {
-        if (fallbackWorkshop) {
-            if (!isWorkshopPast(fallbackWorkshop.date, fallbackWorkshop.time)) {
-                return jsonError("Feedback can only be submitted after the event.", 409);
-            }
-
-            const savedFallback = saveFallbackFeedback(auth.user.id, workshopId, {
-                rating: parsed.data.rating ?? null,
-                comment: parsed.data.comment,
-                photos: parsed.data.photos || [],
-                videoUrl: parsed.data.videoUrl || null,
-            });
-
-            return NextResponse.json({
-                feedback: toFallbackWorkshopFeedbackResponse(savedFallback),
-                message: "Thanks for sharing your feedback.",
-            });
-        }
-
         const { data: workshop, error: workshopError } = await serviceClient
             .from("workshops")
             .select("date, time")
@@ -212,17 +180,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             .single();
 
         if (isMissingFeedbackTableError(saveError)) {
-            const savedFallback = saveFallbackFeedback(auth.user.id, workshopId, {
-                rating: parsed.data.rating ?? null,
-                comment: parsed.data.comment,
-                photos: parsed.data.photos || [],
-                videoUrl: parsed.data.videoUrl || null,
-            });
-
-            return NextResponse.json({
-                feedback: toFallbackWorkshopFeedbackResponse(savedFallback),
-                message: "Thanks for sharing your feedback.",
-            });
+            return jsonError(
+                "Feedback is unavailable until the workshop_feedback table is configured.",
+                503
+            );
         }
 
         if (saveError) {

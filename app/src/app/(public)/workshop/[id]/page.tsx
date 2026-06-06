@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { mockWorkshops, type Workshop } from "@/lib/data";
+import type { Workshop } from "@/lib/data";
 import { getAbsoluteUrl } from "@/lib/env";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
@@ -11,10 +11,6 @@ import WorkshopClient from "./WorkshopClient";
 export const revalidate = 60;
 
 const SIMILAR_WORKSHOP_LIMIT = 3;
-
-function allowMockFallback() {
-    return process.env.NODE_ENV !== "production";
-}
 
 function rankSimilarWorkshops(workshops: Workshop[], currentWorkshop: Workshop, todayIso: string) {
     return workshops
@@ -39,8 +35,13 @@ function rankSimilarWorkshops(workshops: Workshop[], currentWorkshop: Workshop, 
         .slice(0, SIMILAR_WORKSHOP_LIMIT);
 }
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-    const workshop = await getWorkshop(params.id);
+export async function generateMetadata({
+    params,
+}: {
+    params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+    const { id } = await params;
+    const workshop = await getWorkshop(id);
     if (!workshop) {
         return { title: "Workshop Not Found | Only Workshops" };
     }
@@ -96,10 +97,7 @@ async function getWorkshop(id: string) {
             // fallback
         }
     }
-    if (!allowMockFallback()) {
-        return null;
-    }
-    return mockWorkshops.find((workshop) => workshop.id === id) || null;
+    return null;
 }
 
 async function getSimilarWorkshops(workshop: Workshop, todayIso: string) {
@@ -139,15 +137,16 @@ async function getSimilarWorkshops(workshop: Workshop, todayIso: string) {
         }
     }
 
-    if (!allowMockFallback()) {
-        return [];
-    }
-
-    return rankSimilarWorkshops(mockWorkshops, workshop, todayIso);
+    return [];
 }
 
-export default async function WorkshopDetailPage({ params }: { params: { id: string } }) {
-    const workshop = await getWorkshop(params.id);
+export default async function WorkshopDetailPage({
+    params,
+}: {
+    params: Promise<{ id: string }>;
+}) {
+    const { id } = await params;
+    const workshop = await getWorkshop(id);
 
     const todayIso = new Date().toISOString().slice(0, 10);
     if (!workshop) {

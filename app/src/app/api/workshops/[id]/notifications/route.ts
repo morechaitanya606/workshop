@@ -2,7 +2,6 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { parseBody } from "@/lib/api-route";
 import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
-import { isKnownMockWorkshopId } from "@/lib/data";
 import type { Tables } from "@/lib/database.types";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { workshopNotificationSchema } from "@/lib/validators";
@@ -13,40 +12,11 @@ type NotificationRow = {
     notify_creator: Tables<"workshop_notification_preferences">["notify_creator"] | null;
 };
 
-const fallbackNotificationStore = new Map<string, { similar: boolean; creator: boolean }>();
-
 function mapNotificationState(record: NotificationRow | null | undefined) {
     return {
         similar: Boolean(record?.notify_similar),
         creator: Boolean(record?.notify_creator),
     };
-}
-
-function notificationFallbackKey(userId: string, workshopId: string) {
-    return `${userId}:${workshopId}`;
-}
-
-function getFallbackNotificationState(userId: string, workshopId: string) {
-    return (
-        fallbackNotificationStore.get(notificationFallbackKey(userId, workshopId)) || {
-            similar: false,
-            creator: false,
-        }
-    );
-}
-
-function upsertFallbackNotificationState(
-    userId: string,
-    workshopId: string,
-    mode: "similar" | "creator"
-) {
-    const current = getFallbackNotificationState(userId, workshopId);
-    const next = {
-        similar: mode === "similar" ? true : current.similar,
-        creator: mode === "creator" ? true : current.creator,
-    };
-    fallbackNotificationStore.set(notificationFallbackKey(userId, workshopId), next);
-    return next;
 }
 
 function isMissingNotificationPreferencesTableError(error: unknown) {
@@ -65,7 +35,10 @@ function isMissingNotificationPreferencesTableError(error: unknown) {
     );
 }
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -75,16 +48,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (!service.ok) return service.response;
     const serviceClient = service.client;
 
-    const workshopId = params.id;
-    const allowMockFallback = process.env.NODE_ENV !== "production";
+    const { id: workshopId } = await params;
 
     try {
-        if (allowMockFallback && isKnownMockWorkshopId(workshopId)) {
-            return NextResponse.json({
-                subscriptions: getFallbackNotificationState(auth.user.id, workshopId),
-            });
-        }
-
         const { data, error } = await serviceClient
             .from("workshop_notification_preferences")
             .select("notify_similar, notify_creator")
@@ -93,9 +59,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
             .maybeSingle();
 
         if (isMissingNotificationPreferencesTableError(error)) {
-            return NextResponse.json({
-                subscriptions: getFallbackNotificationState(auth.user.id, workshopId),
-            });
+            return jsonError(
+                "Notification preferences table is unavailable. Run the latest Supabase migration first.",
+                503,
+                error
+            );
         }
 
         if (error) {
@@ -110,7 +78,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -140,26 +111,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         return parsed.response;
     }
 
-    const workshopId = params.id;
-    const allowMockFallback = process.env.NODE_ENV !== "production";
+    const { id: workshopId } = await params;
 
     try {
-        if (allowMockFallback && isKnownMockWorkshopId(workshopId)) {
-            const subscriptions = upsertFallbackNotificationState(
-                auth.user.id,
-                workshopId,
-                parsed.data.mode
-            );
-
-            return NextResponse.json({
-                subscriptions,
-                message:
-                    parsed.data.mode === "similar"
-                        ? "Notification enabled for similar events."
-                        : "Notification enabled for creator's next event.",
-            });
-        }
-
         const { data: existing, error: existingError } = await serviceClient
             .from("workshop_notification_preferences")
             .select("notify_similar, notify_creator")
@@ -168,19 +122,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             .maybeSingle();
 
         if (isMissingNotificationPreferencesTableError(existingError)) {
-            const subscriptions = upsertFallbackNotificationState(
-                auth.user.id,
-                workshopId,
-                parsed.data.mode
+            return jsonError(
+                "Notification preferences table is unavailable. Run the latest Supabase migration first.",
+                503,
+                existingError
             );
-
-            return NextResponse.json({
-                subscriptions,
-                message:
-                    parsed.data.mode === "similar"
-                        ? "Notification enabled for similar events."
-                        : "Notification enabled for creator's next event.",
-            });
         }
 
         if (existingError) {
@@ -212,19 +158,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             .single();
 
         if (isMissingNotificationPreferencesTableError(saveError)) {
-            const subscriptions = upsertFallbackNotificationState(
-                auth.user.id,
-                workshopId,
-                parsed.data.mode
+            return jsonError(
+                "Notification preferences table is unavailable. Run the latest Supabase migration first.",
+                503,
+                saveError
             );
-
-            return NextResponse.json({
-                subscriptions,
-                message:
-                    parsed.data.mode === "similar"
-                        ? "Notification enabled for similar events."
-                        : "Notification enabled for creator's next event.",
-            });
         }
 
         if (saveError) {

@@ -63,7 +63,7 @@ export function isApiClientError(error: unknown): error is ApiClientError {
 
 export type GetWorkshopResponse = {
     workshop: Workshop;
-    source: "supabase" | "mock";
+    source: "supabase";
 };
 
 export type FaqItem = {
@@ -203,7 +203,7 @@ export type SupportTicket = {
     replies: Array<{
         id: string;
         message: string;
-        author: "admin" | "user";
+        author: "admin" | "host" | "user";
         created_at: string;
     }>;
 };
@@ -216,6 +216,32 @@ export function getSupportTickets(accessToken: string) {
     return apiRequest<SupportTicketsResponse>("/api/support", {
         accessToken,
         cache: "no-store",
+    });
+}
+
+export function updateSupportTicketStatus(
+    ticketId: string,
+    accessToken: string,
+    status: SupportTicket["status"]
+) {
+    return apiRequest<{ ticket: Pick<SupportTicket, "id" | "status"> }>(
+        `/api/support/${ticketId}`,
+        {
+            method: "PATCH",
+            accessToken,
+            body: { status },
+        }
+    );
+}
+
+export function createSupportTicketReply(ticketId: string, accessToken: string, message: string) {
+    return apiRequest<{
+        reply: SupportTicket["replies"][number];
+        ticket: Pick<SupportTicket, "id" | "status">;
+    }>(`/api/support/${ticketId}/replies`, {
+        method: "POST",
+        accessToken,
+        body: { message },
     });
 }
 
@@ -449,6 +475,7 @@ export function toApiErrorMessage(error: unknown, fallbackMessage: string) {
 
 export type PlatformSettings = {
     service_fee?: number;
+    hero_image_url?: string;
     special_page?: SpecialPageSettings;
 };
 
@@ -596,7 +623,7 @@ export type MyBookingsResponse = {
             cover_image?: string;
         };
     }>;
-    source: "supabase" | "mock";
+    source: "supabase";
 };
 
 export function getMyBookings(accessToken: string) {
@@ -723,6 +750,20 @@ export type AdminFeedbackResponse = {
     totalPages: number;
 };
 
+export type AdminFeedback = AdminFeedbackResponse["feedback"][number];
+
+export type AdminFeedbackUpdate = {
+    id: string;
+    user_id?: string;
+    workshop_id?: string;
+    rating?: number | null;
+    comment?: string;
+    photos?: string[];
+    video_url?: string | null;
+    created_at?: string;
+    updated_at?: string;
+};
+
 export function getAdminFeedback(
     accessToken: string,
     params: {
@@ -754,7 +795,7 @@ export function updateAdminFeedback(
     feedbackId: string,
     payload: { rating?: number; comment?: string }
 ) {
-    return apiRequest<{ feedback: unknown }>(`/api/admin/feedback/${feedbackId}`, {
+    return apiRequest<{ feedback: AdminFeedbackUpdate }>(`/api/admin/feedback/${feedbackId}`, {
         method: "PATCH",
         accessToken,
         body: payload,
@@ -808,6 +849,7 @@ export function updateAdminCommunityPhoto(
     accessToken: string,
     photoId: string,
     payload: {
+        imageUrl?: string;
         altText?: string;
         sortOrder?: number;
         isActive?: boolean;

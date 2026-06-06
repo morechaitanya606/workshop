@@ -1,7 +1,0 @@
-{
-    "endpoints": {
-        "devTools": {
-            "url": "ws://localhost:9222/devtools/browser"
-        }
-    }
-}

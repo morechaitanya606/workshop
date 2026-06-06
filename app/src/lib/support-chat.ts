@@ -1,6 +1,5 @@
-import * as Sentry from "@sentry/core";
+import * as Sentry from "@sentry/nextjs";
 import type { Workshop } from "@/lib/data";
-import { mockWorkshops } from "@/lib/data";
 import {
     SUPPORT_CHAT_CACHE_TTL_MS,
     SUPPORT_CHAT_LIST_LIMIT,
@@ -1028,12 +1027,12 @@ export async function loadSupportChatWorkshops(now = Date.now()) {
 
     warnDevFallback(
         "support_chat",
-        "Using mock workshop data because support chat could not load live workshops."
+        "No live workshops loaded. Support chat will have limited workshop context."
     );
 
     workshopCache = {
-        data: mockWorkshops,
+        data: [],
         fetchedAt: now,
     };
-    return mockWorkshops;
+    return [];
 }

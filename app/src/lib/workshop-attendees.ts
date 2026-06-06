@@ -1,10 +1,8 @@
-import { isKnownMockWorkshopId } from "@/lib/data";
 import type { SupabaseServerClient } from "@/lib/supabase-server";
 
 type WorkshopOwnerLookup = {
     exists: boolean;
     ownerUserId: string | null;
-    isMock: boolean;
 };
 
 export type ConfirmedWorkshopAttendee = {
@@ -39,22 +37,10 @@ function isMissingColumnError(error: unknown, columnName: string) {
     );
 }
 
-export function isMockWorkshopId(workshopId: string) {
-    return isKnownMockWorkshopId(workshopId);
-}
-
 export async function getWorkshopOwnerLookup(
     serviceClient: SupabaseServerClient,
     workshopId: string
 ): Promise<WorkshopOwnerLookup> {
-    if (isMockWorkshopId(workshopId)) {
-        return {
-            exists: true,
-            ownerUserId: null,
-            isMock: true,
-        };
-    }
-
     const primaryQuery = await serviceClient
         .from("workshops")
         .select("id, host_user_id, host_id")
@@ -80,7 +66,6 @@ export async function getWorkshopOwnerLookup(
             return {
                 exists: false,
                 ownerUserId: null,
-                isMock: false,
             };
         }
 
@@ -88,7 +73,6 @@ export async function getWorkshopOwnerLookup(
             return {
                 exists: true,
                 ownerUserId: null,
-                isMock: false,
             };
         }
 
@@ -105,7 +89,6 @@ export async function getWorkshopOwnerLookup(
         return {
             exists: true,
             ownerUserId: hostQuery.data?.user_id ?? null,
-            isMock: false,
         };
     }
 
@@ -113,7 +96,6 @@ export async function getWorkshopOwnerLookup(
         return {
             exists: false,
             ownerUserId: null,
-            isMock: false,
         };
     }
 
@@ -121,7 +103,6 @@ export async function getWorkshopOwnerLookup(
         return {
             exists: true,
             ownerUserId: primaryQuery.data.host_user_id,
-            isMock: false,
         };
     }
 
@@ -129,7 +110,6 @@ export async function getWorkshopOwnerLookup(
         return {
             exists: true,
             ownerUserId: null,
-            isMock: false,
         };
     }
 
@@ -146,7 +126,6 @@ export async function getWorkshopOwnerLookup(
     return {
         exists: true,
         ownerUserId: hostQuery.data?.user_id ?? null,
-        isMock: false,
     };
 }
 
