@@ -55,6 +55,46 @@ type CreateWorkshopForm = {
 
 type FieldErrors = Partial<Record<keyof CreateWorkshopForm, string>>;
 
+const FIELD_VALIDATION_MESSAGES: Partial<Record<keyof CreateWorkshopForm, string>> = {
+    title: "Title must be at least 3 characters.",
+    description: "Description must be at least 20 characters.",
+    category: "Choose a category or enter a custom category.",
+    price: "Price must be a whole number greater than 0.",
+    location: "Location must be at least 2 characters.",
+    city: "City must be at least 2 characters.",
+    duration: "Duration is required.",
+    date: "Date is required.",
+    time: "Time is required.",
+    maxSeats: "Max seats must be a whole number between 1 and 500.",
+    coverImage: "Cover image is required. Upload an image or paste a valid image URL.",
+    galleryImages: "Each gallery image must be a valid image URL.",
+    videoUrl: "Video URL must be a valid URL.",
+    instagramLink: "Instagram link must be a valid URL.",
+    youtubeLink: "YouTube link must be a valid URL.",
+    websiteLink: "Website link must be a valid URL.",
+    hostName: "Host name must be at least 2 characters.",
+    hostBio: "Host bio must be at least 10 characters.",
+    hostInstagram: "Host Instagram link must be a valid URL.",
+    hostYoutube: "Host YouTube link must be a valid URL.",
+    hostWebsite: "Host website link must be a valid URL.",
+    whatYouLearn: "Add at least one learning outcome.",
+    materialsProvided: "Add at least one provided material.",
+    badgeLabels: "Each badge label must be under 120 characters.",
+    latitude: "Latitude must be between -90 and 90.",
+    longitude: "Longitude must be between -180 and 180.",
+    locationImages: "Each location image must be a valid image URL.",
+    earlyBirdDiscountValue: "Discount value must be a whole number.",
+    earlyBirdDaysAfterListing: "Valid days must be a whole number.",
+};
+
+function getFieldValidationMessage(field: keyof CreateWorkshopForm, message: string) {
+    if (message.toLowerCase().includes("url")) {
+        return message;
+    }
+
+    return FIELD_VALIDATION_MESSAGES[field] || message || "Please enter a valid value.";
+}
+
 function SectionHeader(props: { title: string; description: string }) {
     return (
         <div className="md:col-span-2 border-b border-gray-100 pb-3 pt-3 first:pt-0">
@@ -254,7 +294,9 @@ export default function HostCreateWorkshopPage() {
                                 : null;
                 if (!field && typeof root === "string" && root in form)
                     field = root as keyof CreateWorkshopForm;
-                if (field && !nextErrors[field]) nextErrors[field] = issue.message;
+                if (field && !nextErrors[field]) {
+                    nextErrors[field] = getFieldValidationMessage(field, issue.message);
+                }
             }
             setFieldErrors(nextErrors);
             setError("Please fix the highlighted fields and try again.");

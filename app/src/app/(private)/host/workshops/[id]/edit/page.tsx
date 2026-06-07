@@ -4,14 +4,15 @@ import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "rea
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Check, Upload } from "lucide-react";
+import { ArrowLeft, Loader2, Check, Lock, Upload } from "lucide-react";
 import { categories, PAST_EVENTS_CATEGORY_ID, type Workshop } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
-import AdminShell from "@/components/admin/AdminShell";
+import HostShell from "@/components/host/HostShell";
 import {
-    getAdminWorkshop,
+    getHostWorkshop,
+    isApiClientError,
     toApiErrorMessage,
-    updateAdminWorkshop,
+    updateHostWorkshop,
     uploadMedia,
 } from "@/lib/api-client";
 import { workshopUpdateSchema } from "@/lib/validators";
@@ -110,7 +111,7 @@ function workshopToFormValues(workshop: Workshop): WorkshopEditForm {
     };
 }
 
-export default function AdminEditWorkshopPage() {
+export default function HostEditWorkshopPage() {
     const params = useParams<{ id: string }>();
     const router = useRouter();
     const { session } = useAuth();
@@ -130,7 +131,9 @@ export default function AdminEditWorkshopPage() {
     const [uploadingVideo, setUploadingVideo] = useState(false);
     const [uploadingLocation, setUploadingLocation] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [workshopNotFound, setWorkshopNotFound] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [approvalStatus, setApprovalStatus] = useState<Workshop["approvalStatus"] | null>(null);
     const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof WorkshopEditForm, string>>>(
         {}
     );
@@ -188,6 +191,7 @@ export default function AdminEditWorkshopPage() {
             const isKnownCategory = categoryOptions.some((item) => item.label === nextCategory);
 
             setForm(workshopToFormValues(workshop));
+            setApprovalStatus(workshop.approvalStatus);
             setCategorySelection(
                 nextCategory ? (isKnownCategory ? nextCategory : "__other__") : ""
             );
@@ -315,17 +319,23 @@ export default function AdminEditWorkshopPage() {
         const loadWorkshop = async () => {
             if (!session?.access_token || !workshopId) return;
             setLoadingWorkshop(true);
+            setWorkshopNotFound(false);
             setError(null);
 
             try {
-                const result = await getAdminWorkshop(session.access_token, workshopId);
+                const result = await getHostWorkshop(session.access_token, workshopId);
                 const workshop = result.workshop;
                 if (!cancelled && workshop) {
                     syncWorkshopForm(workshop);
                 }
             } catch (fetchError) {
                 if (!cancelled) {
-                    setError(toApiErrorMessage(fetchError, "Unable to load workshop."));
+                    if (isApiClientError(fetchError) && fetchError.status === 404) {
+                        setWorkshopNotFound(true);
+                        setError(null);
+                    } else {
+                        setError(toApiErrorMessage(fetchError, "Unable to load workshop."));
+                    }
                 }
             } finally {
                 if (!cancelled) {
@@ -343,6 +353,10 @@ export default function AdminEditWorkshopPage() {
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!session?.access_token || !workshopId) return;
+        if (approvalStatus === "approved") {
+            setError("Approved workshops cannot be edited by hosts.");
+            return;
+        }
 
         const payload = {
             title: form.title.trim(),
@@ -432,7 +446,7 @@ export default function AdminEditWorkshopPage() {
         setError(null);
         setFieldErrors({});
         try {
-            const result = await updateAdminWorkshop(
+            const result = await updateHostWorkshop(
                 session.access_token,
                 workshopId,
                 validation.data
@@ -450,16 +464,19 @@ export default function AdminEditWorkshopPage() {
     };
 
     return (
-        <AdminShell>
+        <HostShell>
             <div className="mb-8 flex items-center gap-3">
-                <Link href="/admin/workshops" className="btn-secondary !py-2 !px-3">
+                <Link href="/host/workshops" className="btn-secondary !py-2 !px-3">
                     <ArrowLeft className="w-4 h-4" />
                 </Link>
                 <div>
                     <p className="text-xs font-inter font-bold uppercase tracking-wider text-terracotta mb-1">
-                        Workshops
+                        Host
                     </p>
                     <h1 className="heading-md">Edit Workshop</h1>
+                    <p className="mt-1 text-sm font-inter text-dark-muted">
+                        You can edit your workshop until an admin approves it.
+                    </p>
                 </div>
             </div>
 
@@ -467,6 +484,44 @@ export default function AdminEditWorkshopPage() {
                 <div className="flex items-center gap-2 text-sm font-inter text-dark-muted">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Loading workshop...
+                </div>
+            ) : workshopNotFound ? (
+                <div className="bg-white rounded-2xl shadow-soft p-8">
+                    <h2 className="font-playfair text-2xl font-bold text-dark">
+                        Workshop not found
+                    </h2>
+                    <p className="mt-2 max-w-2xl text-sm font-inter text-dark-muted">
+                        This workshop may have been deleted or moved. Go back to your workshop list
+                        and choose an available pending or rejected workshop to edit.
+                    </p>
+                    <div className="mt-6">
+                        <Link href="/host/workshops" className="btn-secondary">
+                            Back to Workshops
+                        </Link>
+                    </div>
+                </div>
+            ) : approvalStatus === "approved" ? (
+                <div className="bg-white rounded-2xl shadow-soft p-8">
+                    <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">
+                        <Lock className="h-5 w-5" />
+                    </div>
+                    <h2 className="font-playfair text-2xl font-bold text-dark">
+                        Workshop locked after approval
+                    </h2>
+                    <p className="mt-2 max-w-2xl text-sm font-inter text-dark-muted">
+                        This workshop has already been approved, so hosts cannot edit it anymore.
+                        Please contact an admin if the live listing needs a change.
+                    </p>
+                    <div className="mt-6 flex flex-wrap gap-3">
+                        <Link href="/host/workshops" className="btn-secondary">
+                            Back to Workshops
+                        </Link>
+                        {workshopId && (
+                            <Link href={`/workshop/${workshopId}`} className="btn-primary">
+                                View Listing
+                            </Link>
+                        )}
+                    </div>
                 </div>
             ) : (
                 <form
@@ -1196,7 +1251,7 @@ export default function AdminEditWorkshopPage() {
                     )}
 
                     <div className="flex gap-3">
-                        <Link href="/admin/workshops" className="btn-secondary">
+                        <Link href="/host/workshops" className="btn-secondary">
                             Cancel
                         </Link>
                         <button
@@ -1216,6 +1271,6 @@ export default function AdminEditWorkshopPage() {
                     </div>
                 </form>
             )}
-        </AdminShell>
+        </HostShell>
     );
 }

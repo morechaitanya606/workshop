@@ -954,6 +954,38 @@ export function createHostWorkshop(accessToken: string, payload: WorkshopCreateI
     });
 }
 
+export type HostWorkshopResponse = {
+    workshop: Workshop;
+    editable?: boolean;
+    message?: string;
+};
+
+export function getHostWorkshop(accessToken: string, workshopId: string) {
+    return apiRequest<HostWorkshopResponse>(`/api/host/workshops/${workshopId}`, {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function updateHostWorkshop(
+    accessToken: string,
+    workshopId: string,
+    payload: WorkshopUpdateInput
+) {
+    return apiRequest<HostWorkshopResponse>(`/api/host/workshops/${workshopId}`, {
+        method: "PATCH",
+        accessToken,
+        body: payload,
+    });
+}
+
+export function deleteHostWorkshop(accessToken: string, workshopId: string) {
+    return apiRequest<{ success: boolean; message?: string }>(`/api/host/workshops/${workshopId}`, {
+        method: "DELETE",
+        accessToken,
+    });
+}
+
 export function updateAdminWorkshop(
     accessToken: string,
     workshopId: string,

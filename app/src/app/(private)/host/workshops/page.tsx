@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Calendar, MapPin, Users, Loader2, Plus, Clock } from "lucide-react";
+import { Calendar, MapPin, Users, Loader2, Plus, Clock, Pencil, Lock, Trash2 } from "lucide-react";
 import HostShell from "@/components/host/HostShell";
 import { useAuth } from "@/lib/auth-context";
-import { getHostWorkshops, toApiErrorMessage } from "@/lib/api-client";
+import { deleteHostWorkshop, getHostWorkshops, toApiErrorMessage } from "@/lib/api-client";
 import type { Workshop } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -37,10 +37,14 @@ function getStatusMessage(status: Workshop["approvalStatus"]) {
         case "pending":
             return "This workshop is waiting for admin approval before it appears on the website.";
         case "rejected":
-            return "This workshop is not live right now. Please contact admin if you want to resubmit it.";
+            return "This workshop is not live right now. You can edit it before asking admin to review it again.";
         default:
             return "This workshop is approved and visible on the website.";
     }
+}
+
+function canHostEditWorkshop(status: Workshop["approvalStatus"]) {
+    return status !== "approved";
 }
 
 export default function HostWorkshopsPage() {
@@ -48,6 +52,7 @@ export default function HostWorkshopsPage() {
     const [workshops, setWorkshops] = useState<Workshop[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [deletingWorkshopId, setDeletingWorkshopId] = useState<string | null>(null);
 
     useEffect(() => {
         if (!session?.access_token) return;
@@ -67,6 +72,29 @@ export default function HostWorkshopsPage() {
 
         load();
     }, [session?.access_token]);
+
+    const handleDeleteWorkshop = async (workshop: Workshop) => {
+        if (!session?.access_token || workshop.approvalStatus === "approved") {
+            return;
+        }
+
+        const confirmed = window.confirm(`Delete "${workshop.title}"? This cannot be undone.`);
+        if (!confirmed) {
+            return;
+        }
+
+        setDeletingWorkshopId(workshop.id);
+        setError(null);
+
+        try {
+            await deleteHostWorkshop(session.access_token, workshop.id);
+            setWorkshops((current) => current.filter((item) => item.id !== workshop.id));
+        } catch (err) {
+            setError(toApiErrorMessage(err, "Unable to delete workshop."));
+        } finally {
+            setDeletingWorkshopId(null);
+        }
+    };
 
     return (
         <HostShell>
@@ -193,15 +221,48 @@ export default function HostWorkshopsPage() {
                                 <div className="flex flex-wrap items-center gap-2">
                                     <Link
                                         href={`/host/workshops/${workshop.id}/attendees`}
-                                        className="btn-secondary !py-2 !px-4 text-sm flex-1 justify-center"
+                                        className="btn-secondary !py-2 !px-4 text-sm flex-1 min-w-[8rem] justify-center"
                                     >
                                         <Users className="w-4 h-4" />
                                         Attendees
                                     </Link>
+                                    {canHostEditWorkshop(workshop.approvalStatus) ? (
+                                        <>
+                                            <Link
+                                                href={`/host/workshops/${workshop.id}/edit`}
+                                                className="btn-secondary !py-2 !px-4 text-sm flex-1 min-w-[8rem] justify-center"
+                                            >
+                                                <Pencil className="w-4 h-4" />
+                                                Edit
+                                            </Link>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDeleteWorkshop(workshop)}
+                                                disabled={deletingWorkshopId === workshop.id}
+                                                className="btn-secondary !py-2 !px-4 text-sm flex-1 min-w-[8rem] justify-center border-red-200 text-red-700 hover:border-red-300 disabled:opacity-60 disabled:cursor-not-allowed"
+                                            >
+                                                {deletingWorkshopId === workshop.id ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : (
+                                                    <Trash2 className="w-4 h-4" />
+                                                )}
+                                                Delete
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            disabled
+                                            className="btn-secondary !py-2 !px-4 text-sm flex-1 min-w-[8rem] justify-center opacity-60 cursor-not-allowed"
+                                        >
+                                            <Lock className="w-4 h-4" />
+                                            Locked
+                                        </button>
+                                    )}
                                     {workshop.approvalStatus === "approved" ? (
                                         <Link
-                                            href={`/workshops/${workshop.id}`}
-                                            className="btn-secondary !py-2 !px-4 text-sm flex-1 justify-center"
+                                            href={`/workshop/${workshop.id}`}
+                                            className="btn-secondary !py-2 !px-4 text-sm flex-1 min-w-[8rem] justify-center"
                                         >
                                             View Listing
                                         </Link>
@@ -209,7 +270,7 @@ export default function HostWorkshopsPage() {
                                         <button
                                             type="button"
                                             disabled
-                                            className="btn-secondary !py-2 !px-4 text-sm flex-1 justify-center opacity-60 cursor-not-allowed"
+                                            className="btn-secondary !py-2 !px-4 text-sm flex-1 min-w-[8rem] justify-center opacity-60 cursor-not-allowed"
                                         >
                                             Not Live Yet
                                         </button>

@@ -7,7 +7,9 @@ import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { workshopCreateSchema } from "@/lib/validators";
 import { buildWorkshopInsertPayload, mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import {
+    isMissingColumnError,
     isMissingApprovalStatusColumnError,
+    withoutNewColumns,
     withoutApprovalStatus,
 } from "@/lib/workshop-approval-compat";
 
@@ -75,7 +77,7 @@ export async function POST(request: NextRequest) {
             approvalStatus: auth.role === "admin" ? "approved" : "pending",
         });
 
-        let usedApprovalCompatibilityMode = false;
+        let usedCompatibilityMode = false;
         let { data, error } = await serviceClient
             .from("workshops")
             .insert(payload)
@@ -83,10 +85,19 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (error && isMissingApprovalStatusColumnError(error)) {
-            usedApprovalCompatibilityMode = true;
+            usedCompatibilityMode = true;
             ({ data, error } = await serviceClient
                 .from("workshops")
                 .insert(withoutApprovalStatus(payload))
+                .select("*")
+                .single());
+        }
+
+        if (error && isMissingColumnError(error)) {
+            usedCompatibilityMode = true;
+            ({ data, error } = await serviceClient
+                .from("workshops")
+                .insert(withoutNewColumns(payload))
                 .select("*")
                 .single());
         }
@@ -102,11 +113,11 @@ export async function POST(request: NextRequest) {
             {
                 workshop: mapWorkshopRowToWorkshop(data),
                 message:
-                    usedApprovalCompatibilityMode && auth.role !== "admin"
+                    usedCompatibilityMode && auth.role !== "admin"
                         ? "Workshop created for testing. Admin approval will start once the latest database migration is applied."
                         : auth.role === "admin"
-                        ? "Workshop created successfully."
-                        : "Workshop submitted for admin approval.",
+                          ? "Workshop created successfully."
+                          : "Workshop submitted for admin approval.",
             },
             { status: 201 }
         );

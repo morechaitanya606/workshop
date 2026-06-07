@@ -9,6 +9,20 @@ import { getPublicSupabaseConfig } from "@/lib/env";
 
 const DEFAULT_BUCKET = "uploads";
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 60 * 10;
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const VIDEO_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"]);
+const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
+const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov", "m4v"]);
+const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+    mp4: "video/mp4",
+    webm: "video/webm",
+    mov: "video/quicktime",
+    m4v: "video/x-m4v",
+};
 
 function buildObjectPath(userId: string, ext: string) {
     const uniqueId = crypto.randomBytes(16).toString("hex");
@@ -16,6 +30,37 @@ function buildObjectPath(userId: string, ext: string) {
     // BUG-9 fix: Sanitize userId to prevent directory traversal
     const safeUserId = userId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) || "unknown";
     return `${safeUserId}/${uniqueId}.${safeExt}`;
+}
+
+function getSafeExtension(fileName: string) {
+    return (fileName.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function getUploadFileInfo(file: File) {
+    const contentType = file.type.trim().toLowerCase();
+    const extension = getSafeExtension(file.name);
+
+    if (IMAGE_TYPES.has(contentType) || IMAGE_EXTENSIONS.has(extension)) {
+        return {
+            kind: "image" as const,
+            extension: extension || "jpg",
+            contentType: IMAGE_TYPES.has(contentType)
+                ? contentType
+                : CONTENT_TYPE_BY_EXTENSION[extension] || "image/jpeg",
+        };
+    }
+
+    if (VIDEO_TYPES.has(contentType) || VIDEO_EXTENSIONS.has(extension)) {
+        return {
+            kind: "video" as const,
+            extension: extension || "mp4",
+            contentType: VIDEO_TYPES.has(contentType)
+                ? contentType
+                : CONTENT_TYPE_BY_EXTENSION[extension] || "video/mp4",
+        };
+    }
+
+    return null;
 }
 
 function buildLocalUploadPath(bucket: string, objectPath: string) {
@@ -74,15 +119,12 @@ export async function POST(request: NextRequest) {
             return jsonError("No file provided.", 400);
         }
 
-        const imageTypes = ["image/jpeg", "image/png", "image/webp"];
-        const videoTypes = ["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"];
-        const isImage = imageTypes.includes(file.type);
-        const isVideo = videoTypes.includes(file.type);
-
-        if (!isImage && !isVideo) {
+        const fileInfo = getUploadFileInfo(file);
+        if (!fileInfo) {
             return jsonError("Invalid file type. Allowed: JPEG, PNG, WebP, MP4, WebM, MOV.", 400);
         }
 
+        const isVideo = fileInfo.kind === "video";
         const maxBytes = isVideo ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
         if (file.size > maxBytes) {
             return jsonError(
@@ -94,8 +136,7 @@ export async function POST(request: NextRequest) {
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
 
-        const ext = (file.name.split(".").pop() || "").toLowerCase();
-        const objectPath = buildObjectPath(auth.user.id, ext || (isVideo ? "mp4" : "jpg"));
+        const objectPath = buildObjectPath(auth.user.id, fileInfo.extension);
         const config = getPublicSupabaseConfig();
         const canUseLocalFallback = process.env.NODE_ENV !== "production";
 
@@ -111,11 +152,10 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        const contentType = file.type || (isVideo ? "video/mp4" : "image/jpeg");
         const { error: uploadError } = await service.client.storage
             .from(bucket)
             .upload(objectPath, buffer, {
-                contentType,
+                contentType: fileInfo.contentType,
                 upsert: false,
             });
 

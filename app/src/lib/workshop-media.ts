@@ -1,6 +1,7 @@
 const DRIVE_FILE_PATH_RE = /\/file\/d\/([a-zA-Z0-9_-]+)/;
 const DRIVE_SHORT_PATH_RE = /\/d\/([a-zA-Z0-9_-]+)/;
 const BARE_DOMAIN_RE = /^(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:[/:?#]|$)/i;
+const IMAGE_FILE_EXTENSION_RE = /\.(?:avif|gif|heic|heif|jpe?g|png|svg|webp)(?:[?#].*)?$/i;
 
 export function normalizeUrlInput(value: string) {
     const trimmed = value.trim();
@@ -96,6 +97,28 @@ export function normalizeWorkshopImageUrlInput(value: string) {
     }
 
     return trimmed;
+}
+
+export function isSupportedWorkshopImageUrl(value: string | null | undefined) {
+    const normalized = normalizeWorkshopImageUrlInput(value || "");
+    if (!normalized) return false;
+
+    if (normalized.startsWith("/")) {
+        return IMAGE_FILE_EXTENSION_RE.test(normalized);
+    }
+
+    const url = parseUrl(normalized);
+    if (!url) return false;
+
+    const hostname = url.hostname.toLowerCase();
+    if (hostname === "images.unsplash.com") return true;
+    if (hostname === "drive.google.com" && url.pathname === "/uc") return true;
+    if (hostname === "drive.usercontent.google.com") return true;
+    if (hostname.endsWith(".googleusercontent.com")) return true;
+    if (hostname.endsWith(".supabase.co")) return true;
+    if (hostname.endsWith(".r2.cloudflarestorage.com")) return true;
+
+    return false;
 }
 
 export function normalizeWorkshopVideoUrlInput(value: string) {

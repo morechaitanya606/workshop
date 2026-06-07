@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Play, Grid3X3, Share2, Heart } from "lucide-react";
 import { useRef } from "react";
 import { fadeIn, fadeInUp, quickTransition, standardTransition } from "@/lib/motion-presets";
-import { isDirectVideoFileUrl } from "@/lib/workshop-media";
+import { isDirectVideoFileUrl, isSupportedWorkshopImageUrl } from "@/lib/workshop-media";
 import type { Workshop } from "@/lib/data";
 
 export interface WorkshopGalleryProps {
@@ -37,11 +37,13 @@ export default function WorkshopGallery({
         new Set(
             [workshop.coverImage, ...(workshop.galleryImages || [])]
                 .map((image) => image?.trim())
-                .filter((image): image is string => Boolean(image))
+                .filter(
+                    (image): image is string => Boolean(image) && isSupportedWorkshopImageUrl(image)
+                )
         )
     );
     const activeImageIndex = Math.min(Math.max(activeImage, 0), galleryImages.length - 1);
-    const activeImageSrc = galleryImages[activeImageIndex] || workshop.coverImage;
+    const activeImageSrc = galleryImages[activeImageIndex] || "/images/og-default.jpg";
     const hasThumbnails = galleryImages.length > 1;
     const visibleThumbnails = galleryImages
         .map((src, index) => ({ src, index }))

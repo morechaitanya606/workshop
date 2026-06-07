@@ -25,6 +25,21 @@ export type AuthResult = AuthSuccess | AuthFailure;
 export type AppUserRole = Tables<"profiles">["role"];
 let skipRemoteAuthUntil = 0;
 
+function getAuthRequestTimeoutMs() {
+    const configuredTimeoutMs = Number.parseInt(process.env.SUPABASE_AUTH_TIMEOUT_MS || "", 10);
+    return Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0
+        ? configuredTimeoutMs
+        : undefined;
+}
+
+function isDevAuthFallbackEnabled() {
+    if (process.env.NODE_ENV === "production") {
+        return false;
+    }
+
+    return process.env.ENABLE_DEV_AUTH_FALLBACK !== "false";
+}
+
 function getBearerToken(request: NextRequest) {
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -127,9 +142,17 @@ export async function requireAuthenticatedUser(request: NextRequest): Promise<Au
         };
     }
 
-    const isDev = process.env.NODE_ENV !== "production";
-    const isDevFallbackEnabled = isDev && process.env.ENABLE_DEV_AUTH_FALLBACK === "true";
+    const isDevFallbackEnabled = isDevAuthFallbackEnabled();
+    const shouldValidateRemoteInDev = process.env.SUPABASE_AUTH_REMOTE_VALIDATE === "true";
     const fallbackUser = buildFallbackUserFromToken(token);
+
+    if (isDevFallbackEnabled && fallbackUser && !shouldValidateRemoteInDev) {
+        return {
+            ok: true,
+            user: fallbackUser,
+            accessToken: token,
+        };
+    }
 
     // When auth network is unstable in development, avoid repeating slow retries
     // for every API call and use JWT claims temporarily.
@@ -143,7 +166,7 @@ export async function requireAuthenticatedUser(request: NextRequest): Promise<Au
 
     try {
         const anonClient = createSupabaseAnonServerClient({
-            requestTimeoutMs: isDev ? 3_000 : undefined,
+            requestTimeoutMs: getAuthRequestTimeoutMs(),
         });
         const { data, error } = await anonClient.auth.getUser(token);
         if (!error && data.user) {

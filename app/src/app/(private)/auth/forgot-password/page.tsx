@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { Loader2, Mail, CheckCircle, AlertCircle } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { getClientAppUrl } from "@/lib/client-url";
 import { cardReveal, standardTransition, useMotionProps } from "@/lib/motion-presets";
 
 export default function ForgotPasswordPage() {
@@ -29,7 +30,7 @@ export default function ForgotPasswordPage() {
 
         setLoading(true);
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/auth/reset-password`,
+            redirectTo: getClientAppUrl("/auth/reset-password"),
         });
         setLoading(false);
 

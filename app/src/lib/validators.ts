@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+    isSupportedWorkshopImageUrl,
     normalizeUrlInput,
     normalizeWorkshopImageUrlInput,
     normalizeWorkshopVideoUrlInput,
@@ -17,7 +18,8 @@ const imageUrl = z
     .refine(
         (value) => value.startsWith("/") || /^https?:\/\/.+/i.test(value),
         "Must be a valid URL."
-    );
+    )
+    .refine((value) => isSupportedWorkshopImageUrl(value), "Must be a public image URL.");
 
 const imageUrlOrEmpty = z
     .string()
@@ -26,6 +28,10 @@ const imageUrlOrEmpty = z
     .refine(
         (value) => value === "" || value.startsWith("/") || /^https?:\/\/.+/i.test(value),
         "Must be a valid URL."
+    )
+    .refine(
+        (value) => value === "" || isSupportedWorkshopImageUrl(value),
+        "Must be a public image URL."
     );
 
 const videoUrlOrEmpty = z

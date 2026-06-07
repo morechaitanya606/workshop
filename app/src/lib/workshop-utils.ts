@@ -2,6 +2,7 @@ import type { Workshop } from "@/lib/data";
 import type { Tables, TablesInsert, Json } from "@/lib/database.types";
 import type { WorkshopCreateInput, WorkshopQueryInput } from "@/lib/validators";
 import {
+    isSupportedWorkshopImageUrl,
     normalizeWorkshopImageUrlInput,
     normalizeWorkshopVideoUrlInput,
 } from "@/lib/workshop-media";
@@ -28,7 +29,12 @@ function normalizeWorkshopImageUrl(value: unknown) {
         return trimmed.replace(LEGACY_LOCAL_IMAGE_EXT_RE, ".webp$1");
     }
 
-    return trimmed;
+    return normalizeWorkshopImageUrlInput(trimmed);
+}
+
+function cleanSupportedWorkshopImageUrl(value: unknown) {
+    const normalized = normalizeWorkshopImageUrl(value);
+    return isSupportedWorkshopImageUrl(normalized) ? normalized : "";
 }
 
 function cleanUrlValue(value: unknown) {
@@ -73,10 +79,10 @@ export function mapWorkshopRowToWorkshop(row: Tables<"workshops">): Workshop {
     const socialLinks = cleanLinks(row.social_links);
     const hostSocialLinks = cleanLinks(row.host_social_links);
     const galleryImages = cleanStringList(row.gallery_images)
-        .map((img) => normalizeWorkshopImageUrl(img))
+        .map((img) => cleanSupportedWorkshopImageUrl(img))
         .filter((img) => img.length > 0);
     const locationImages = cleanStringList(row.location_images)
-        .map((img) => normalizeWorkshopImageUrl(img))
+        .map((img) => cleanSupportedWorkshopImageUrl(img))
         .filter((img) => img.length > 0);
 
     return {
@@ -92,15 +98,14 @@ export function mapWorkshopRowToWorkshop(row: Tables<"workshops">): Workshop {
         time: normalizeTimeValue(String(row.time)),
         maxSeats: Number(row.max_seats),
         seatsRemaining: Number(row.seats_remaining),
-        coverImage: normalizeWorkshopImageUrl(row.cover_image),
+        coverImage: cleanSupportedWorkshopImageUrl(row.cover_image),
         galleryImages,
         videoUrl: cleanUrlValue(row.video_url),
         rating: Number(row.rating ?? 0),
         reviewCount: Number(row.review_count ?? 0),
         hostName: String(row.host_name),
         hostAvatar:
-            normalizeWorkshopImageUrl(cleanUrlValue(row.host_avatar)) ||
-            "/images/icon.png",
+            cleanSupportedWorkshopImageUrl(cleanUrlValue(row.host_avatar)) || "/images/icon.png",
         hostBio: String(row.host_bio),
         hostExperience: cleanUrlValue(row.host_experience),
         hostSocialLinks,

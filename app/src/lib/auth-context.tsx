@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useRef, ReactNode } fro
 import { User, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./supabase";
 import { getAuthMe } from "@/lib/api-client";
+import { getClientAppUrl } from "@/lib/client-url";
 
 import { clearFavoritesCache } from "@/components/WorkshopCard";
 
@@ -260,7 +261,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: "google",
             options: {
-                redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeRedirectPath)}`,
+                redirectTo: getClientAppUrl(
+                    `/auth/callback?next=${encodeURIComponent(safeRedirectPath)}`
+                ),
             },
         });
         return { error: error?.message ?? null };

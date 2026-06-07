@@ -42,6 +42,7 @@ import { formatCurrency, formatDate, formatTime, getInitials } from "@/lib/utils
 import { BOOKING_CUTOFF_HOURS, getWorkshopDateTime, isBookingClosedNow } from "@/lib/booking-time";
 import { useAuth } from "@/lib/auth-context";
 import { trackEvent } from "@/lib/analytics";
+import { isSupportedWorkshopImageUrl } from "@/lib/workshop-media";
 import {
     fadeInUp,
     quickTransition,
@@ -487,6 +488,9 @@ export default function WorkshopClient({
     const mapOpenUrl = hasValidCoordinates
         ? `https://www.google.com/maps/search/?api=1&query=${workshop.latitude},${workshop.longitude}`
         : `https://www.google.com/maps/search/?api=1&query=${encodedLocationQuery}`;
+    const locationImages = (workshop.locationImages || []).filter((image) =>
+        isSupportedWorkshopImageUrl(image)
+    );
     const workshopPath = `/workshop/${workshop.id}`;
     const loginRedirectHref = `/auth/login?redirect=${encodeURIComponent(workshopPath)}`;
     const MAX_FEEDBACK_PHOTOS = 4;
@@ -1351,25 +1355,24 @@ export default function WorkshopClient({
                                         </div>
                                     </div>
 
-                                    {workshop.locationImages &&
-                                        workshop.locationImages.length > 0 && (
-                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
-                                                {workshop.locationImages.map((img, i) => (
-                                                    <div
-                                                        key={i}
-                                                        className="relative aspect-[4/3] rounded-xl overflow-hidden border border-clay/30 shadow-sm"
-                                                    >
-                                                        <Image
-                                                            src={img}
-                                                            alt={`Location image ${i + 1}`}
-                                                            fill
-                                                            className="object-cover"
-                                                            sizes="(max-width: 640px) 50vw, 33vw"
-                                                        />
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
+                                    {locationImages.length > 0 && (
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
+                                            {locationImages.map((img, i) => (
+                                                <div
+                                                    key={i}
+                                                    className="relative aspect-[4/3] rounded-xl overflow-hidden border border-clay/30 shadow-sm"
+                                                >
+                                                    <Image
+                                                        src={img}
+                                                        alt={`Location image ${i + 1}`}
+                                                        fill
+                                                        className="object-cover"
+                                                        sizes="(max-width: 640px) 50vw, 33vw"
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </motion.div>
 
                                 <motion.div
