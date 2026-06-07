@@ -185,6 +185,12 @@ export async function requireAuthenticatedUser(request: NextRequest): Promise<Au
                 };
             }
         }
+        if (isTransientSupabaseAuthError(error)) {
+            return {
+                ok: false,
+                response: jsonError("Unable to validate auth token right now. Please retry.", 401),
+            };
+        }
         return {
             ok: false,
             response: jsonError("Unable to validate auth token.", 500, error),

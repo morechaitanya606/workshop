@@ -3,6 +3,7 @@ import "server-only";
 import * as Sentry from "@sentry/nextjs";
 import {
     getCommunityBySlug,
+    isMissingCommunitiesTableError,
     listCommunities,
     normalizeCommunitySlug,
     type Community,
@@ -52,6 +53,13 @@ export async function loadPublicCommunities(limit = 24): Promise<PublicCommuniti
                 source: "supabase",
             };
         } catch (error) {
+            if (isMissingCommunitiesTableError(error)) {
+                return {
+                    data: [],
+                    source: "supabase",
+                };
+            }
+
             fallbackReason =
                 error instanceof Error
                     ? error.message
@@ -90,6 +98,13 @@ export async function loadPublicCommunityBySlug(slug: string): Promise<PublicCom
                 source: "supabase",
             };
         } catch (error) {
+            if (isMissingCommunitiesTableError(error)) {
+                return {
+                    community: null,
+                    source: "supabase",
+                };
+            }
+
             fallbackReason =
                 error instanceof Error
                     ? error.message

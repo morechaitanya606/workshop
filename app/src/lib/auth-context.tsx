@@ -37,6 +37,71 @@ const AuthContext = createContext<AuthContextType>({
     signOut: async () => {},
 });
 
+function getErrorMessage(error: unknown) {
+    if (typeof error === "string") return error;
+    if (error && typeof error === "object" && "message" in error) {
+        return String((error as { message?: unknown }).message || "");
+    }
+    return "";
+}
+
+function isInvalidRefreshTokenError(error: unknown) {
+    const message = getErrorMessage(error).toLowerCase();
+    return message.includes("invalid refresh token") || message.includes("refresh token not found");
+}
+
+function clearSupabaseAuthStorage() {
+    if (typeof window === "undefined") {
+        return;
+    }
+
+    const clearStorage = (storage: Storage) => {
+        for (let index = storage.length - 1; index >= 0; index -= 1) {
+            const key = storage.key(index);
+            if (key?.startsWith("sb-") || key?.includes("supabase.auth.token")) {
+                storage.removeItem(key);
+            }
+        }
+    };
+
+    try {
+        clearStorage(window.localStorage);
+    } catch {
+        // Storage can be unavailable in restricted browser contexts.
+    }
+
+    try {
+        clearStorage(window.sessionStorage);
+    } catch {
+        // Storage can be unavailable in restricted browser contexts.
+    }
+
+    try {
+        document.cookie.split(";").forEach((cookie) => {
+            const name = cookie.split("=")[0]?.trim();
+            if (!name?.startsWith("sb-")) {
+                return;
+            }
+
+            document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax`;
+        });
+    } catch {
+        // Cookie writes can fail in unusual browser contexts.
+    }
+}
+
+async function clearStaleSupabaseSession() {
+    clearFavoritesCache();
+
+    try {
+        await supabase.auth.signOut({ scope: "local" });
+    } catch {
+        // If the refresh token is already invalid, manual storage cleanup below is enough.
+    }
+
+    clearSupabaseAuthStorage();
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [session, setSession] = useState<Session | null>(null);
@@ -63,6 +128,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             } catch {
                 return "user" as UserRole;
             }
+        };
+
+        const resetSession = () => {
+            roleRequestId += 1;
+            userIdRef.current = null;
+            setSession(null);
+            setUser(null);
+            setRole("user");
+            setLoading(false);
+            setRoleLoading(false);
         };
 
         const applySession = (nextSession: Session | null) => {
@@ -95,10 +170,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
 
         // Get initial session
-        supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
-            if (cancelled) return;
-            applySession(initialSession);
-        });
+        supabase.auth
+            .getSession()
+            .then(async ({ data: { session: initialSession }, error }) => {
+                if (cancelled) return;
+
+                if (error) {
+                    if (isInvalidRefreshTokenError(error)) {
+                        await clearStaleSupabaseSession();
+                    }
+                    resetSession();
+                    return;
+                }
+
+                applySession(initialSession);
+            })
+            .catch(async (error) => {
+                if (cancelled) return;
+
+                if (isInvalidRefreshTokenError(error)) {
+                    await clearStaleSupabaseSession();
+                }
+                resetSession();
+            });
 
         // Listen for auth state changes
         const {
@@ -115,12 +209,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
     }, []);
 
+    const clearInvalidSessionBeforeAuth = async () => {
+        try {
+            const { error } = await supabase.auth.getSession();
+            if (isInvalidRefreshTokenError(error)) {
+                await clearStaleSupabaseSession();
+            }
+        } catch (error) {
+            if (isInvalidRefreshTokenError(error)) {
+                await clearStaleSupabaseSession();
+            }
+        }
+    };
+
     const signIn = async (email: string, password: string) => {
         if (!isSupabaseConfigured) {
             return {
                 error: "Authentication is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).",
             };
         }
+        await clearInvalidSessionBeforeAuth();
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         return { error: error?.message ?? null };
     };
@@ -131,6 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 error: "Authentication is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).",
             };
         }
+        await clearInvalidSessionBeforeAuth();
         const { error } = await supabase.auth.signUp({
             email,
             password,
@@ -146,11 +255,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             };
         }
 
+        await clearInvalidSessionBeforeAuth();
         const safeRedirectPath = redirectPath.startsWith("/") ? redirectPath : "/";
         const { error } = await supabase.auth.signInWithOAuth({
             provider: "google",
             options: {
-                redirectTo: `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(safeRedirectPath)}`,
+                redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeRedirectPath)}`,
             },
         });
         return { error: error?.message ?? null };

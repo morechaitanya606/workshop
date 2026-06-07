@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -38,6 +38,7 @@ function LoginContent() {
         }
     }
 
+    const oauthError = searchParams.get("error");
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         setError(null);
@@ -67,6 +68,12 @@ function LoginContent() {
             router.push(redirectPath);
         }
     };
+
+    useEffect(() => {
+        if (oauthError) {
+            setError(oauthError);
+        }
+    }, [oauthError]);
 
     const handleGoogleSignIn = async () => {
         setError(null);

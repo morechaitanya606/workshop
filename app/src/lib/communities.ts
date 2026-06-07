@@ -88,6 +88,20 @@ export function getCommunitySocialPreviewImage(coverImage: string | null) {
     return DEFAULT_COMMUNITY_SOCIAL_PREVIEW_IMAGE;
 }
 
+export function isMissingCommunitiesTableError(error: unknown) {
+    const message =
+        error && typeof error === "object" && "message" in error
+            ? String((error as { message?: unknown }).message || "").toLowerCase()
+            : "";
+
+    return (
+        message.includes("communities") &&
+        (message.includes("does not exist") ||
+            message.includes("schema cache") ||
+            message.includes("could not find"))
+    );
+}
+
 export async function generateUniqueCommunitySlug(
     serviceClient: SupabaseServerClient,
     title: string

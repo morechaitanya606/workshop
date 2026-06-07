@@ -34,6 +34,7 @@ const strictTransportSecurityHeader = isProduction
 const baseConfig = {
     images: {
         formats: ["image/avif", "image/webp"],
+        qualities: [60, 70, 72, 75, 80],
         remotePatterns: [
             {
                 protocol: "https",

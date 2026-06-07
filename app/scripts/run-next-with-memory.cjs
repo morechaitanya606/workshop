@@ -46,9 +46,15 @@ const heartbeatIntervalMs = Number.parseInt(
     process.env.NEXT_WRAPPER_HEARTBEAT_INTERVAL_MS || "30000",
     10
 );
+const heartbeatCommands = (process.env.NEXT_WRAPPER_HEARTBEAT_COMMANDS || "build")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 const childTimeoutMs = Number.parseInt(process.env.NEXT_WRAPPER_TIMEOUT_MS || "0", 10);
 const heartbeatEnabled =
-    Number.isFinite(heartbeatIntervalMs) && heartbeatIntervalMs > 0 && command !== "start";
+    Number.isFinite(heartbeatIntervalMs) &&
+    heartbeatIntervalMs > 0 &&
+    heartbeatCommands.includes(command);
 const timeoutEnabled = Number.isFinite(childTimeoutMs) && childTimeoutMs > 0;
 let stdoutTail = "";
 let stderrTail = "";

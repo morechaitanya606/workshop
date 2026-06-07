@@ -17,11 +17,23 @@ function sanitizeRedirect(raw: string | null): string {
     return raw;
 }
 
+function redirectToLoginWithError(request: Request, next: string, errorMessage: string) {
+    const loginUrl = new URL("/auth/login", request.url);
+    loginUrl.searchParams.set("redirect", next);
+    loginUrl.searchParams.set("error", errorMessage);
+    return NextResponse.redirect(loginUrl);
+}
+
 export async function GET(request: Request) {
     const requestUrl = new URL(request.url);
     const code = requestUrl.searchParams.get("code");
-
     const next = sanitizeRedirect(requestUrl.searchParams.get("next"));
+    const oauthError =
+        requestUrl.searchParams.get("error_description") || requestUrl.searchParams.get("error");
+
+    if (oauthError) {
+        return redirectToLoginWithError(request, next, oauthError);
+    }
 
     if (code) {
         const cookieStore = await cookies();
@@ -35,19 +47,14 @@ export async function GET(request: Request) {
             supabasePublicConfig.key,
             {
                 cookies: {
-                    get(name: string) {
-                        return cookieStore.get(name)?.value;
+                    getAll() {
+                        return cookieStore.getAll();
                     },
-                    set(name: string, value: string, options: any) {
+                    setAll(cookiesToSet) {
                         try {
-                            cookieStore.set({ name, value, ...options });
-                        } catch {
-                            // Ignored due to middleware refreshing session
-                        }
-                    },
-                    remove(name: string, options: any) {
-                        try {
-                            cookieStore.set({ name, value: "", ...options });
+                            cookiesToSet.forEach(({ name, value, options }) => {
+                                cookieStore.set(name, value, options);
+                            });
                         } catch {
                             // Ignored due to middleware refreshing session
                         }
@@ -58,6 +65,10 @@ export async function GET(request: Request) {
 
         try {
             const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+            if (error) {
+                return redirectToLoginWithError(request, next, error.message);
+            }
 
             if (!error && data?.user) {
                 const role = await getUserRole(data.user.id);
@@ -77,6 +88,11 @@ export async function GET(request: Request) {
                     hasCode: Boolean(code),
                 },
             });
+            return redirectToLoginWithError(
+                request,
+                next,
+                "Google sign-in could not be completed. Please try again."
+            );
         }
     }
 
