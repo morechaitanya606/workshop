@@ -6,13 +6,47 @@ import { getPublicSupabaseConfig } from "@/lib/env";
 
 const supabasePublicConfig = getPublicSupabaseConfig();
 const ADMIN_ROUTES = ["/admin", "/dashboard"];
+const AUTH_CALLBACK_PARAMS = ["code", "error", "error_description"];
 
 function isAdminRoute(pathname: string) {
     return ADMIN_ROUTES.some((route) => pathname.startsWith(route));
 }
 
+function shouldRecoverAuthCallback(request: NextRequest) {
+    if (request.nextUrl.pathname === "/auth/callback") return false;
+    return AUTH_CALLBACK_PARAMS.some((param) => request.nextUrl.searchParams.has(param));
+}
+
+function getAuthRecoveryNextPath(request: NextRequest) {
+    const next = request.nextUrl.searchParams.get("next");
+    if (next?.startsWith("/") && !next.startsWith("//") && !next.includes("\\")) {
+        return next;
+    }
+
+    const query = new URLSearchParams(request.nextUrl.searchParams);
+    AUTH_CALLBACK_PARAMS.forEach((param) => query.delete(param));
+    query.delete("next");
+
+    const search = query.toString();
+    return `${request.nextUrl.pathname}${search ? `?${search}` : ""}`;
+}
+
+function recoverAuthCallback(request: NextRequest) {
+    const callbackUrl = new URL("/auth/callback", request.url);
+    AUTH_CALLBACK_PARAMS.forEach((param) => {
+        const value = request.nextUrl.searchParams.get(param);
+        if (value) callbackUrl.searchParams.set(param, value);
+    });
+    callbackUrl.searchParams.set("next", getAuthRecoveryNextPath(request));
+    return NextResponse.redirect(callbackUrl);
+}
+
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
+
+    if (shouldRecoverAuthCallback(request)) {
+        return recoverAuthCallback(request);
+    }
 
     if (!supabasePublicConfig) {
         // BUG-10 fix: Block admin routes when auth is misconfigured instead of passing all traffic
@@ -82,6 +116,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ["/admin/:path*", "/dashboard/:path*"],
+    matcher: ["/", "/admin/:path*", "/dashboard/:path*"],
     runtime: "nodejs",
 };

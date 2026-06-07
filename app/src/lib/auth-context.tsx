@@ -4,7 +4,6 @@ import { createContext, useContext, useEffect, useState, useRef, ReactNode } fro
 import { User, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./supabase";
 import { getAuthMe } from "@/lib/api-client";
-import { getClientAppUrl } from "@/lib/client-url";
 
 import { clearFavoritesCache } from "@/components/WorkshopCard";
 
@@ -258,15 +257,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         await clearInvalidSessionBeforeAuth();
         const safeRedirectPath = redirectPath.startsWith("/") ? redirectPath : "/";
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider: "google",
-            options: {
-                redirectTo: getClientAppUrl(
-                    `/auth/callback?next=${encodeURIComponent(safeRedirectPath)}`
-                ),
-            },
-        });
-        return { error: error?.message ?? null };
+        const googleUrl = new URL("/api/auth/google", window.location.origin);
+        googleUrl.searchParams.set("next", safeRedirectPath);
+        window.location.assign(googleUrl.toString());
+        return { error: null };
     };
 
     const signOut = async () => {
