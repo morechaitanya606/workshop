@@ -1,4 +1,5 @@
 const { spawn } = require("child_process");
+const net = require("net");
 const os = require("os");
 
 const [command, ...args] = process.argv.slice(2);
@@ -64,6 +65,39 @@ let childStartError = null;
 let lastOutputAt = Date.now();
 let heartbeatTimer = null;
 let timeoutTimer = null;
+let stdoutAvailable = true;
+let stderrAvailable = true;
+
+function handleOutputError(streamName, error) {
+    if (error?.code === "EPIPE") {
+        if (streamName === "stdout") {
+            stdoutAvailable = false;
+        } else {
+            stderrAvailable = false;
+        }
+        return;
+    }
+
+    throw error;
+}
+
+function forwardOutput(streamName, chunk) {
+    if (streamName === "stdout") {
+        if (!stdoutAvailable || process.stdout.destroyed) {
+            return;
+        }
+        process.stdout.write(chunk);
+        return;
+    }
+
+    if (!stderrAvailable || process.stderr.destroyed) {
+        return;
+    }
+    process.stderr.write(chunk);
+}
+
+process.stdout.on("error", (error) => handleOutputError("stdout", error));
+process.stderr.on("error", (error) => handleOutputError("stderr", error));
 
 function appendTail(current, chunk) {
     const next = current + chunk.toString();
@@ -124,8 +158,8 @@ function printHeartbeat() {
     );
 }
 
-function getStartPortFromArgs() {
-    if (command !== "start") {
+function getPortFromArgs() {
+    if (command !== "dev" && command !== "start") {
         return null;
     }
 
@@ -143,71 +177,133 @@ function getStartPortFromArgs() {
     return null;
 }
 
-const inferredPort = process.env.PORT || getStartPortFromArgs();
+function canListenOnPort(port) {
+    return new Promise((resolve) => {
+        const server = net.createServer();
 
-console.error(
-    `[next-wrapper] Running next ${[command, ...args].join(" ")} with Node ${process.versions.node}, Next ${nextVersion}, heap ${heapMb} MB`
-);
+        server.once("error", () => resolve(false));
+        server.once("listening", () => {
+            server.close(() => resolve(true));
+        });
+        server.listen(port, "127.0.0.1");
+    });
+}
 
-const child = spawn(process.execPath, [nextBin, command, ...args], {
-    cwd: process.cwd(),
-    stdio: ["inherit", "pipe", "pipe"],
-    env: {
-        ...process.env,
+async function findAvailablePort(startPort) {
+    for (let offset = 0; offset < 20; offset += 1) {
+        const port = startPort + offset;
+        if (await canListenOnPort(port)) {
+            return String(port);
+        }
+    }
+
+    return String(startPort);
+}
+
+function hasPortArg() {
+    return args.some((arg) => arg === "-p" || arg === "--port" || arg.startsWith("--port="));
+}
+
+async function resolveDevPort() {
+    if (command !== "dev") {
+        return null;
+    }
+
+    const explicitPort = getPortFromArgs() || process.env.PORT;
+    if (explicitPort) {
+        return explicitPort;
+    }
+
+    return findAvailablePort(3000);
+}
+
+async function main() {
+    const devPort = await resolveDevPort();
+    const startPort = command === "start" ? process.env.PORT || getPortFromArgs() : null;
+    const inferredPort = devPort || startPort;
+    const nextArgs = [...args];
+
+    if (command === "dev" && devPort && !hasPortArg()) {
+        nextArgs.push("--port", devPort);
+    }
+
+    const extraEnv = {
         ...(inferredPort ? { PORT: inferredPort } : {}),
-        NODE_OPTIONS: nodeOptions.join(" "),
-    },
-});
+        ...(devPort ? { NEXT_DEV_DIST_DIR: `.next-dev-${devPort}` } : {}),
+    };
 
-if (heartbeatEnabled) {
-    heartbeatTimer = setInterval(printHeartbeat, heartbeatIntervalMs);
+    console.error(
+        `[next-wrapper] Running next ${[command, ...nextArgs].join(" ")} with Node ${process.versions.node}, Next ${nextVersion}, heap ${heapMb} MB${
+            devPort ? `, dev dist ${extraEnv.NEXT_DEV_DIST_DIR}` : ""
+        }`
+    );
+
+    const child = spawn(process.execPath, [nextBin, command, ...nextArgs], {
+        cwd: process.cwd(),
+        stdio: ["inherit", "pipe", "pipe"],
+        env: {
+            ...process.env,
+            ...extraEnv,
+            NODE_OPTIONS: nodeOptions.join(" "),
+        },
+    });
+
+    if (heartbeatEnabled) {
+        heartbeatTimer = setInterval(printHeartbeat, heartbeatIntervalMs);
+    }
+
+    if (timeoutEnabled) {
+        timeoutTimer = setTimeout(() => {
+            printDiagnostics("child exceeded NEXT_WRAPPER_TIMEOUT_MS", null, null);
+            child.kill("SIGTERM");
+        }, childTimeoutMs);
+    }
+
+    child.stdout.on("data", (chunk) => {
+        lastOutputAt = Date.now();
+        stdoutBytes += chunk.length;
+        stdoutTail = appendTail(stdoutTail, chunk);
+        forwardOutput("stdout", chunk);
+    });
+
+    child.stderr.on("data", (chunk) => {
+        lastOutputAt = Date.now();
+        stderrBytes += chunk.length;
+        stderrTail = appendTail(stderrTail, chunk);
+        forwardOutput("stderr", chunk);
+    });
+
+    child.on("error", (error) => {
+        childStartError = error;
+    });
+
+    child.on("close", (code, signal) => {
+        if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
+        }
+
+        if (timeoutTimer) {
+            clearTimeout(timeoutTimer);
+        }
+
+        if (signal) {
+            printDiagnostics("child terminated by signal", code, signal);
+            process.exit(1);
+            return;
+        }
+
+        if (code && code !== 0) {
+            printDiagnostics("child exited with non-zero code", code, signal);
+        } else if (stdoutBytes === 0 && stderrBytes === 0) {
+            printDiagnostics("child completed without output", code, signal);
+        }
+
+        process.exit(code ?? 1);
+    });
 }
 
-if (timeoutEnabled) {
-    timeoutTimer = setTimeout(() => {
-        printDiagnostics("child exceeded NEXT_WRAPPER_TIMEOUT_MS", null, null);
-        child.kill("SIGTERM");
-    }, childTimeoutMs);
-}
-
-child.stdout.on("data", (chunk) => {
-    lastOutputAt = Date.now();
-    stdoutBytes += chunk.length;
-    stdoutTail = appendTail(stdoutTail, chunk);
-    process.stdout.write(chunk);
-});
-
-child.stderr.on("data", (chunk) => {
-    lastOutputAt = Date.now();
-    stderrBytes += chunk.length;
-    stderrTail = appendTail(stderrTail, chunk);
-    process.stderr.write(chunk);
-});
-
-child.on("error", (error) => {
+main().catch((error) => {
     childStartError = error;
-});
-
-child.on("close", (code, signal) => {
-    if (heartbeatTimer) {
-        clearInterval(heartbeatTimer);
-    }
-
-    if (timeoutTimer) {
-        clearTimeout(timeoutTimer);
-    }
-
-    if (signal) {
-        printDiagnostics("child terminated by signal", code, signal);
-        process.exit(1);
-        return;
-    }
-
-    if (code && code !== 0) {
-        printDiagnostics("child exited with non-zero code", code, signal);
-    } else if (stdoutBytes === 0 && stderrBytes === 0) {
-        printDiagnostics("child completed without output", code, signal);
-    }
-
-    process.exit(code ?? 1);
+    printDiagnostics("wrapper failed before starting next", null, null);
+    process.exit(1);
 });

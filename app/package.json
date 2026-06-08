@@ -11,7 +11,7 @@
         "start": "node scripts/run-next-with-memory.cjs start",
         "lint": "eslint . --max-warnings=0",
         "typecheck": "tsc --noEmit --incremental false",
-        "test": "vitest run",
+        "test": "vitest run --reporter=dot --pool=threads --maxWorkers=1",
         "test:watch": "vitest",
         "knip": "knip",
         "preflight": "npm run typecheck && npm run lint && npm run build",

@@ -56,6 +56,9 @@ function BookingContent() {
         formData,
         handleFormFieldChange,
         handleCheckout,
+        handleRetryCheckout,
+        canRetryCheckout,
+        retryCheckoutLabel,
         isCheckoutDisabled,
         guests,
         serviceFee,
@@ -212,16 +215,16 @@ function BookingContent() {
                     {error && (
                         <div className="mb-6 flex flex-col gap-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-inter sm:flex-row sm:items-center sm:justify-between">
                             <span>{error}</span>
-                            {!holdExpired && holdId && (
+                            {canRetryCheckout && (
                                 <button
                                     type="button"
                                     onClick={() => {
                                         setError(null);
-                                        void handleCheckout();
+                                        void handleRetryCheckout();
                                     }}
                                     className="inline-flex items-center justify-center rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
                                 >
-                                    Try again
+                                    {retryCheckoutLabel}
                                 </button>
                             )}
                         </div>

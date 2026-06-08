@@ -30,6 +30,31 @@ const strictTransportSecurityHeader = isProduction
       ]
     : [];
 
+function getDevServerPort() {
+    const argv = process.argv;
+
+    for (let index = 0; index < argv.length; index += 1) {
+        const arg = argv[index];
+        if ((arg === "-p" || arg === "--port") && argv[index + 1]) {
+            return argv[index + 1];
+        }
+        if (arg.startsWith("--port=")) {
+            return arg.slice("--port=".length);
+        }
+    }
+
+    return process.env.PORT || "3000";
+}
+
+function getDevDistDir() {
+    if (process.env.NEXT_DEV_DIST_DIR) {
+        return process.env.NEXT_DEV_DIST_DIR;
+    }
+
+    const port = String(getDevServerPort()).replace(/[^0-9]/g, "") || "3000";
+    return `.next-dev-${port}`;
+}
+
 /** @type {import('next').NextConfig} */
 const baseConfig = {
     images: {
@@ -98,7 +123,7 @@ export default async function configByPhase(phase) {
     const nextConfig = {
         ...baseConfig,
         // Prevent `next dev` and `next build` from mutating the same `.next` directory.
-        distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next",
+        distDir: phase === PHASE_DEVELOPMENT_SERVER ? getDevDistDir() : ".next",
     };
 
     const isSentryConfigured = Boolean(

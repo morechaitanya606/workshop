@@ -9,6 +9,57 @@ import { AuthProvider } from "@/lib/auth-context";
 import { getAppUrl } from "@/lib/env";
 import { PlatformSettingsProvider } from "@/lib/platform-settings-context";
 
+const chunkLoadRecoveryScript = `
+(() => {
+  const storageKey = "onlyworkshops:chunk-recovery";
+
+  function messageFrom(value) {
+    if (!value) return "";
+    if (typeof value === "string") return value;
+    if (value.message) return String(value.message);
+    if (value.reason) return messageFrom(value.reason);
+    if (value.error) return messageFrom(value.error);
+    return String(value);
+  }
+
+  function isChunkLoadError(value) {
+    const message = messageFrom(value).toLowerCase();
+    return (
+      message.includes("chunkloaderror") ||
+      message.includes("loading chunk") ||
+      message.includes("failed to fetch dynamically imported module") ||
+      message.includes("error loading dynamically imported module") ||
+      message.includes("/_next/static/chunks/")
+    );
+  }
+
+  function recover(value) {
+    if (!isChunkLoadError(value)) return;
+
+    const marker = [location.pathname, location.search, Date.now()].join("|");
+    let previous = "";
+    try {
+      previous = sessionStorage.getItem(storageKey) || "";
+    } catch {
+      previous = "";
+    }
+
+    const previousTime = Number(previous.split("|").pop() || 0);
+
+    if (Date.now() - previousTime < 10000) return;
+
+    try {
+      sessionStorage.setItem(storageKey, marker);
+    } catch {}
+
+    location.reload();
+  }
+
+  window.addEventListener("error", (event) => recover(event.error || event.message));
+  window.addEventListener("unhandledrejection", (event) => recover(event.reason));
+})();
+`;
+
 const playfair = Playfair_Display({
     subsets: ["latin"],
     variable: "--font-playfair",
@@ -71,6 +122,7 @@ export default function RootLayout({
     return (
         <html lang="en" className={`${playfair.variable} ${inter.variable}`}>
             <body className="min-h-screen bg-cream antialiased">
+                <script dangerouslySetInnerHTML={{ __html: chunkLoadRecoveryScript }} />
                 <a
                     href="#main-content"
                     className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:rounded-full focus:bg-terracotta focus:px-6 focus:py-3 focus:text-white focus:font-inter focus:font-semibold focus:shadow-lg"

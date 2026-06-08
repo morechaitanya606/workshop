@@ -13,6 +13,7 @@ node_modules
 /out/
 app/.next/
 app/.next-dev/
+app/.next-dev-*/
 app/out/
 
 # production

@@ -71,6 +71,36 @@ function paymentError(message: string, status: number, context: Record<string, u
     );
 }
 
+function getErrorMessage(error: unknown) {
+    if (!error) return null;
+    if (typeof error === "string") return error;
+    if (typeof error === "object" && "message" in error) {
+        const message = String((error as { message?: unknown }).message || "").trim();
+        return message || null;
+    }
+    return String(error);
+}
+
+function getErrorCode(error: unknown) {
+    if (!error || typeof error !== "object" || !("code" in error)) return null;
+    const code = String((error as { code?: unknown }).code || "").trim();
+    return code || null;
+}
+
+function isMissingExtendedConfirmBookingRpc(error: unknown) {
+    const message = (getErrorMessage(error) || "").toLowerCase();
+    const code = getErrorCode(error);
+
+    return (
+        code === "PGRST202" ||
+        (message.includes("confirm_booking_from_hold") &&
+            (message.includes("schema cache") ||
+                message.includes("could not find the function") ||
+                message.includes("p_coupon_id") ||
+                message.includes("p_discount_applied")))
+    );
+}
+
 async function loadBookingById(serviceClient: SupabaseServerClient, bookingId: string) {
     const { data: booking } = await serviceClient
         .from("bookings")
@@ -102,6 +132,29 @@ async function loadBookingById(serviceClient: SupabaseServerClient, bookingId: s
         .single();
 
     return booking;
+}
+
+async function loadExistingConfirmedBookingForPayment(
+    serviceClient: SupabaseServerClient,
+    params: {
+        userId: string;
+        workshopId: string;
+        holdId: string;
+        paymentId: string;
+    }
+) {
+    const { data: existingBooking } = await serviceClient
+        .from("bookings")
+        .select("id")
+        .eq("payment_intent_id", params.paymentId)
+        .eq("user_id", params.userId)
+        .eq("workshop_id", params.workshopId)
+        .eq("hold_id", params.holdId)
+        .eq("status", "confirmed")
+        .maybeSingle();
+
+    if (!existingBooking?.id) return null;
+    return loadBookingById(serviceClient, existingBooking.id);
 }
 
 async function loadHoldWithWorkshop(
@@ -219,6 +272,124 @@ async function sendConfirmedBookingNotification(
     });
 }
 
+type ConfirmBookingRpcParams = {
+    holdId: string;
+    userId: string;
+    workshopId: string;
+    paymentProvider: string;
+    paymentIntentId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    notes: string;
+    serviceFee: number;
+    subtotal: number;
+    total: number;
+    couponId: string | null;
+    discountApplied: number;
+};
+
+function canUseLegacyConfirmBookingRpc(params: ConfirmBookingRpcParams) {
+    return !params.couponId && params.discountApplied === 0;
+}
+
+async function confirmBookingFromHold(
+    serviceClient: SupabaseServerClient,
+    params: ConfirmBookingRpcParams
+) {
+    const extended = await serviceClient.rpc("confirm_booking_from_hold", {
+        p_hold_id: params.holdId,
+        p_user_id: params.userId,
+        p_workshop_id: params.workshopId,
+        p_payment_provider: params.paymentProvider,
+        p_payment_intent_id: params.paymentIntentId,
+        p_first_name: params.firstName,
+        p_last_name: params.lastName,
+        p_email: params.email,
+        p_phone: params.phone,
+        p_notes: params.notes,
+        p_service_fee: params.serviceFee,
+        p_subtotal: params.subtotal,
+        p_total: params.total,
+        p_coupon_id: params.couponId,
+        p_discount_applied: params.discountApplied,
+    });
+
+    if (!extended.error && typeof extended.data === "string") {
+        return {
+            bookingId: extended.data,
+            error: null,
+            attemptedLegacy: false,
+            extendedError: null,
+            legacyError: null,
+        };
+    }
+
+    if (
+        !extended.error ||
+        !isMissingExtendedConfirmBookingRpc(extended.error) ||
+        !canUseLegacyConfirmBookingRpc(params)
+    ) {
+        return {
+            bookingId: null,
+            error: extended.error || "Extended booking RPC returned no booking id.",
+            attemptedLegacy: false,
+            extendedError: extended.error,
+            legacyError: null,
+        };
+    }
+
+    const legacy = await serviceClient.rpc("confirm_booking_from_hold", {
+        p_hold_id: params.holdId,
+        p_user_id: params.userId,
+        p_workshop_id: params.workshopId,
+        p_payment_provider: params.paymentProvider,
+        p_payment_intent_id: params.paymentIntentId,
+        p_first_name: params.firstName,
+        p_last_name: params.lastName,
+        p_email: params.email,
+        p_phone: params.phone,
+        p_notes: params.notes,
+        p_service_fee: params.serviceFee,
+    });
+
+    if (!legacy.error && typeof legacy.data === "string") {
+        return {
+            bookingId: legacy.data,
+            error: null,
+            attemptedLegacy: true,
+            extendedError: extended.error,
+            legacyError: null,
+        };
+    }
+
+    return {
+        bookingId: null,
+        error: legacy.error || extended.error || "Legacy booking RPC returned no booking id.",
+        attemptedLegacy: true,
+        extendedError: extended.error,
+        legacyError: legacy.error,
+    };
+}
+
+async function alreadyConfirmedResponse(
+    booking: Awaited<ReturnType<typeof loadBookingById>>,
+    context: { holdId: string; workshopId: string; paymentId: string; paymentStatus: string }
+) {
+    await sendConfirmedBookingNotification(booking, {
+        holdId: context.holdId,
+        workshopId: context.workshopId,
+    });
+
+    return NextResponse.json({
+        mode: "already_confirmed",
+        booking,
+        paymentId: context.paymentId,
+        paymentStatus: context.paymentStatus,
+    });
+}
+
 export async function POST(request: NextRequest) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
@@ -283,6 +454,27 @@ export async function POST(request: NextRequest) {
         }
 
         if (hold.status !== "active") {
+            if (isPaymentConfirmation && payload.razorpayPaymentId) {
+                const existingConfirmedBooking = await loadExistingConfirmedBookingForPayment(
+                    serviceClient,
+                    {
+                        userId: auth.user.id,
+                        workshopId: payload.workshopId,
+                        holdId: payload.holdId,
+                        paymentId: payload.razorpayPaymentId,
+                    }
+                );
+
+                if (existingConfirmedBooking) {
+                    return alreadyConfirmedResponse(existingConfirmedBooking, {
+                        holdId: payload.holdId,
+                        workshopId: payload.workshopId,
+                        paymentId: payload.razorpayPaymentId,
+                        paymentStatus: "captured",
+                    });
+                }
+            }
+
             return paymentError("This seat hold is no longer active.", 409, {
                 userId: auth.user.id,
                 holdId: payload.holdId,
@@ -362,7 +554,8 @@ export async function POST(request: NextRequest) {
                     !Array.isArray(coupon.applicable_categories) ||
                     coupon.applicable_categories.length === 0 ||
                     Boolean(
-                        workshop.category && coupon.applicable_categories.includes(workshop.category)
+                        workshop.category &&
+                        coupon.applicable_categories.includes(workshop.category)
                     );
 
                 if (validTime && validUses && validMinimum && validWorkshop && validCategory) {
@@ -538,64 +731,68 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        const { data: existingBooking } = await serviceClient
-            .from("bookings")
-            .select("id")
-            .eq("payment_intent_id", payload.razorpayPaymentId!)
-            .maybeSingle();
+        const existingConfirmedBooking = await loadExistingConfirmedBookingForPayment(
+            serviceClient,
+            {
+                userId: auth.user.id,
+                workshopId: payload.workshopId,
+                holdId: payload.holdId,
+                paymentId: payload.razorpayPaymentId!,
+            }
+        );
 
-        if (existingBooking?.id) {
-            const booking = await loadBookingById(serviceClient, existingBooking.id);
-            await sendConfirmedBookingNotification(booking, {
+        if (existingConfirmedBooking) {
+            return alreadyConfirmedResponse(existingConfirmedBooking, {
                 holdId: payload.holdId,
                 workshopId: payload.workshopId,
-            });
-            return NextResponse.json({
-                mode: "already_confirmed",
-                booking,
-                paymentId: payload.razorpayPaymentId,
+                paymentId: payload.razorpayPaymentId!,
                 paymentStatus,
             });
         }
 
-        let bookingId: string | null = null;
-        const { data: rpcBookingId, error: rpcError } = await serviceClient.rpc(
-            "confirm_booking_from_hold",
-            {
-                p_hold_id: payload.holdId,
-                p_user_id: auth.user.id,
-                p_workshop_id: payload.workshopId,
-                p_payment_provider: PAYMENT_PROVIDER,
-                p_payment_intent_id: payload.razorpayPaymentId!,
-                p_first_name: payload.firstName,
-                p_last_name: payload.lastName,
-                p_email: payload.email,
-                p_phone: payload.phone,
-                p_notes: payload.notes,
-                p_service_fee: serviceFee,
-                p_subtotal: subtotal,
-                p_total: total,
-                p_coupon_id: appliedCouponId,
-                p_discount_applied: discountAmount,
-            }
-        );
+        const confirmation = await confirmBookingFromHold(serviceClient, {
+            holdId: payload.holdId,
+            userId: auth.user.id,
+            workshopId: payload.workshopId,
+            paymentProvider: PAYMENT_PROVIDER,
+            paymentIntentId: payload.razorpayPaymentId!,
+            firstName: payload.firstName,
+            lastName: payload.lastName,
+            email: payload.email,
+            phone: payload.phone,
+            notes: payload.notes,
+            serviceFee,
+            subtotal,
+            total,
+            couponId: appliedCouponId,
+            discountApplied: discountAmount,
+        });
 
-        if (!rpcError && typeof rpcBookingId === "string") {
-            bookingId = rpcBookingId;
-        }
+        const bookingId = confirmation.bookingId;
 
         if (!bookingId) {
+            const errorContext: Record<string, unknown> = {
+                userId: auth.user.id,
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                paymentId: payload.razorpayPaymentId,
+                couponId: appliedCouponId,
+                details: getErrorMessage(confirmation.error),
+                attemptedLegacyRpc: confirmation.attemptedLegacy,
+            };
+
+            if (confirmation.extendedError) {
+                errorContext.extendedRpcDetails = getErrorMessage(confirmation.extendedError);
+            }
+
+            if (confirmation.legacyError) {
+                errorContext.legacyRpcDetails = getErrorMessage(confirmation.legacyError);
+            }
+
             return paymentError(
                 "Payment succeeded, but atomic booking confirmation failed. Contact support immediately.",
                 500,
-                {
-                    userId: auth.user.id,
-                    holdId: payload.holdId,
-                    workshopId: payload.workshopId,
-                    paymentId: payload.razorpayPaymentId,
-                    couponId: appliedCouponId,
-                    details: rpcError?.message || null,
-                }
+                errorContext
             );
         }
 

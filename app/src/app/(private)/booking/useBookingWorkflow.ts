@@ -8,6 +8,7 @@ import {
     createCheckoutOrder,
     getWorkshopById,
     toApiErrorMessage,
+    type CheckoutPayload,
 } from "@/lib/api-client";
 import type { Workshop } from "@/lib/data";
 import type {
@@ -23,6 +24,12 @@ function parseTimestamp(value: string | null) {
     const timestamp = Date.parse(value);
     return Number.isNaN(timestamp) ? null : timestamp;
 }
+
+type PendingConfirmationPayload = CheckoutPayload & {
+    razorpayOrderId: string;
+    razorpayPaymentId: string;
+    razorpaySignature: string;
+};
 
 export function useBookingWorkflow() {
     const router = useRouter();
@@ -48,6 +55,8 @@ export function useBookingWorkflow() {
     const [error, setError] = useState<string | null>(null);
     const [formErrors, setFormErrors] = useState<FormErrors>({});
     const [confirmedBooking, setConfirmedBooking] = useState<ConfirmedBooking | null>(null);
+    const [pendingConfirmationPayload, setPendingConfirmationPayload] =
+        useState<PendingConfirmationPayload | null>(null);
     const [formData, setFormData] = useState<BookingFormData>({
         firstName: "",
         lastName: "",
@@ -308,10 +317,61 @@ export function useBookingWorkflow() {
         }
     };
 
+    const confirmPayment = async (confirmationPayload: PendingConfirmationPayload) => {
+        if (!session?.access_token) {
+            const message = "Your session expired. Please log in again.";
+            setError(message);
+            toast.error("Session expired", message);
+            setSubmitting(false);
+            return;
+        }
+        if (!workshop) return;
+
+        setStep(2);
+        setSubmitting(true);
+        setError(null);
+
+        try {
+            const confirmResult = await confirmCheckoutPayment(
+                session.access_token,
+                confirmationPayload
+            );
+
+            setPendingConfirmationPayload(null);
+            setConfirmedBooking(confirmResult.booking || null);
+            trackEvent("booking_completed", {
+                workshopId: workshop.id,
+                bookingId: confirmResult.booking?.id || null,
+                total,
+            });
+            toast.success(
+                "Booking confirmed",
+                "Payment verified and your workshop booking is confirmed."
+            );
+            setStep(3);
+        } catch (confirmationError) {
+            setPendingConfirmationPayload(confirmationPayload);
+            const message = toApiErrorMessage(
+                confirmationError,
+                "Payment succeeded, but booking confirmation could not be completed."
+            );
+            setError(message);
+            toast.error("Verification pending", message);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     const handleCheckout = async () => {
         if (!workshop) return;
 
+        if (pendingConfirmationPayload) {
+            await confirmPayment(pendingConfirmationPayload);
+            return;
+        }
+
         setError(null);
+        setPendingConfirmationPayload(null);
         if (!validateForm()) {
             toast.info("Review form details", "Please fix the highlighted fields.");
             setStep(1);
@@ -392,37 +452,20 @@ export function useBookingWorkflow() {
                 order_id: order.id,
                 prefill: order.prefill,
                 handler: async (payment) => {
-                    try {
-                        const confirmResult = await confirmCheckoutPayment(session.access_token, {
-                            ...checkoutPayload,
-                            razorpayOrderId: payment.razorpay_order_id,
-                            razorpayPaymentId: payment.razorpay_payment_id,
-                            razorpaySignature: payment.razorpay_signature,
-                        });
+                    const confirmationPayload = {
+                        ...checkoutPayload,
+                        razorpayOrderId: payment.razorpay_order_id,
+                        razorpayPaymentId: payment.razorpay_payment_id,
+                        razorpaySignature: payment.razorpay_signature,
+                    };
 
-                        setConfirmedBooking(confirmResult.booking || null);
-                        trackEvent("booking_completed", {
-                            workshopId: workshop.id,
-                            bookingId: confirmResult.booking?.id || null,
-                            total,
-                        });
-                        toast.success(
-                            "Booking confirmed",
-                            "Payment verified and your workshop booking is confirmed."
-                        );
-                        setStep(3);
-                    } catch {
-                        const message =
-                            "Payment succeeded, but booking confirmation could not be completed.";
-                        setError(message);
-                        toast.error("Verification pending", message);
-                    } finally {
-                        setSubmitting(false);
-                    }
+                    setPendingConfirmationPayload(confirmationPayload);
+                    await confirmPayment(confirmationPayload);
                 },
                 modal: {
                     ondismiss: () => {
                         const message = "Payment was cancelled before completion.";
+                        setPendingConfirmationPayload(null);
                         setError(message);
                         toast.info("Payment cancelled", message);
                         setStep(1);
@@ -436,6 +479,7 @@ export function useBookingWorkflow() {
 
             checkout.on("payment.failed", () => {
                 const message = "Payment failed. Please try again.";
+                setPendingConfirmationPayload(null);
                 setError(message);
                 toast.error("Payment failed", message);
                 setStep(1);
@@ -448,11 +492,21 @@ export function useBookingWorkflow() {
                 checkoutError,
                 "Unable to start checkout right now. Please try again."
             );
+            setPendingConfirmationPayload(null);
             setError(message);
             toast.error("Checkout failed", message);
             setStep(1);
             setSubmitting(false);
         }
+    };
+
+    const handleRetryCheckout = async () => {
+        if (pendingConfirmationPayload) {
+            await confirmPayment(pendingConfirmationPayload);
+            return;
+        }
+
+        await handleCheckout();
     };
 
     return {
@@ -476,6 +530,9 @@ export function useBookingWorkflow() {
         formData,
         handleFormFieldChange,
         handleCheckout,
+        handleRetryCheckout,
+        canRetryCheckout: Boolean(pendingConfirmationPayload) || (!holdExpired && Boolean(holdId)),
+        retryCheckoutLabel: pendingConfirmationPayload ? "Retry confirmation" : "Try again",
         isCheckoutDisabled,
         guests,
         serviceFee,

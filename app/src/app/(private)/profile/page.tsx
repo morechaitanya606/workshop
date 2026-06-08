@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState, useRef, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -20,7 +19,11 @@ import {
     Heart,
     Banknote,
 } from "lucide-react";
+import WorkshopTicket from "@/app/(private)/booking/WorkshopTicket";
 import Navbar from "@/components/Navbar";
+import ProfileEarningsPanel from "@/components/profile/ProfileEarningsPanel";
+import ProfileSettingsPanel from "@/components/profile/ProfileSettingsPanel";
+import ProfileWishlistPanel from "@/components/profile/ProfileWishlistPanel";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
@@ -80,31 +83,6 @@ const defaultDraft: FeedbackDraft = {
     videoUrl: "",
 };
 const MIN_REVIEW_LENGTH = 10;
-
-const WorkshopTicket = dynamic(() => import("@/app/(private)/booking/WorkshopTicket"), {
-    loading: () => <ProfileDeferredPanelFallback message="Loading your ticket..." />,
-});
-
-const ProfileEarningsPanel = dynamic(() => import("@/components/profile/ProfileEarningsPanel"), {
-    loading: () => <ProfileDeferredPanelFallback message="Loading earnings..." />,
-});
-
-const ProfileSettingsPanel = dynamic(() => import("@/components/profile/ProfileSettingsPanel"), {
-    loading: () => <ProfileDeferredPanelFallback message="Loading settings..." />,
-});
-
-const ProfileWishlistPanel = dynamic(() => import("@/components/profile/ProfileWishlistPanel"), {
-    loading: () => <ProfileDeferredPanelFallback message="Loading wishlist..." />,
-});
-
-function ProfileDeferredPanelFallback({ message }: { message: string }) {
-    return (
-        <div className="flex flex-col items-center justify-center py-20 text-dark/60">
-            <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-terracotta/20 border-t-terracotta" />
-            <p>{message}</p>
-        </div>
-    );
-}
 
 export default function ProfilePage() {
     const router = useRouter();

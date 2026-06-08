@@ -432,6 +432,7 @@ export type CheckoutPayload = {
     email: string;
     phone?: string;
     notes?: string;
+    couponCode?: string;
     razorpayOrderId?: string;
     razorpayPaymentId?: string;
     razorpaySignature?: string;

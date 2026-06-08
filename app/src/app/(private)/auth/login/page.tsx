@@ -11,6 +11,30 @@ import { getAuthMe } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
 import { cardReveal, standardTransition, useMotionProps } from "@/lib/motion-presets";
 
+function getErrorMessage(error: unknown, fallback: string) {
+    if (typeof error === "string" && error.trim()) return error;
+    if (error && typeof error === "object" && "message" in error) {
+        const message = String((error as { message?: unknown }).message || "").trim();
+        if (message) return message;
+    }
+    return fallback;
+}
+
+async function getAdminRedirectPath() {
+    try {
+        const {
+            data: { session },
+        } = await supabase.auth.getSession();
+        const accessToken = session?.access_token;
+        if (!accessToken) return null;
+
+        const data = await getAuthMe(accessToken);
+        return data.role === "admin" ? "/admin/dashboard" : null;
+    } catch {
+        return null;
+    }
+}
+
 function LoginContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -44,28 +68,18 @@ function LoginContent() {
         setError(null);
         setLoading(true);
 
-        const { error: authError } = await signIn(email, password);
-        if (authError) {
-            setError(authError);
-            setLoading(false);
-        } else {
-            // Check role after successful login
-            try {
-                const {
-                    data: { session },
-                } = await supabase.auth.getSession();
-                const accessToken = session?.access_token;
-                if (accessToken) {
-                    const data = await getAuthMe(accessToken);
-                    if (data.role === "admin") {
-                        router.push("/admin/dashboard");
-                        return;
-                    }
-                }
-            } catch (err) {
-                console.error("Failed to check role during login:", err);
+        try {
+            const { error: authError } = await signIn(email, password);
+            if (authError) {
+                setError(authError);
+                return;
             }
-            router.push(redirectPath);
+
+            router.push((await getAdminRedirectPath()) ?? redirectPath);
+        } catch (submitError) {
+            setError(getErrorMessage(submitError, "Unable to log in. Please try again."));
+        } finally {
+            setLoading(false);
         }
     };
 
