@@ -2,7 +2,6 @@ app/node_modules/
 app/.next/
 app/.next-dev/
 app/out/
-app/.codex-logs/
 app/.local-data/
 app/public/uploads/uploads/
 app/supabase/.temp/
