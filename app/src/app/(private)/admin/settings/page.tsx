@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
     CalendarDays,
     Gift,
@@ -8,7 +8,9 @@ import {
     IndianRupee,
     Loader2,
     Plus,
+    Store,
     Tag,
+    Trash2,
     ToggleLeft,
     ToggleRight,
     Upload,
@@ -25,6 +27,7 @@ import {
     updatePlatformSettings,
     uploadMedia,
     type AdminCoupon,
+    type CafePartner,
     type PlatformSettings,
 } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -106,6 +109,14 @@ export default function AdminSettingsPage() {
     const [updatingCouponId, setUpdatingCouponId] = useState<string | null>(null);
     const [newCoupon, setNewCoupon] = useState<CouponFormState>(INITIAL_COUPON_FORM);
 
+    const [cafePartners, setCafePartners] = useState<CafePartner[]>([]);
+    const [newPartnerName, setNewPartnerName] = useState("");
+    const [newPartnerLogoUrl, setNewPartnerLogoUrl] = useState("");
+    const [uploadingPartnerLogo, setUploadingPartnerLogo] = useState(false);
+    const [savingPartners, setSavingPartners] = useState(false);
+    const [partnersMsg, setPartnersMsg] = useState<string | null>(null);
+    const partnerLogoInputRef = useRef<HTMLInputElement>(null);
+
     useEffect(() => {
         if (!session?.access_token) return;
 
@@ -143,6 +154,9 @@ export default function AdminSettingsPage() {
                     visibleUntil: nextSpecialPage.visibleUntil,
                 });
                 setHeroImageInput(nextSettings.hero_image_url || "");
+                setCafePartners(
+                    Array.isArray(nextSettings.cafe_partners) ? nextSettings.cafe_partners : []
+                );
                 setCoupons(
                     Array.isArray(couponsResult.coupons)
                         ? couponsResult.coupons.map(normalizeCoupon)
@@ -171,6 +185,70 @@ export default function AdminSettingsPage() {
     const handleRetry = () => {
         setError(null);
         setReloadKey((prev) => prev + 1);
+    };
+
+    const handlePartnerLogoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file || !session?.access_token) return;
+
+        setUploadingPartnerLogo(true);
+        setPartnersMsg(null);
+
+        try {
+            const result = await uploadMedia(session.access_token, file);
+            setNewPartnerLogoUrl(result.url);
+            setPartnersMsg("Logo uploaded. Fill in the partner name and click Add Partner.");
+        } catch (uploadError) {
+            setPartnersMsg(toApiErrorMessage(uploadError, "Unable to upload partner logo."));
+        } finally {
+            setUploadingPartnerLogo(false);
+        }
+    };
+
+    const handleAddPartner = async () => {
+        const name = newPartnerName.trim();
+        const logo_url = newPartnerLogoUrl.trim();
+
+        if (!name || !logo_url) {
+            setPartnersMsg("Please enter a partner name and upload a logo.");
+            return;
+        }
+
+        const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        const nextPartners: CafePartner[] = [
+            ...cafePartners,
+            { id: `${id}-${Date.now()}`, name, logo_url },
+        ];
+
+        await savePartners(nextPartners);
+        setNewPartnerName("");
+        setNewPartnerLogoUrl("");
+    };
+
+    const handleRemovePartner = async (id: string) => {
+        const nextPartners = cafePartners.filter((p) => p.id !== id);
+        await savePartners(nextPartners);
+    };
+
+    const savePartners = async (nextPartners: CafePartner[]) => {
+        if (!session?.access_token) return;
+
+        setSavingPartners(true);
+        setPartnersMsg(null);
+
+        try {
+            await updatePlatformSettings(session.access_token, {
+                settings: { cafe_partners: nextPartners },
+            });
+            setCafePartners(nextPartners);
+            mergeSettings({ cafe_partners: nextPartners });
+            setPartnersMsg("Cafe/Studio partners updated.");
+        } catch (saveError) {
+            setPartnersMsg(toApiErrorMessage(saveError, "Unable to save partners."));
+        } finally {
+            setSavingPartners(false);
+        }
     };
 
     const handleHeroImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -384,6 +462,128 @@ export default function AdminSettingsPage() {
                             icon={<ToggleRight className="h-5 w-5 text-terracotta" />}
                         />
                     </div>
+                    <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-soft">
+                        <div className="mb-6 flex items-start gap-3">
+                            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-terracotta/10 text-terracotta">
+                                <Store className="h-5 w-5" />
+                            </span>
+                            <div>
+                                <h2 className="text-lg font-playfair font-bold text-dark">
+                                    Cafe / Studio Partners
+                                </h2>
+                                <p className="mt-1 text-sm font-inter text-dark-muted">
+                                    Manage the partners shown in the homepage marquee. Changes are
+                                    live immediately.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="mb-6 rounded-xl border border-clay/30 bg-cream-50 p-4 space-y-4">
+                            <h3 className="text-sm font-inter font-semibold text-dark">
+                                Add New Partner
+                            </h3>
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr,auto]">
+                                <input
+                                    type="text"
+                                    placeholder="Partner name (e.g. Mirelle Patisserie)"
+                                    value={newPartnerName}
+                                    onChange={(e) => setNewPartnerName(e.target.value)}
+                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
+                                />
+                                <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-clay/40 bg-white px-4 py-2 text-sm font-inter font-semibold text-dark transition-colors hover:bg-cream whitespace-nowrap">
+                                    {uploadingPartnerLogo ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Upload className="h-4 w-4" />
+                                    )}
+                                    {uploadingPartnerLogo ? "Uploading..." : "Upload Logo"}
+                                    <input
+                                        ref={partnerLogoInputRef}
+                                        type="file"
+                                        accept="image/jpeg,image/png,image/webp"
+                                        onChange={handlePartnerLogoUpload}
+                                        disabled={uploadingPartnerLogo || savingPartners}
+                                        className="sr-only"
+                                    />
+                                </label>
+                            </div>
+                            {newPartnerLogoUrl && (
+                                <div className="flex items-center gap-3">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                        src={newPartnerLogoUrl}
+                                        alt="Logo preview"
+                                        className="h-14 w-14 rounded-lg border border-clay/30 object-contain bg-white p-1"
+                                    />
+                                    <span className="text-xs text-dark-muted break-all">
+                                        {newPartnerLogoUrl}
+                                    </span>
+                                </div>
+                            )}
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => void handleAddPartner()}
+                                    disabled={savingPartners || uploadingPartnerLogo}
+                                    className="btn-secondary !px-4 !py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {savingPartners ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Plus className="h-4 w-4" />
+                                    )}
+                                    Add Partner
+                                </button>
+                                {partnersMsg && (
+                                    <p
+                                        className={`text-xs font-medium ${
+                                            partnersMsg.toLowerCase().includes("updated") ||
+                                            partnersMsg.toLowerCase().includes("uploaded")
+                                                ? "text-emerald-600"
+                                                : "text-red-500"
+                                        }`}
+                                    >
+                                        {partnersMsg}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            {cafePartners.map((partner) => (
+                                <div
+                                    key={partner.id}
+                                    className="flex items-center gap-3 rounded-xl border border-clay/30 bg-white p-3"
+                                >
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                        src={partner.logo_url}
+                                        alt={partner.name}
+                                        className="h-12 w-12 shrink-0 rounded-lg border border-clay/20 object-contain bg-white p-1"
+                                    />
+                                    <span className="flex-1 text-sm font-inter font-medium text-dark line-clamp-2">
+                                        {partner.name}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleRemovePartner(partner.id)}
+                                        disabled={savingPartners}
+                                        className="shrink-0 rounded-lg p-1.5 text-dark-muted hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-50"
+                                        title="Remove partner"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            ))}
+                            {cafePartners.length === 0 && (
+                                <p className="col-span-full py-6 text-center text-sm text-dark-muted">
+                                    No custom partners saved. The homepage will use the default
+                                    partner list.
+                                </p>
+                            )}
+                        </div>
+                    </section>
+
                     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px,1fr]">
                         <div className="space-y-6">
                             <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-soft">
@@ -633,8 +833,8 @@ export default function AdminSettingsPage() {
                                 {settingsMsg && (
                                     <p
                                         className={`mt-3 text-sm font-medium ${
-                                            settingsMsg.toLowerCase().includes("updated")
-                                            || settingsMsg.toLowerCase().includes("uploaded")
+                                            settingsMsg.toLowerCase().includes("updated") ||
+                                            settingsMsg.toLowerCase().includes("uploaded")
                                                 ? "text-emerald-600"
                                                 : "text-red-500"
                                         }`}

@@ -264,7 +264,10 @@ export default function HomePageClient({
                 <SocialProofSection shouldReduceMotion={shouldReduceMotion} />
             </ScrollReveal>
             <ScrollReveal>
-                <PartnersMarquee shouldReduceMotion={shouldReduceMotion} />
+                <PartnersMarquee
+                    shouldReduceMotion={shouldReduceMotion}
+                    partners={settings.cafe_partners}
+                />
             </ScrollReveal>
             <section className="section-padding mt-24 sm:mt-20">
                 <ScrollReveal className="bg-white rounded-3xl shadow-card border border-clay/30 p-6 md:p-8">

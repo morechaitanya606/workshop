@@ -11,12 +11,11 @@ if (!command) {
 
 const nodeMajor = Number.parseInt(process.versions.node.split(".")[0], 10);
 
-if (Number.isFinite(nodeMajor) && nodeMajor >= 24) {
+if (Number.isFinite(nodeMajor) && nodeMajor >= 25) {
     console.error(
         [
             `Detected Node.js ${process.versions.node}.`,
-            "This staged upgrade supports Next.js 15 on Node 18.18 through Node 23.",
-            "Node 24 is intentionally deferred for this project stage.",
+            "This project supports Next.js 15 on Node 18.18 through Node 24.",
         ].join(" ")
     );
     process.exit(1);

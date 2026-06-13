@@ -474,10 +474,17 @@ export function toApiErrorMessage(error: unknown, fallbackMessage: string) {
     return fallbackMessage;
 }
 
+export type CafePartner = {
+    id: string;
+    name: string;
+    logo_url: string;
+};
+
 export type PlatformSettings = {
     service_fee?: number;
     hero_image_url?: string;
     special_page?: SpecialPageSettings;
+    cafe_partners?: CafePartner[];
 };
 
 export type PlatformSettingsResponse = {
