@@ -3,51 +3,7 @@
 import Image from "next/image";
 import type { CafePartner } from "@/lib/api-client";
 
-const DEFAULT_CAFE_PARTNERS: CafePartner[] = [
-    { id: "blue-tokai", name: "Blue Tokai", logo_url: "/images/partners/blue-tokai-logo.png" },
-    {
-        id: "boka-book-cafe",
-        name: "Boka Book Cafe",
-        logo_url: "/images/partners/boka-book-cafe.jpg",
-    },
-    {
-        id: "butterish-kitchen",
-        name: "Butterish Kitchen | Studio",
-        logo_url: "/images/partners/butterish-kitchen.jpg",
-    },
-    { id: "cafe-peter", name: "Cafe Peter", logo_url: "/images/partners/cafe-peter.jpg" },
-    { id: "cafe-raaha", name: "Cafe Raaha", logo_url: "/images/partners/cafe-raaha-logo.png" },
-    { id: "doolally", name: "Doolally", logo_url: "/images/partners/doolally.png" },
-    {
-        id: "hippie-at-heart",
-        name: "Hippie @ Heart",
-        logo_url: "/images/partners/hippie-at-heart.jpg",
-    },
-    { id: "iyagi-studio", name: "Iyagi Studio", logo_url: "/images/partners/iyagi-studio.jpg" },
-    { id: "la-ven", name: "Le Ven", logo_url: "/images/partners/la-ven-logo.jpg" },
-    {
-        id: "mirelle-patisserie",
-        name: "Mirelle Patisserie",
-        logo_url: "/images/partners/mirelle-patisserie.jpg",
-    },
-    { id: "starbucks", name: "Starbucks", logo_url: "/images/partners/starbucks-logo.jpg" },
-    {
-        id: "third-place-cafe",
-        name: "Third Place Cafe",
-        logo_url: "/images/partners/third-place-cafe.jpg",
-    },
-    {
-        id: "third-space-cafe",
-        name: "Third Space Cafe",
-        logo_url: "/images/partners/third-space-cafe.jpg",
-    },
-    {
-        id: "third-wave-coffee",
-        name: "Third Wave Coffee",
-        logo_url: "/images/partners/third-wave-coffee.png",
-    },
-    { id: "tipplr", name: "Tipplr Cafe & Bar", logo_url: "/images/partners/tipplr-cafe-bar.jpeg" },
-];
+const DEFAULT_CAFE_PARTNERS: CafePartner[] = [];
 
 export default function PartnersMarquee({
     shouldReduceMotion,
@@ -58,6 +14,8 @@ export default function PartnersMarquee({
 }) {
     const cafePartners = partners && partners.length > 0 ? partners : DEFAULT_CAFE_PARTNERS;
     const marqueePartners = shouldReduceMotion ? cafePartners : [...cafePartners, ...cafePartners];
+
+    if (cafePartners.length === 0) return null;
 
     return (
         <section className="section-padding overflow-hidden mt-20 sm:mt-16 mb-4">
