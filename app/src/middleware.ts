@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { withSharedAuthCookieOptions } from "@/lib/auth-origin";
 import type { Database, Tables } from "@/lib/database.types";
 import { getPublicSupabaseConfig } from "@/lib/env";
 
@@ -79,8 +80,13 @@ export async function middleware(request: NextRequest) {
                         request,
                     });
                     cookiesToSet.forEach(({ name, value, options }) =>
-                        response.cookies.set(name, value, options)
+                        response.cookies.set(
+                            name,
+                            value,
+                            withSharedAuthCookieOptions(request, options)
+                        )
                     );
+                    response.headers.set("Cache-Control", "private, no-store");
                 },
             },
         }

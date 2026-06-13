@@ -1,7 +1,8 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import * as Sentry from "@sentry/nextjs";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { applyAuthCookies, getAuthAppOrigin } from "@/lib/auth-origin";
 import { getUserRole } from "@/lib/api-auth";
 import type { Database } from "@/lib/database.types";
 import { getPublicSupabaseConfig } from "@/lib/env";
@@ -17,11 +18,37 @@ function sanitizeRedirect(raw: string | null): string {
     return raw;
 }
 
-function redirectToLoginWithError(request: Request, next: string, errorMessage: string) {
-    const loginUrl = new URL("/auth/login", request.url);
+function getUserFacingAuthError(errorMessage: string) {
+    const normalizedMessage = errorMessage.toLowerCase();
+    if (
+        normalizedMessage.includes("code verifier") ||
+        normalizedMessage.includes("pkce") ||
+        normalizedMessage.includes("auth flow was initiated")
+    ) {
+        return "Google sign-in expired. Please click Continue with Google again.";
+    }
+
+    return errorMessage;
+}
+
+function createRedirectResponse(
+    request: Request,
+    url: URL,
+    cookiesToSet: Array<{ name: string; value: string; options?: CookieOptions }> = []
+) {
+    return applyAuthCookies(request, NextResponse.redirect(url), cookiesToSet);
+}
+
+function redirectToLoginWithError(
+    request: Request,
+    next: string,
+    errorMessage: string,
+    cookiesToSet: Array<{ name: string; value: string; options?: CookieOptions }> = []
+) {
+    const loginUrl = new URL("/auth/login", getAuthAppOrigin(request));
     loginUrl.searchParams.set("redirect", next);
-    loginUrl.searchParams.set("error", errorMessage);
-    return NextResponse.redirect(loginUrl);
+    loginUrl.searchParams.set("error", getUserFacingAuthError(errorMessage));
+    return createRedirectResponse(request, loginUrl, cookiesToSet);
 }
 
 export async function GET(request: Request) {
@@ -35,11 +62,13 @@ export async function GET(request: Request) {
         return redirectToLoginWithError(request, next, oauthError);
     }
 
+    const cookiesToSet: Array<{ name: string; value: string; options?: CookieOptions }> = [];
+
     if (code) {
         const cookieStore = await cookies();
         const supabasePublicConfig = getPublicSupabaseConfig();
         if (!supabasePublicConfig) {
-            return NextResponse.redirect(new URL(next, request.url));
+            return createRedirectResponse(request, new URL(next, getAuthAppOrigin(request)));
         }
 
         const supabase = createServerClient<Database>(
@@ -50,14 +79,8 @@ export async function GET(request: Request) {
                     getAll() {
                         return cookieStore.getAll();
                     },
-                    setAll(cookiesToSet) {
-                        try {
-                            cookiesToSet.forEach(({ name, value, options }) => {
-                                cookieStore.set(name, value, options);
-                            });
-                        } catch {
-                            // Ignored due to middleware refreshing session
-                        }
+                    setAll(nextCookies) {
+                        cookiesToSet.push(...nextCookies);
                     },
                 },
             }
@@ -67,14 +90,18 @@ export async function GET(request: Request) {
             const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
             if (error) {
-                return redirectToLoginWithError(request, next, error.message);
+                return redirectToLoginWithError(request, next, error.message, cookiesToSet);
             }
 
             if (!error && data?.user) {
                 const role = await getUserRole(data.user.id);
 
                 if (role === "admin") {
-                    return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+                    return createRedirectResponse(
+                        request,
+                        new URL("/admin/dashboard", getAuthAppOrigin(request)),
+                        cookiesToSet
+                    );
                 }
             }
         } catch (err) {
@@ -91,10 +118,11 @@ export async function GET(request: Request) {
             return redirectToLoginWithError(
                 request,
                 next,
-                "Google sign-in could not be completed. Please try again."
+                "Google sign-in could not be completed. Please try again.",
+                cookiesToSet
             );
         }
     }
 
-    return NextResponse.redirect(new URL(next, request.url));
+    return createRedirectResponse(request, new URL(next, getAuthAppOrigin(request)), cookiesToSet);
 }

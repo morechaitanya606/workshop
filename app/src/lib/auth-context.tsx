@@ -84,6 +84,9 @@ function clearSupabaseAuthStorage() {
             }
 
             document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax`;
+            if (window.location.hostname.endsWith("onlyworkshops.com")) {
+                document.cookie = `${name}=; Max-Age=0; path=/; domain=.onlyworkshops.com; SameSite=Lax`;
+            }
         });
     } catch {
         // Cookie writes can fail in unusual browser contexts.

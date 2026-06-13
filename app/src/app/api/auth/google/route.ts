@@ -1,10 +1,9 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { applyAuthCookies, getAuthAppOrigin } from "@/lib/auth-origin";
 import type { Database } from "@/lib/database.types";
 import { getPublicSupabaseConfig } from "@/lib/env";
-
-const PRODUCTION_APP_ORIGIN = "https://onlyworkshops.com";
 
 function sanitizeRedirect(raw: string | null): string {
     if (!raw) return "/";
@@ -12,16 +11,8 @@ function sanitizeRedirect(raw: string | null): string {
     return raw;
 }
 
-function getAppOrigin(request: Request) {
-    if (process.env.NODE_ENV === "production") {
-        return PRODUCTION_APP_ORIGIN;
-    }
-
-    return new URL(request.url).origin;
-}
-
 function redirectToLoginWithError(request: Request, next: string, errorMessage: string) {
-    const loginUrl = new URL("/auth/login", getAppOrigin(request));
+    const loginUrl = new URL("/auth/login", getAuthAppOrigin(request));
     loginUrl.searchParams.set("redirect", next);
     loginUrl.searchParams.set("error", errorMessage);
     return NextResponse.redirect(loginUrl);
@@ -64,7 +55,7 @@ export async function GET(request: Request) {
         }
     );
 
-    const callbackUrl = new URL("/auth/callback", getAppOrigin(request));
+    const callbackUrl = new URL("/auth/callback", getAuthAppOrigin(request));
     callbackUrl.searchParams.set("next", next);
 
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -82,9 +73,5 @@ export async function GET(request: Request) {
         );
     }
 
-    const response = NextResponse.redirect(data.url);
-    cookiesToSet.forEach(({ name, value, options }) => {
-        response.cookies.set(name, value, options);
-    });
-    return response;
+    return applyAuthCookies(request, NextResponse.redirect(data.url), cookiesToSet);
 }
