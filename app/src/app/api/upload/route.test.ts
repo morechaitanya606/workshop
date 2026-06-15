@@ -109,6 +109,100 @@ describe("POST /api/upload", () => {
         );
     });
 
+    it("accepts HEIC images by extension when the browser omits a MIME type", async () => {
+        const upload = vi.fn().mockResolvedValue({
+            error: { message: "Bucket not found" },
+        });
+        const serviceClient = {
+            storage: {
+                from: vi.fn(() => ({
+                    upload,
+                })),
+            },
+        };
+
+        vi.mocked(requireSupabaseService).mockReturnValue({
+            ok: true,
+            client: serviceClient as any,
+        });
+
+        const request = {
+            formData: vi.fn().mockResolvedValue({
+                get(name: string) {
+                    if (name === "file") {
+                        return {
+                            name: "workshop-photo.HEIC",
+                            size: 4,
+                            type: "",
+                            arrayBuffer: vi
+                                .fn()
+                                .mockResolvedValue(new Uint8Array([1, 2, 3, 4]).buffer),
+                        };
+                    }
+
+                    return null;
+                },
+            }),
+        } as any;
+
+        const response = await POST(request);
+        const body = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(body.url).toMatch(/^\/uploads\/uploads\/user-1\/.+\.heic$/);
+        expect(fs.existsSync(path.join(tempDir, "public", ...String(body.path).split("/")))).toBe(
+            true
+        );
+    });
+
+    it("uploads HEIF images with the correct storage content type", async () => {
+        const upload = vi.fn().mockResolvedValue({ error: null });
+        const getPublicUrl = vi.fn(() => ({
+            data: { publicUrl: "https://example.supabase.co/storage/v1/object/public/photo.heif" },
+        }));
+        const serviceClient = {
+            storage: {
+                from: vi.fn(() => ({
+                    upload,
+                    getPublicUrl,
+                })),
+            },
+        };
+
+        vi.mocked(requireSupabaseService).mockReturnValue({
+            ok: true,
+            client: serviceClient as any,
+        });
+
+        const request = {
+            formData: vi.fn().mockResolvedValue({
+                get(name: string) {
+                    if (name === "file") {
+                        return {
+                            name: "workshop-photo.heif",
+                            size: 4,
+                            type: "image/heif",
+                            arrayBuffer: vi
+                                .fn()
+                                .mockResolvedValue(new Uint8Array([1, 2, 3, 4]).buffer),
+                        };
+                    }
+
+                    return null;
+                },
+            }),
+        } as any;
+
+        const response = await POST(request);
+
+        expect(response.status).toBe(200);
+        expect(upload).toHaveBeenCalledWith(
+            expect.stringMatching(/^user-1\/.+\.heif$/),
+            expect.any(Buffer),
+            expect.objectContaining({ contentType: "image/heif" })
+        );
+    });
+
     it("rejects unsupported upload file types before storage writes", async () => {
         const serviceClient = {
             storage: {
@@ -142,7 +236,9 @@ describe("POST /api/upload", () => {
         const body = await response.json();
 
         expect(response.status).toBe(400);
-        expect(body.error).toBe("Invalid file type. Allowed: JPEG, PNG, WebP, MP4, WebM, MOV.");
+        expect(body.error).toBe(
+            "Invalid file type. Allowed: image files (JPEG, PNG, WebP, GIF, AVIF, HEIC/HEIF, BMP, TIFF, SVG, ICO, JP2, JXL, RAW) and videos (MP4, WebM, MOV, M4V)."
+        );
         expect(serviceClient.storage.from).not.toHaveBeenCalled();
     });
 });
