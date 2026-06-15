@@ -35,6 +35,23 @@ vi.mock("@/lib/rate-limit", () => ({
     getRateLimitKey: vi.fn(() => "upload-test-key"),
 }));
 
+const sharpMocks = vi.hoisted(() => ({
+    toBuffer: vi.fn(),
+}));
+
+vi.mock("sharp", () => {
+    const webp = vi.fn(() => ({ toBuffer: sharpMocks.toBuffer }));
+    const rotate = vi.fn(() => ({ webp }));
+    const factory = vi.fn(() => ({ rotate }));
+    return { default: factory };
+});
+
+const heicConvertMock = vi.hoisted(() => ({
+    convert: vi.fn(),
+}));
+
+vi.mock("heic-convert", () => ({ default: heicConvertMock.convert }));
+
 describe("POST /api/upload", () => {
     let tempDir: string;
     let cwdSpy: ReturnType<typeof vi.spyOn>;
@@ -54,6 +71,8 @@ describe("POST /api/upload", () => {
             url: "https://example.supabase.co",
             key: "anon",
         });
+        sharpMocks.toBuffer.mockResolvedValue(Buffer.from("converted-webp-bytes"));
+        heicConvertMock.convert.mockResolvedValue(new Uint8Array([10, 20, 30]));
     });
 
     afterEach(() => {
@@ -109,7 +128,7 @@ describe("POST /api/upload", () => {
         );
     });
 
-    it("accepts HEIC images by extension when the browser omits a MIME type", async () => {
+    it("converts HEIC images to WebP when the browser omits a MIME type", async () => {
         const upload = vi.fn().mockResolvedValue({
             error: { message: "Bucket not found" },
         });
@@ -149,16 +168,17 @@ describe("POST /api/upload", () => {
         const body = await response.json();
 
         expect(response.status).toBe(200);
-        expect(body.url).toMatch(/^\/uploads\/uploads\/user-1\/.+\.heic$/);
+        expect(sharpMocks.toBuffer).toHaveBeenCalled();
+        expect(body.url).toMatch(/^\/uploads\/uploads\/user-1\/.+\.webp$/);
         expect(fs.existsSync(path.join(tempDir, "public", ...String(body.path).split("/")))).toBe(
             true
         );
     });
 
-    it("uploads HEIF images with the correct storage content type", async () => {
+    it("uploads converted HEIF images with the image/webp content type", async () => {
         const upload = vi.fn().mockResolvedValue({ error: null });
         const getPublicUrl = vi.fn(() => ({
-            data: { publicUrl: "https://example.supabase.co/storage/v1/object/public/photo.heif" },
+            data: { publicUrl: "https://example.supabase.co/storage/v1/object/public/photo.webp" },
         }));
         const serviceClient = {
             storage: {
@@ -197,10 +217,52 @@ describe("POST /api/upload", () => {
 
         expect(response.status).toBe(200);
         expect(upload).toHaveBeenCalledWith(
-            expect.stringMatching(/^user-1\/.+\.heif$/),
+            expect.stringMatching(/^user-1\/.+\.webp$/),
             expect.any(Buffer),
-            expect.objectContaining({ contentType: "image/heif" })
+            expect.objectContaining({ contentType: "image/webp" })
         );
+    });
+
+    it("stores the original HEIC file when conversion fails", async () => {
+        heicConvertMock.convert.mockRejectedValueOnce(new Error("unsupported HEIC payload"));
+        const upload = vi.fn().mockResolvedValue({ error: { message: "Bucket not found" } });
+        const serviceClient = {
+            storage: {
+                from: vi.fn(() => ({
+                    upload,
+                })),
+            },
+        };
+
+        vi.mocked(requireSupabaseService).mockReturnValue({
+            ok: true,
+            client: serviceClient as any,
+        });
+
+        const request = {
+            formData: vi.fn().mockResolvedValue({
+                get(name: string) {
+                    if (name === "file") {
+                        return {
+                            name: "workshop-photo.heic",
+                            size: 4,
+                            type: "image/heic",
+                            arrayBuffer: vi
+                                .fn()
+                                .mockResolvedValue(new Uint8Array([1, 2, 3, 4]).buffer),
+                        };
+                    }
+
+                    return null;
+                },
+            }),
+        } as any;
+
+        const response = await POST(request);
+        const body = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(body.url).toMatch(/^\/uploads\/uploads\/user-1\/.+\.heic$/);
     });
 
     it("rejects unsupported upload file types before storage writes", async () => {

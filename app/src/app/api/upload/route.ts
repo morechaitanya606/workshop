@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
+import sharp from "sharp";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
 import crypto from "crypto";
@@ -69,8 +70,32 @@ const VIDEO_TYPES = new Set(Object.values(VIDEO_CONTENT_TYPE_BY_EXTENSION));
 const IMAGE_EXTENSIONS = new Set(Object.keys(IMAGE_CONTENT_TYPE_BY_EXTENSION));
 const VIDEO_EXTENSIONS = new Set(Object.keys(VIDEO_CONTENT_TYPE_BY_EXTENSION));
 
+// HEIC/HEIF photos (the default iPhone format) cannot be rendered by most
+// browsers, so we transcode them to WebP on upload for universal display.
+const HEIC_EXTENSIONS = new Set(["heic", "heics", "heif", "heifs", "hif"]);
+const HEIC_CONTENT_TYPES = new Set([
+    "image/heic",
+    "image/heic-sequence",
+    "image/heif",
+    "image/heif-sequence",
+]);
+
 function isImageContentType(contentType: string) {
     return contentType.startsWith("image/");
+}
+
+function isHeicLike(contentType: string, extension: string) {
+    return HEIC_CONTENT_TYPES.has(contentType) || HEIC_EXTENSIONS.has(extension);
+}
+
+async function convertHeicToWebp(buffer: Buffer) {
+    // sharp's prebuilt binaries can encode WebP but cannot decode HEIC/HEVC
+    // (the HEVC decoder is omitted for licensing reasons), so decode with the
+    // pure-JS heic-convert first, then re-encode to WebP with sharp.
+    const heicConvert = (await import("heic-convert")).default;
+    const decodedJpeg = await heicConvert({ buffer, format: "JPEG", quality: 0.92 });
+    // `.rotate()` applies EXIF orientation so phone photos are not sideways.
+    return sharp(Buffer.from(decodedJpeg)).rotate().webp({ quality: 82 }).toBuffer();
 }
 
 function getImageExtensionFromContentType(contentType: string) {
@@ -205,9 +230,30 @@ export async function POST(request: NextRequest) {
         }
 
         const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
+        let buffer: Buffer = Buffer.from(bytes);
+        let uploadExtension = fileInfo.extension;
+        let uploadContentType = fileInfo.contentType;
 
-        const objectPath = buildObjectPath(auth.user.id, fileInfo.extension);
+        // Transcode HEIC/HEIF to WebP so the image displays in every browser.
+        // If decoding fails (e.g. an unsupported/corrupt file), fall back to
+        // storing the original bytes rather than failing the whole upload.
+        if (fileInfo.kind === "image" && isHeicLike(fileInfo.contentType, fileInfo.extension)) {
+            try {
+                buffer = await convertHeicToWebp(buffer);
+                uploadExtension = "webp";
+                uploadContentType = "image/webp";
+            } catch (conversionError) {
+                console.error("HEIC/HEIF to WebP conversion failed; storing original.", {
+                    name: file.name,
+                    error:
+                        conversionError instanceof Error
+                            ? conversionError.message
+                            : conversionError,
+                });
+            }
+        }
+
+        const objectPath = buildObjectPath(auth.user.id, uploadExtension);
         const config = getPublicSupabaseConfig();
         const canUseLocalFallback = process.env.NODE_ENV !== "production";
 
@@ -226,7 +272,7 @@ export async function POST(request: NextRequest) {
         const { error: uploadError } = await service.client.storage
             .from(bucket)
             .upload(objectPath, buffer, {
-                contentType: fileInfo.contentType,
+                contentType: uploadContentType,
                 upsert: false,
             });
 
