@@ -57,6 +57,7 @@ function getDevDistDir() {
 
 /** @type {import('next').NextConfig} */
 const baseConfig = {
+    allowedDevOrigins: ["localhost:3000", "127.0.0.1:3000"],
     images: {
         formats: ["image/avif", "image/webp"],
         qualities: [60, 70, 72, 75, 80],

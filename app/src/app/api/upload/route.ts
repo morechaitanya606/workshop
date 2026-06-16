@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
+import sharp from "sharp";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
 import crypto from "crypto";
@@ -9,20 +10,112 @@ import { getPublicSupabaseConfig } from "@/lib/env";
 
 const DEFAULT_BUCKET = "uploads";
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 60 * 10;
-const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-const VIDEO_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"]);
-const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
-const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov", "m4v"]);
-const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
+const UPLOAD_TYPE_ERROR_MESSAGE =
+    "Invalid file type. Allowed: image files (JPEG, PNG, WebP, GIF, AVIF, HEIC/HEIF, BMP, TIFF, SVG, ICO, JP2, JXL, RAW) and videos (MP4, WebM, MOV, M4V).";
+const IMAGE_CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
     jpg: "image/jpeg",
     jpeg: "image/jpeg",
+    jpe: "image/jpeg",
+    jfif: "image/jpeg",
     png: "image/png",
+    apng: "image/apng",
     webp: "image/webp",
+    gif: "image/gif",
+    avif: "image/avif",
+    heic: "image/heic",
+    heics: "image/heic-sequence",
+    heif: "image/heif",
+    heifs: "image/heif-sequence",
+    hif: "image/heif",
+    bmp: "image/bmp",
+    dib: "image/bmp",
+    tif: "image/tiff",
+    tiff: "image/tiff",
+    svg: "image/svg+xml",
+    svgz: "image/svg+xml",
+    ico: "image/vnd.microsoft.icon",
+    cur: "image/x-icon",
+    icns: "image/icns",
+    jp2: "image/jp2",
+    j2k: "image/jp2",
+    jpf: "image/jpx",
+    jpx: "image/jpx",
+    jpm: "image/jpm",
+    jxl: "image/jxl",
+    tga: "image/x-tga",
+    psd: "image/vnd.adobe.photoshop",
+    dds: "image/vnd.ms-dds",
+    dng: "image/x-adobe-dng",
+    cr2: "image/x-canon-cr2",
+    cr3: "image/x-canon-cr3",
+    crw: "image/x-canon-crw",
+    nef: "image/x-nikon-nef",
+    nrw: "image/x-nikon-nrw",
+    arw: "image/x-sony-arw",
+    srf: "image/x-sony-srf",
+    sr2: "image/x-sony-sr2",
+    raf: "image/x-fuji-raf",
+    orf: "image/x-olympus-orf",
+    rw2: "image/x-panasonic-rw2",
+    pef: "image/x-pentax-pef",
+    srw: "image/x-samsung-srw",
+};
+const VIDEO_CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
     mp4: "video/mp4",
     webm: "video/webm",
     mov: "video/quicktime",
     m4v: "video/x-m4v",
 };
+const VIDEO_TYPES = new Set(Object.values(VIDEO_CONTENT_TYPE_BY_EXTENSION));
+const IMAGE_EXTENSIONS = new Set(Object.keys(IMAGE_CONTENT_TYPE_BY_EXTENSION));
+const VIDEO_EXTENSIONS = new Set(Object.keys(VIDEO_CONTENT_TYPE_BY_EXTENSION));
+
+// HEIC/HEIF photos (the default iPhone format) cannot be rendered by most
+// browsers, so we transcode them to WebP on upload for universal display.
+const HEIC_EXTENSIONS = new Set(["heic", "heics", "heif", "heifs", "hif"]);
+const HEIC_CONTENT_TYPES = new Set([
+    "image/heic",
+    "image/heic-sequence",
+    "image/heif",
+    "image/heif-sequence",
+]);
+
+function isImageContentType(contentType: string) {
+    return contentType.startsWith("image/");
+}
+
+function isHeicLike(contentType: string, extension: string) {
+    return HEIC_CONTENT_TYPES.has(contentType) || HEIC_EXTENSIONS.has(extension);
+}
+
+async function convertHeicToWebp(buffer: Buffer) {
+    // sharp's prebuilt binaries can encode WebP but cannot decode HEIC/HEVC
+    // (the HEVC decoder is omitted for licensing reasons), so decode with the
+    // pure-JS heic-convert first, then re-encode to WebP with sharp.
+    const heicConvert = (await import("heic-convert")).default;
+    const decodedJpeg = await heicConvert({ buffer, format: "JPEG", quality: 0.92 });
+    // `.rotate()` applies EXIF orientation so phone photos are not sideways.
+    return sharp(Buffer.from(decodedJpeg)).rotate().webp({ quality: 82 }).toBuffer();
+}
+
+function getImageExtensionFromContentType(contentType: string) {
+    if (!isImageContentType(contentType)) {
+        return null;
+    }
+
+    const knownExtension = Object.entries(IMAGE_CONTENT_TYPE_BY_EXTENSION).find(
+        ([, value]) => value === contentType
+    )?.[0];
+    if (knownExtension) {
+        return knownExtension;
+    }
+
+    return contentType
+        .slice("image/".length)
+        .split("+")[0]
+        .replace(/[^a-z0-9]/g, "")
+        .slice(0, 10);
+}
 
 function buildObjectPath(userId: string, ext: string) {
     const uniqueId = crypto.randomBytes(16).toString("hex");
@@ -40,13 +133,16 @@ function getUploadFileInfo(file: File) {
     const contentType = file.type.trim().toLowerCase();
     const extension = getSafeExtension(file.name);
 
-    if (IMAGE_TYPES.has(contentType) || IMAGE_EXTENSIONS.has(extension)) {
+    if (isImageContentType(contentType) || IMAGE_EXTENSIONS.has(extension)) {
+        const inferredExtension =
+            extension || getImageExtensionFromContentType(contentType) || "jpg";
+
         return {
             kind: "image" as const,
-            extension: extension || "jpg",
-            contentType: IMAGE_TYPES.has(contentType)
+            extension: inferredExtension,
+            contentType: isImageContentType(contentType)
                 ? contentType
-                : CONTENT_TYPE_BY_EXTENSION[extension] || "image/jpeg",
+                : IMAGE_CONTENT_TYPE_BY_EXTENSION[extension] || "image/jpeg",
         };
     }
 
@@ -56,7 +152,7 @@ function getUploadFileInfo(file: File) {
             extension: extension || "mp4",
             contentType: VIDEO_TYPES.has(contentType)
                 ? contentType
-                : CONTENT_TYPE_BY_EXTENSION[extension] || "video/mp4",
+                : VIDEO_CONTENT_TYPE_BY_EXTENSION[extension] || "video/mp4",
         };
     }
 
@@ -121,7 +217,7 @@ export async function POST(request: NextRequest) {
 
         const fileInfo = getUploadFileInfo(file);
         if (!fileInfo) {
-            return jsonError("Invalid file type. Allowed: JPEG, PNG, WebP, MP4, WebM, MOV.", 400);
+            return jsonError(UPLOAD_TYPE_ERROR_MESSAGE, 400);
         }
 
         const isVideo = fileInfo.kind === "video";
@@ -134,9 +230,30 @@ export async function POST(request: NextRequest) {
         }
 
         const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
+        let buffer: Buffer = Buffer.from(bytes);
+        let uploadExtension = fileInfo.extension;
+        let uploadContentType = fileInfo.contentType;
 
-        const objectPath = buildObjectPath(auth.user.id, fileInfo.extension);
+        // Transcode HEIC/HEIF to WebP so the image displays in every browser.
+        // If decoding fails (e.g. an unsupported/corrupt file), fall back to
+        // storing the original bytes rather than failing the whole upload.
+        if (fileInfo.kind === "image" && isHeicLike(fileInfo.contentType, fileInfo.extension)) {
+            try {
+                buffer = await convertHeicToWebp(buffer);
+                uploadExtension = "webp";
+                uploadContentType = "image/webp";
+            } catch (conversionError) {
+                console.error("HEIC/HEIF to WebP conversion failed; storing original.", {
+                    name: file.name,
+                    error:
+                        conversionError instanceof Error
+                            ? conversionError.message
+                            : conversionError,
+                });
+            }
+        }
+
+        const objectPath = buildObjectPath(auth.user.id, uploadExtension);
         const config = getPublicSupabaseConfig();
         const canUseLocalFallback = process.env.NODE_ENV !== "production";
 
@@ -155,7 +272,7 @@ export async function POST(request: NextRequest) {
         const { error: uploadError } = await service.client.storage
             .from(bucket)
             .upload(objectPath, buffer, {
-                contentType: fileInfo.contentType,
+                contentType: uploadContentType,
                 upsert: false,
             });
 
