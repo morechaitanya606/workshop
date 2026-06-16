@@ -4,6 +4,11 @@
 
 @layer base {
     :root {
+        --font-inter: "Inter", "Segoe UI", Arial, sans-serif;
+        --font-playfair: "Playfair Display", Georgia, "Times New Roman", serif;
+        --font-dm-sans: "DM Sans", "Segoe UI", Arial, sans-serif;
+        --font-cormorant: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+
         /* ── Motion tokens ── */
         --motion-ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
         --motion-duration-fast: 180ms;

@@ -1,22 +1,6 @@
 import type { Metadata } from "next";
-import { DM_Sans, Cormorant_Garamond } from "next/font/google";
 import { getAbsoluteUrl } from "@/lib/env";
 import SummerRetreatClient from "./SummerRetreatClient";
-
-const dmSans = DM_Sans({
-    subsets: ["latin"],
-    variable: "--font-dm-sans",
-    display: "swap",
-    weight: ["400", "500", "700"],
-});
-
-const cormorantGaramond = Cormorant_Garamond({
-    subsets: ["latin"],
-    variable: "--font-cormorant",
-    display: "swap",
-    weight: ["300"],
-    style: ["italic"],
-});
 
 const canonicalUrl = getAbsoluteUrl("/workshop/summer-family-retreat");
 const ogImageUrl = getAbsoluteUrl("/images/summer-family-retreat-og.jpg");
@@ -113,7 +97,7 @@ export default function SummerFamilyRetreatPage() {
                     __html: JSON.stringify(eventStructuredData),
                 }}
             />
-            <div className={`${dmSans.variable} ${cormorantGaramond.variable}`}>
+            <div>
                 <SummerRetreatClient />
             </div>
         </>
