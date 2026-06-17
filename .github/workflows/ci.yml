@@ -37,6 +37,9 @@ jobs:
         run: npm run build
         env:
           SKIP_ENV_VALIDATION: "true"
-          # Required at build time for metadataBase (getAppUrl); runtime uses the
-          # real production/Vercel env. A stable placeholder is fine for CI.
+          # Build-time placeholders for values baked into the client bundle and
+          # read during prerender. These are public (publishable) values; the
+          # real ones are injected from the production/Vercel env at deploy time.
           NEXT_PUBLIC_APP_URL: "https://onlyworkshops.com"
+          NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_ci_placeholder"
