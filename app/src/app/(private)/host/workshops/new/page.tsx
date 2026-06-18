@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth-context";
 import { categories, PAST_EVENTS_CATEGORY_ID } from "@/lib/data";
 import { createHostWorkshop, toApiErrorMessage, uploadMedia } from "@/lib/api-client";
 import { workshopCreateSchema } from "@/lib/validators";
+import { useImageCropper } from "@/components/ImageCropper";
 
 function toList(value: string) {
     return value
@@ -196,6 +197,8 @@ export default function HostCreateWorkshopPage() {
         setFieldErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
     };
 
+    const { cropImages, cropperElement } = useImageCropper();
+
     const uploadOneFile = async (file: File) => {
         if (!session?.access_token) throw new Error("Your session expired. Please log in again.");
         const result = await uploadMedia(session.access_token, file, { crop: "5:4" });
@@ -318,6 +321,7 @@ export default function HostCreateWorkshopPage() {
 
     return (
         <HostShell>
+            {cropperElement}
             <div className="mb-8 flex items-center gap-3">
                 <Link href="/host/workshops" className="btn-secondary !py-2 !px-3">
                     <ArrowLeft className="w-4 h-4" />
@@ -592,10 +596,12 @@ export default function HostCreateWorkshopPage() {
                                     const file = e.target.files?.[0];
                                     e.target.value = "";
                                     if (!file) return;
+                                    const [cropped] = await cropImages([file]);
+                                    if (!cropped) return;
                                     setUploadingCover(true);
                                     setError(null);
                                     try {
-                                        update("coverImage", await uploadOneFile(file));
+                                        update("coverImage", await uploadOneFile(cropped));
                                     } catch (uploadError) {
                                         setError(
                                             toApiErrorMessage(
@@ -651,12 +657,14 @@ export default function HostCreateWorkshopPage() {
                                 label="Upload Gallery Images"
                                 accept="image/*"
                                 multiple
-                                onChange={(e) => {
+                                onChange={async (e) => {
                                     const files = Array.from(e.target.files || []);
                                     e.target.value = "";
+                                    const cropped = await cropImages(files);
+                                    if (!cropped.length) return;
                                     void mergeUploadedUrls(
                                         "galleryImages",
-                                        files,
+                                        cropped,
                                         setUploadingGallery
                                     );
                                 }}

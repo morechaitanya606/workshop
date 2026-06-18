@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Check, Lock, Upload } from "lucide-react";
+import { useImageCropper } from "@/components/ImageCropper";
 import { categories, PAST_EVENTS_CATEGORY_ID, type Workshop } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import HostShell from "@/components/host/HostShell";
@@ -235,6 +236,8 @@ export default function HostEditWorkshopPage() {
         }
     };
 
+    const { cropImages, cropperElement } = useImageCropper();
+
     const uploadOneFile = async (file: File) => {
         if (!session?.access_token) {
             throw new Error("Your session expired. Please log in again.");
@@ -248,10 +251,13 @@ export default function HostEditWorkshopPage() {
         event.target.value = "";
         if (!file) return;
 
+        const [cropped] = await cropImages([file]);
+        if (!cropped) return;
+
         setUploadingCover(true);
         setError(null);
         try {
-            const url = await uploadOneFile(file);
+            const url = await uploadOneFile(cropped);
             update("coverImage", url);
         } catch (uploadError) {
             setError(toApiErrorMessage(uploadError, "Unable to upload cover image."));
@@ -265,10 +271,13 @@ export default function HostEditWorkshopPage() {
         event.target.value = "";
         if (!files.length) return;
 
+        const cropped = await cropImages(files);
+        if (!cropped.length) return;
+
         setUploadingGallery(true);
         setError(null);
         try {
-            const urls = await Promise.all(files.map((file) => uploadOneFile(file)));
+            const urls = await Promise.all(cropped.map((file) => uploadOneFile(file)));
             const merged = Array.from(new Set([...toList(form.galleryImages), ...urls]));
             update("galleryImages", merged.join("\n"));
         } catch (uploadError) {
@@ -465,6 +474,7 @@ export default function HostEditWorkshopPage() {
 
     return (
         <HostShell>
+            {cropperElement}
             <div className="mb-8 flex items-center gap-3">
                 <Link href="/host/workshops" className="btn-secondary !py-2 !px-3">
                     <ArrowLeft className="w-4 h-4" />
