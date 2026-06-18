@@ -8,8 +8,37 @@ import { getCroppedFile } from "@/lib/crop-image";
 
 const DEFAULT_ASPECT = 5 / 4;
 
+type CropSource = { kind: "file"; file: File } | { kind: "url"; url: string };
+
+// Returns a same-origin src the canvas can read without cross-origin tainting.
+// blob: (from File) and local "/..." paths are already same-origin; remote
+// images are routed through our image proxy.
+function toLoadableSrc(url: string) {
+    if (url.startsWith("blob:") || url.startsWith("/")) {
+        return url;
+    }
+    return `/api/image-proxy?url=${encodeURIComponent(url)}`;
+}
+
+function deriveFileName(url: string) {
+    try {
+        const pathname = url.startsWith("http") ? new URL(url).pathname : url;
+        const last = pathname.split("/").pop() || "image";
+        return last.split("?")[0] || "image";
+    } catch {
+        return "image";
+    }
+}
+
+function outputMimeFor(source: CropSource): "image/jpeg" | "image/png" {
+    if (source.kind === "file") {
+        return source.file.type === "image/png" ? "image/png" : "image/jpeg";
+    }
+    return /\.png(\?|$)/i.test(source.url) ? "image/png" : "image/jpeg";
+}
+
 type CropperModalProps = {
-    file: File;
+    source: CropSource;
     aspect: number;
     index: number;
     total: number;
@@ -17,21 +46,29 @@ type CropperModalProps = {
     onCancel: () => void;
 };
 
-function ImageCropperModal({ file, aspect, index, total, onApply, onCancel }: CropperModalProps) {
+function ImageCropperModal({ source, aspect, index, total, onApply, onCancel }: CropperModalProps) {
     const [src, setSrc] = useState("");
     const [crop, setCrop] = useState({ x: 0, y: 0 });
     const [zoom, setZoom] = useState(1);
     const [areaPixels, setAreaPixels] = useState<Area | null>(null);
     const [processing, setProcessing] = useState(false);
+    const [loadError, setLoadError] = useState(false);
 
     useEffect(() => {
-        const url = URL.createObjectURL(file);
-        setSrc(url);
         setCrop({ x: 0, y: 0 });
         setZoom(1);
         setAreaPixels(null);
-        return () => URL.revokeObjectURL(url);
-    }, [file]);
+        setLoadError(false);
+
+        if (source.kind === "file") {
+            const objectUrl = URL.createObjectURL(source.file);
+            setSrc(objectUrl);
+            return () => URL.revokeObjectURL(objectUrl);
+        }
+
+        setSrc(toLoadableSrc(source.url));
+        return undefined;
+    }, [source]);
 
     const onCropComplete = useCallback((_area: Area, areaInPixels: Area) => {
         setAreaPixels(areaInPixels);
@@ -41,9 +78,11 @@ function ImageCropperModal({ file, aspect, index, total, onApply, onCancel }: Cr
         if (!areaPixels) return;
         setProcessing(true);
         try {
-            const mimeType = file.type === "image/png" ? "image/png" : "image/jpeg";
-            const cropped = await getCroppedFile(src, areaPixels, file.name, mimeType);
+            const fileName = source.kind === "file" ? source.file.name : deriveFileName(source.url);
+            const cropped = await getCroppedFile(src, areaPixels, fileName, outputMimeFor(source));
             onApply(cropped);
+        } catch {
+            setLoadError(true);
         } finally {
             setProcessing(false);
         }
@@ -81,7 +120,16 @@ function ImageCropperModal({ file, aspect, index, total, onApply, onCancel }: Cr
                             onCropChange={setCrop}
                             onZoomChange={setZoom}
                             onCropComplete={onCropComplete}
+                            onMediaLoaded={() => setLoadError(false)}
                         />
+                    )}
+                    {loadError && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-6 text-center">
+                            <p className="text-sm font-inter text-white">
+                                Could not load this image for cropping. Please try again or
+                                re-upload it.
+                            </p>
+                        </div>
                     )}
                 </div>
 
@@ -126,19 +174,12 @@ function ImageCropperModal({ file, aspect, index, total, onApply, onCancel }: Cr
 }
 
 /**
- * Hook that opens an interactive crop modal for one or more files in sequence
- * and resolves with the cropped files.
- *
- * Usage:
- *   const { cropImages, cropperElement } = useImageCropper();
- *   // in an upload handler:
- *   const [cropped] = await cropImages([file]);
- *   if (!cropped) return; // user cancelled
- *   // ...upload `cropped`
- *   // render {cropperElement} once in the page.
+ * Hook for an interactive 5:4 crop modal. Supports cropping freshly selected
+ * files (`cropImages`) and re-cropping an already-uploaded image by URL
+ * (`cropExistingImage`). Render `cropperElement` once in the page.
  */
 export function useImageCropper(aspect: number = DEFAULT_ASPECT) {
-    const [queue, setQueue] = useState<File[]>([]);
+    const [queue, setQueue] = useState<CropSource[]>([]);
     const [index, setIndex] = useState(0);
     const resultsRef = useRef<File[]>([]);
     const resolverRef = useRef<((files: File[]) => void) | null>(null);
@@ -153,19 +194,35 @@ export function useImageCropper(aspect: number = DEFAULT_ASPECT) {
         resolver?.(results);
     }, []);
 
-    const cropImages = useCallback((files: File[]) => {
+    const cropSources = useCallback((sources: CropSource[]) => {
         return new Promise<File[]>((resolve) => {
-            const imageFiles = files.filter((file) => file.type.startsWith("image/"));
-            if (!imageFiles.length) {
+            if (!sources.length) {
                 resolve([]);
                 return;
             }
             resultsRef.current = [];
             resolverRef.current = resolve;
             setIndex(0);
-            setQueue(imageFiles);
+            setQueue(sources);
         });
     }, []);
+
+    const cropImages = useCallback(
+        (files: File[]) => {
+            const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+            return cropSources(imageFiles.map((file) => ({ kind: "file", file })));
+        },
+        [cropSources]
+    );
+
+    const cropExistingImage = useCallback(
+        async (url: string): Promise<File | null> => {
+            if (!url.trim()) return null;
+            const results = await cropSources([{ kind: "url", url: url.trim() }]);
+            return results[0] ?? null;
+        },
+        [cropSources]
+    );
 
     const current = queue[index] ?? null;
 
@@ -184,7 +241,7 @@ export function useImageCropper(aspect: number = DEFAULT_ASPECT) {
     const cropperElement = current ? (
         <ImageCropperModal
             key={index}
-            file={current}
+            source={current}
             aspect={aspect}
             index={index}
             total={queue.length}
@@ -193,5 +250,5 @@ export function useImageCropper(aspect: number = DEFAULT_ASPECT) {
         />
     ) : null;
 
-    return { cropImages, cropperElement };
+    return { cropImages, cropExistingImage, cropperElement };
 }
