@@ -40,6 +40,43 @@ export function isStandardWebImage(contentType: string, extension: string) {
     return STANDARD_CONTENT_TYPES.has(contentType) || STANDARD_EXTENSIONS.has(extension);
 }
 
+export type CropAspect = { width: number; height: number };
+
+/**
+ * Center-crop an image buffer to the given aspect ratio at maximum resolution
+ * (no upscaling/resampling — just an extract of the largest matching rectangle).
+ */
+async function cropToAspect(buffer: Buffer, aspect: CropAspect): Promise<Buffer> {
+    const meta = await sharp(buffer).metadata();
+    const width = meta.width ?? 0;
+    const height = meta.height ?? 0;
+    if (!width || !height) {
+        return buffer;
+    }
+
+    const target = aspect.width / aspect.height;
+    const current = width / height;
+
+    let cropW = width;
+    let cropH = height;
+    if (current > target) {
+        // Too wide — trim the sides.
+        cropW = Math.round(height * target);
+    } else if (current < target) {
+        // Too tall — trim top/bottom.
+        cropH = Math.round(width / target);
+    } else {
+        return buffer;
+    }
+
+    const left = Math.max(0, Math.floor((width - cropW) / 2));
+    const top = Math.max(0, Math.floor((height - cropH) / 2));
+    cropW = Math.min(cropW, width - left);
+    cropH = Math.min(cropH, height - top);
+
+    return sharp(buffer).extract({ left, top, width: cropW, height: cropH }).toBuffer();
+}
+
 async function decodeHeicToJpeg(buffer: Buffer): Promise<Buffer> {
     // sharp's prebuilt binaries can encode JPEG/PNG but cannot decode HEIC/HEVC
     // (the HEVC decoder is omitted for licensing reasons), so decode with the
@@ -56,18 +93,30 @@ async function decodeHeicToJpeg(buffer: Buffer): Promise<Buffer> {
  * - Images with an alpha channel become PNG so transparency is preserved.
  * - Everything else becomes JPEG.
  * - EXIF orientation is applied via `.rotate()` so phone photos are upright.
+ * - When `cropAspect` is provided, the image is center-cropped to that aspect
+ *   ratio (e.g. 5:4) before encoding.
  *
  * Throws if the source cannot be decoded; callers decide how to handle that.
  */
 export async function convertImageToJpegOrPng(
     input: Buffer,
-    source: { contentType: string; extension: string }
+    source: { contentType: string; extension: string },
+    options?: { cropAspect?: CropAspect }
 ): Promise<NormalizedImage> {
     const decoded = isHeicLike(source.contentType, source.extension)
         ? await decodeHeicToJpeg(input)
         : input;
 
-    const pipeline = sharp(decoded).rotate();
+    let pipeline = sharp(decoded).rotate();
+
+    if (options?.cropAspect) {
+        // Bake EXIF rotation first so the crop math uses upright dimensions,
+        // then center-crop to the requested aspect ratio.
+        const rotated = await pipeline.toBuffer();
+        const cropped = await cropToAspect(rotated, options.cropAspect);
+        pipeline = sharp(cropped);
+    }
+
     const metadata = await pipeline.metadata();
 
     if (metadata.hasAlpha) {

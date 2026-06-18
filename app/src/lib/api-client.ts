@@ -641,9 +641,12 @@ export function getMyBookings(accessToken: string) {
     });
 }
 
-export async function uploadMedia(accessToken: string, file: File) {
+export async function uploadMedia(accessToken: string, file: File, options?: { crop?: string }) {
     const formData = new FormData();
     formData.append("file", file);
+    if (options?.crop) {
+        formData.append("crop", options.crop);
+    }
 
     const response = await fetch("/api/upload", {
         method: "POST",

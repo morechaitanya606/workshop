@@ -6,7 +6,11 @@ import crypto from "crypto";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { getPublicSupabaseConfig } from "@/lib/env";
-import { convertImageToJpegOrPng, isStandardWebImage } from "@/lib/image-conversion";
+import {
+    convertImageToJpegOrPng,
+    isStandardWebImage,
+    type CropAspect,
+} from "@/lib/image-conversion";
 
 const DEFAULT_BUCKET = "uploads";
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 60 * 10;
@@ -72,6 +76,18 @@ const VIDEO_EXTENSIONS = new Set(Object.keys(VIDEO_CONTENT_TYPE_BY_EXTENSION));
 
 function isImageContentType(contentType: string) {
     return contentType.startsWith("image/");
+}
+
+// Parses a crop request like "5:4" into an aspect ratio. Returns null for
+// missing/invalid values so uploads without a crop are unaffected.
+function parseCropAspect(value: FormDataEntryValue | null): CropAspect | null {
+    if (typeof value !== "string") return null;
+    const match = value.trim().match(/^(\d+)\s*:\s*(\d+)$/);
+    if (!match) return null;
+    const width = Number(match[1]);
+    const height = Number(match[2]);
+    if (!width || !height) return null;
+    return { width, height };
 }
 
 function getImageExtensionFromContentType(contentType: string) {
@@ -186,6 +202,7 @@ export async function POST(request: NextRequest) {
             .trim()
             .toLowerCase();
         const wantsSignedUrl = access === "private" || access === "signed";
+        const cropAspect = parseCropAspect(formData.get("crop"));
 
         if (!file) {
             return jsonError("No file provided.", 400);
@@ -212,19 +229,24 @@ export async function POST(request: NextRequest) {
 
         // Normalise every image to a standard web format (JPEG, or PNG when the
         // source has transparency). JPEG/PNG inputs are already acceptable and
-        // are left untouched. This guarantees the stored file renders in all
+        // are left untouched UNLESS a crop is requested (e.g. cover/gallery
+        // images cropped to 5:4). This guarantees the stored file renders in all
         // browsers and is accepted by Supabase Storage buckets that restrict
         // MIME types. If decoding fails (e.g. an unsupported/corrupt file), fall
         // back to storing the original bytes rather than failing the upload.
-        if (
+        const needsConversion =
             fileInfo.kind === "image" &&
-            !isStandardWebImage(fileInfo.contentType, fileInfo.extension)
-        ) {
+            (Boolean(cropAspect) || !isStandardWebImage(fileInfo.contentType, fileInfo.extension));
+        if (needsConversion) {
             try {
-                const normalized = await convertImageToJpegOrPng(buffer, {
-                    contentType: fileInfo.contentType,
-                    extension: fileInfo.extension,
-                });
+                const normalized = await convertImageToJpegOrPng(
+                    buffer,
+                    {
+                        contentType: fileInfo.contentType,
+                        extension: fileInfo.extension,
+                    },
+                    cropAspect ? { cropAspect } : undefined
+                );
                 buffer = normalized.buffer;
                 uploadExtension = normalized.extension;
                 uploadContentType = normalized.contentType;
