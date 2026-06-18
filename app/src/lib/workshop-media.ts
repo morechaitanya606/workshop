@@ -93,7 +93,10 @@ export function normalizeWorkshopImageUrlInput(value: string) {
 
     const driveId = extractGoogleDriveFileId(trimmed);
     if (driveId) {
-        return `https://drive.google.com/uc?export=view&id=${driveId}`;
+        // Google deprecated the `uc?export=view` hotlink endpoint (it now returns
+        // a 303 with no image bytes). The `thumbnail` endpoint still serves the
+        // image directly and is what browsers/next-image can render.
+        return `https://drive.google.com/thumbnail?id=${driveId}&sz=w1200`;
     }
 
     return trimmed;
@@ -112,7 +115,7 @@ export function isSupportedWorkshopImageUrl(value: string | null | undefined) {
 
     const hostname = url.hostname.toLowerCase();
     if (hostname === "images.unsplash.com") return true;
-    if (hostname === "drive.google.com" && url.pathname === "/uc") return true;
+    if (hostname === "drive.google.com" && url.pathname === "/thumbnail") return true;
     if (hostname === "drive.usercontent.google.com") return true;
     if (hostname.endsWith(".googleusercontent.com")) return true;
     if (hostname.endsWith(".supabase.co")) return true;
