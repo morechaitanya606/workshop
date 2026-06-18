@@ -3,7 +3,7 @@
 import { type ChangeEvent, type FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Upload } from "lucide-react";
+import { ArrowLeft, Loader2, Upload, X } from "lucide-react";
 import HostShell from "@/components/host/HostShell";
 import { useAuth } from "@/lib/auth-context";
 import { categories, PAST_EVENTS_CATEGORY_ID } from "@/lib/data";
@@ -609,6 +609,29 @@ export default function HostCreateWorkshopPage() {
                                 }}
                             />
                         </div>
+                        {form.coverImage.trim() && (
+                            <div className="mt-3">
+                                <p className="mb-1.5 text-[11px] font-inter font-semibold uppercase tracking-wider text-dark-muted">
+                                    Preview (5:4)
+                                </p>
+                                <div className="relative w-full max-w-xs overflow-hidden rounded-xl border border-gray-200 bg-cream-100 aspect-[5/4]">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                        src={form.coverImage.trim()}
+                                        alt="Cover image preview"
+                                        className="absolute inset-0 h-full w-full object-cover"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => update("coverImage", "")}
+                                        className="absolute right-2 top-2 rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-black/80"
+                                        aria-label="Remove cover image"
+                                    >
+                                        <X className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <div className="md:col-span-2">
                         <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
@@ -639,6 +662,43 @@ export default function HostCreateWorkshopPage() {
                                 }}
                             />
                         </div>
+                        {toList(form.galleryImages).length > 0 && (
+                            <div className="mt-3">
+                                <p className="mb-1.5 text-[11px] font-inter font-semibold uppercase tracking-wider text-dark-muted">
+                                    Preview (5:4)
+                                </p>
+                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                                    {toList(form.galleryImages).map((url) => (
+                                        <div
+                                            key={url}
+                                            className="relative overflow-hidden rounded-xl border border-gray-200 bg-cream-100 aspect-[5/4]"
+                                        >
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img
+                                                src={url}
+                                                alt="Gallery image preview"
+                                                className="absolute inset-0 h-full w-full object-cover"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    update(
+                                                        "galleryImages",
+                                                        toList(form.galleryImages)
+                                                            .filter((item) => item !== url)
+                                                            .join("\n")
+                                                    )
+                                                }
+                                                className="absolute right-2 top-2 rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-black/80"
+                                                aria-label="Remove gallery image"
+                                            >
+                                                <X className="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <div className="md:col-span-2">
                         <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">

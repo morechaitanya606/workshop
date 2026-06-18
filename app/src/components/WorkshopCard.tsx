@@ -247,7 +247,7 @@ export default function WorkshopCard({
                 >
                     {/* Image */}
                     <div
-                        className={`relative overflow-hidden w-2/5 sm:w-full shrink-0 aspect-square sm:aspect-[4/3] bg-cream-100 ${!imageLoaded ? "animate-pulse" : ""}`}
+                        className={`relative overflow-hidden w-2/5 sm:w-full shrink-0 aspect-[5/4] bg-cream-100 ${!imageLoaded ? "animate-pulse" : ""}`}
                     >
                         <Image
                             key={imagePool[isHovered ? imageIndex : 0]} // Force remount on source change to reset loading state if needed, but actually without key it might blink. Let's omit key to allow Next.js to swap it smoothly.

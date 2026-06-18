@@ -197,7 +197,7 @@ export default function AdminEditWorkshopPage() {
     );
 
     const renderImagePreview = (src: string, alt: string) => (
-        <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-gray-200 bg-cream-100">
+        <div className="relative aspect-[5/4] overflow-hidden rounded-xl border border-gray-200 bg-cream-100">
             <Image src={src} alt={alt} fill className="object-cover" sizes="160px" />
         </div>
     );
