@@ -4,7 +4,8 @@ import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "rea
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Check, Upload } from "lucide-react";
+import { ArrowLeft, Loader2, Check, Crop, Upload } from "lucide-react";
+import { useImageCropper } from "@/components/ImageCropper";
 import { categories, PAST_EVENTS_CATEGORY_ID, type Workshop } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import AdminShell from "@/components/admin/AdminShell";
@@ -196,9 +197,19 @@ export default function AdminEditWorkshopPage() {
         [categoryOptions]
     );
 
-    const renderImagePreview = (src: string, alt: string) => (
-        <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-gray-200 bg-cream-100">
+    const renderImagePreview = (src: string, alt: string, onCrop?: () => void) => (
+        <div className="relative aspect-[5/4] overflow-hidden rounded-xl border border-gray-200 bg-cream-100">
             <Image src={src} alt={alt} fill className="object-cover" sizes="160px" />
+            {onCrop && (
+                <button
+                    type="button"
+                    onClick={onCrop}
+                    aria-label="Crop image"
+                    className="absolute right-2 top-2 rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-black/80"
+                >
+                    <Crop className="h-3.5 w-3.5" />
+                </button>
+            )}
         </div>
     );
 
@@ -231,12 +242,52 @@ export default function AdminEditWorkshopPage() {
         }
     };
 
+    const { cropImages, cropExistingImage, cropperElement } = useImageCropper();
+
     const uploadOneFile = async (file: File) => {
         if (!session?.access_token) {
             throw new Error("Your session expired. Please log in again.");
         }
-        const result = await uploadMedia(session.access_token, file);
+        const result = await uploadMedia(session.access_token, file, { crop: "5:4" });
         return String(result.url || "");
+    };
+
+    const handleCropCover = async () => {
+        const cropped = await cropExistingImage(form.coverImage.trim());
+        if (!cropped) return;
+        setUploadingCover(true);
+        setError(null);
+        try {
+            update("coverImage", await uploadOneFile(cropped));
+        } catch (uploadError) {
+            setError(toApiErrorMessage(uploadError, "Unable to crop cover image."));
+        } finally {
+            setUploadingCover(false);
+        }
+    };
+
+    const handleCropListImage = async (
+        field: "galleryImages" | "locationImages",
+        originalUrl: string,
+        setBusy: (value: boolean) => void
+    ) => {
+        const cropped = await cropExistingImage(originalUrl);
+        if (!cropped) return;
+        setBusy(true);
+        setError(null);
+        try {
+            const newUrl = await uploadOneFile(cropped);
+            update(
+                field,
+                toList(form[field])
+                    .map((item) => (item === originalUrl ? newUrl : item))
+                    .join("\n")
+            );
+        } catch (uploadError) {
+            setError(toApiErrorMessage(uploadError, "Unable to crop image."));
+        } finally {
+            setBusy(false);
+        }
     };
 
     const handleCoverUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -244,10 +295,13 @@ export default function AdminEditWorkshopPage() {
         event.target.value = "";
         if (!file) return;
 
+        const [cropped] = await cropImages([file]);
+        if (!cropped) return;
+
         setUploadingCover(true);
         setError(null);
         try {
-            const url = await uploadOneFile(file);
+            const url = await uploadOneFile(cropped);
             update("coverImage", url);
         } catch (uploadError) {
             setError(toApiErrorMessage(uploadError, "Unable to upload cover image."));
@@ -261,10 +315,13 @@ export default function AdminEditWorkshopPage() {
         event.target.value = "";
         if (!files.length) return;
 
+        const cropped = await cropImages(files);
+        if (!cropped.length) return;
+
         setUploadingGallery(true);
         setError(null);
         try {
-            const urls = await Promise.all(files.map((file) => uploadOneFile(file)));
+            const urls = await Promise.all(cropped.map((file) => uploadOneFile(file)));
             const merged = Array.from(new Set([...toList(form.galleryImages), ...urls]));
             update("galleryImages", merged.join("\n"));
         } catch (uploadError) {
@@ -451,6 +508,7 @@ export default function AdminEditWorkshopPage() {
 
     return (
         <AdminShell>
+            {cropperElement}
             <div className="mb-8 flex items-center gap-3">
                 <Link href="/admin/workshops" className="btn-secondary !py-2 !px-3">
                     <ArrowLeft className="w-4 h-4" />
@@ -746,7 +804,11 @@ export default function AdminEditWorkshopPage() {
                             </div>
                             {coverPreview && (
                                 <div className="mt-3 max-w-xs">
-                                    {renderImagePreview(coverPreview, "Saved cover image")}
+                                    {renderImagePreview(
+                                        coverPreview,
+                                        "Saved cover image",
+                                        handleCropCover
+                                    )}
                                 </div>
                             )}
                             {coverPreviewEntry && !coverPreview && (
@@ -795,7 +857,13 @@ export default function AdminEditWorkshopPage() {
                                         <div key={`${src}-${index}`}>
                                             {renderImagePreview(
                                                 src,
-                                                `Saved gallery image ${index + 1}`
+                                                `Saved gallery image ${index + 1}`,
+                                                () =>
+                                                    handleCropListImage(
+                                                        "galleryImages",
+                                                        src,
+                                                        setUploadingGallery
+                                                    )
                                             )}
                                         </div>
                                     ))}
@@ -845,7 +913,13 @@ export default function AdminEditWorkshopPage() {
                                         <div key={`${src}-${index}`}>
                                             {renderImagePreview(
                                                 src,
-                                                `Saved location image ${index + 1}`
+                                                `Saved location image ${index + 1}`,
+                                                () =>
+                                                    handleCropListImage(
+                                                        "locationImages",
+                                                        src,
+                                                        setUploadingLocation
+                                                    )
                                             )}
                                         </div>
                                     ))}

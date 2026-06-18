@@ -3,12 +3,13 @@
 import { type ChangeEvent, type FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Upload } from "lucide-react";
+import { ArrowLeft, Crop, Loader2, Upload, X } from "lucide-react";
 import HostShell from "@/components/host/HostShell";
 import { useAuth } from "@/lib/auth-context";
 import { categories, PAST_EVENTS_CATEGORY_ID } from "@/lib/data";
 import { createHostWorkshop, toApiErrorMessage, uploadMedia } from "@/lib/api-client";
 import { workshopCreateSchema } from "@/lib/validators";
+import { useImageCropper } from "@/components/ImageCropper";
 
 function toList(value: string) {
     return value
@@ -196,10 +197,46 @@ export default function HostCreateWorkshopPage() {
         setFieldErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
     };
 
+    const { cropImages, cropExistingImage, cropperElement } = useImageCropper();
+
     const uploadOneFile = async (file: File) => {
         if (!session?.access_token) throw new Error("Your session expired. Please log in again.");
-        const result = await uploadMedia(session.access_token, file);
+        const result = await uploadMedia(session.access_token, file, { crop: "5:4" });
         return String(result.url || "");
+    };
+
+    const handleCropCover = async () => {
+        const cropped = await cropExistingImage(form.coverImage.trim());
+        if (!cropped) return;
+        setUploadingCover(true);
+        setError(null);
+        try {
+            update("coverImage", await uploadOneFile(cropped));
+        } catch (uploadError) {
+            setError(toApiErrorMessage(uploadError, "Unable to crop cover image."));
+        } finally {
+            setUploadingCover(false);
+        }
+    };
+
+    const handleCropGalleryImage = async (originalUrl: string) => {
+        const cropped = await cropExistingImage(originalUrl);
+        if (!cropped) return;
+        setUploadingGallery(true);
+        setError(null);
+        try {
+            const newUrl = await uploadOneFile(cropped);
+            update(
+                "galleryImages",
+                toList(form.galleryImages)
+                    .map((item) => (item === originalUrl ? newUrl : item))
+                    .join("\n")
+            );
+        } catch (uploadError) {
+            setError(toApiErrorMessage(uploadError, "Unable to crop gallery image."));
+        } finally {
+            setUploadingGallery(false);
+        }
     };
 
     const mergeUploadedUrls = async (
@@ -318,6 +355,7 @@ export default function HostCreateWorkshopPage() {
 
     return (
         <HostShell>
+            {cropperElement}
             <div className="mb-8 flex items-center gap-3">
                 <Link href="/host/workshops" className="btn-secondary !py-2 !px-3">
                     <ArrowLeft className="w-4 h-4" />
@@ -592,10 +630,12 @@ export default function HostCreateWorkshopPage() {
                                     const file = e.target.files?.[0];
                                     e.target.value = "";
                                     if (!file) return;
+                                    const [cropped] = await cropImages([file]);
+                                    if (!cropped) return;
                                     setUploadingCover(true);
                                     setError(null);
                                     try {
-                                        update("coverImage", await uploadOneFile(file));
+                                        update("coverImage", await uploadOneFile(cropped));
                                     } catch (uploadError) {
                                         setError(
                                             toApiErrorMessage(
@@ -609,6 +649,39 @@ export default function HostCreateWorkshopPage() {
                                 }}
                             />
                         </div>
+                        {form.coverImage.trim() && (
+                            <div className="mt-3">
+                                <p className="mb-1.5 text-[11px] font-inter font-semibold uppercase tracking-wider text-dark-muted">
+                                    Preview (5:4)
+                                </p>
+                                <div className="relative w-full max-w-xs overflow-hidden rounded-xl border border-gray-200 bg-cream-100 aspect-[5/4]">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                        src={form.coverImage.trim()}
+                                        alt="Cover image preview"
+                                        className="absolute inset-0 h-full w-full object-cover"
+                                    />
+                                    <div className="absolute right-2 top-2 flex gap-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={handleCropCover}
+                                            className="rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-black/80"
+                                            aria-label="Crop cover image"
+                                        >
+                                            <Crop className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => update("coverImage", "")}
+                                            className="rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-black/80"
+                                            aria-label="Remove cover image"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <div className="md:col-span-2">
                         <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
@@ -628,17 +701,66 @@ export default function HostCreateWorkshopPage() {
                                 label="Upload Gallery Images"
                                 accept="image/*"
                                 multiple
-                                onChange={(e) => {
+                                onChange={async (e) => {
                                     const files = Array.from(e.target.files || []);
                                     e.target.value = "";
+                                    const cropped = await cropImages(files);
+                                    if (!cropped.length) return;
                                     void mergeUploadedUrls(
                                         "galleryImages",
-                                        files,
+                                        cropped,
                                         setUploadingGallery
                                     );
                                 }}
                             />
                         </div>
+                        {toList(form.galleryImages).length > 0 && (
+                            <div className="mt-3">
+                                <p className="mb-1.5 text-[11px] font-inter font-semibold uppercase tracking-wider text-dark-muted">
+                                    Preview (5:4)
+                                </p>
+                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                                    {toList(form.galleryImages).map((url) => (
+                                        <div
+                                            key={url}
+                                            className="relative overflow-hidden rounded-xl border border-gray-200 bg-cream-100 aspect-[5/4]"
+                                        >
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img
+                                                src={url}
+                                                alt="Gallery image preview"
+                                                className="absolute inset-0 h-full w-full object-cover"
+                                            />
+                                            <div className="absolute right-2 top-2 flex gap-1.5">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleCropGalleryImage(url)}
+                                                    className="rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-black/80"
+                                                    aria-label="Crop gallery image"
+                                                >
+                                                    <Crop className="h-3.5 w-3.5" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        update(
+                                                            "galleryImages",
+                                                            toList(form.galleryImages)
+                                                                .filter((item) => item !== url)
+                                                                .join("\n")
+                                                        )
+                                                    }
+                                                    className="rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-black/80"
+                                                    aria-label="Remove gallery image"
+                                                >
+                                                    <X className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <div className="md:col-span-2">
                         <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
