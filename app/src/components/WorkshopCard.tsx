@@ -66,6 +66,9 @@ export default function WorkshopCard({
     const [imageIndex, setImageIndex] = useState(0);
     const [imageLoaded, setImageLoaded] = useState(false);
     const [heartPopping, setHeartPopping] = useState(false);
+    // Cards adopt the cover image's own aspect ratio (5:4, 4:5, 1:1, ...) so the
+    // crop chosen at upload is reflected here. Defaults to 5:4 until measured.
+    const [coverAspect, setCoverAspect] = useState("5 / 4");
 
     const workshopDateTime = getWorkshopDateTime(workshop.date, workshop.time);
     const now = Date.now();
@@ -85,6 +88,22 @@ export default function WorkshopCard({
         const unique = Array.from(new Set(items));
         return unique.length ? unique : [workshop.coverImage];
     }, [workshop.coverImage, workshop.galleryImages]);
+
+    useEffect(() => {
+        const cover = imagePool[0];
+        if (!cover || typeof window === "undefined") return;
+        let cancelled = false;
+        const probe = new window.Image();
+        probe.onload = () => {
+            if (!cancelled && probe.naturalWidth && probe.naturalHeight) {
+                setCoverAspect(`${probe.naturalWidth} / ${probe.naturalHeight}`);
+            }
+        };
+        probe.src = cover;
+        return () => {
+            cancelled = true;
+        };
+    }, [imagePool]);
 
     const highlightedBadge = isPastWorkshop
         ? null
@@ -247,7 +266,8 @@ export default function WorkshopCard({
                 >
                     {/* Image */}
                     <div
-                        className={`relative overflow-hidden w-2/5 sm:w-full shrink-0 aspect-[5/4] bg-cream-100 ${!imageLoaded ? "animate-pulse" : ""}`}
+                        className={`relative overflow-hidden w-2/5 sm:w-full shrink-0 bg-cream-100 ${!imageLoaded ? "animate-pulse" : ""}`}
+                        style={{ aspectRatio: coverAspect }}
                     >
                         <Image
                             key={imagePool[isHovered ? imageIndex : 0]} // Force remount on source change to reset loading state if needed, but actually without key it might blink. Let's omit key to allow Next.js to swap it smoothly.

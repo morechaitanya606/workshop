@@ -8,6 +8,12 @@ import { getCroppedFile } from "@/lib/crop-image";
 
 const DEFAULT_ASPECT = 5 / 4;
 
+const ASPECT_OPTIONS: { label: string; value: number }[] = [
+    { label: "5:4", value: 5 / 4 },
+    { label: "4:5", value: 4 / 5 },
+    { label: "1:1", value: 1 },
+];
+
 type CropSource = { kind: "file"; file: File } | { kind: "url"; url: string };
 
 // Returns a same-origin src the canvas can read without cross-origin tainting.
@@ -39,20 +45,34 @@ function outputMimeFor(source: CropSource): "image/jpeg" | "image/png" {
 
 type CropperModalProps = {
     source: CropSource;
-    aspect: number;
+    defaultAspect: number;
     index: number;
     total: number;
     onApply: (file: File) => void;
     onCancel: () => void;
 };
 
-function ImageCropperModal({ source, aspect, index, total, onApply, onCancel }: CropperModalProps) {
+function ImageCropperModal({
+    source,
+    defaultAspect,
+    index,
+    total,
+    onApply,
+    onCancel,
+}: CropperModalProps) {
     const [src, setSrc] = useState("");
+    const [aspect, setAspect] = useState(defaultAspect);
     const [crop, setCrop] = useState({ x: 0, y: 0 });
     const [zoom, setZoom] = useState(1);
     const [areaPixels, setAreaPixels] = useState<Area | null>(null);
     const [processing, setProcessing] = useState(false);
     const [loadError, setLoadError] = useState(false);
+
+    const selectAspect = (value: number) => {
+        setAspect(value);
+        setCrop({ x: 0, y: 0 });
+        setZoom(1);
+    };
 
     useEffect(() => {
         setCrop({ x: 0, y: 0 });
@@ -133,6 +153,29 @@ function ImageCropperModal({ source, aspect, index, total, onApply, onCancel }: 
                     )}
                 </div>
 
+                <div className="flex items-center gap-2 px-4 pt-3">
+                    <span className="text-xs font-inter font-semibold uppercase tracking-wider text-dark-muted">
+                        Ratio
+                    </span>
+                    {ASPECT_OPTIONS.map((option) => {
+                        const active = Math.abs(aspect - option.value) < 0.001;
+                        return (
+                            <button
+                                key={option.label}
+                                type="button"
+                                onClick={() => selectAspect(option.value)}
+                                className={`rounded-lg border px-3 py-1 text-xs font-inter font-semibold transition-colors ${
+                                    active
+                                        ? "border-terracotta bg-terracotta/5 text-terracotta"
+                                        : "border-gray-200 text-dark-muted hover:border-gray-300"
+                                }`}
+                            >
+                                {option.label}
+                            </button>
+                        );
+                    })}
+                </div>
+
                 <div className="flex items-center gap-3 px-4 py-3">
                     <span className="text-xs font-inter font-semibold uppercase tracking-wider text-dark-muted">
                         Zoom
@@ -178,7 +221,7 @@ function ImageCropperModal({ source, aspect, index, total, onApply, onCancel }: 
  * files (`cropImages`) and re-cropping an already-uploaded image by URL
  * (`cropExistingImage`). Render `cropperElement` once in the page.
  */
-export function useImageCropper(aspect: number = DEFAULT_ASPECT) {
+export function useImageCropper(defaultAspect: number = DEFAULT_ASPECT) {
     const [queue, setQueue] = useState<CropSource[]>([]);
     const [index, setIndex] = useState(0);
     const resultsRef = useRef<File[]>([]);
@@ -242,7 +285,7 @@ export function useImageCropper(aspect: number = DEFAULT_ASPECT) {
         <ImageCropperModal
             key={index}
             source={current}
-            aspect={aspect}
+            defaultAspect={defaultAspect}
             index={index}
             total={queue.length}
             onApply={handleApply}

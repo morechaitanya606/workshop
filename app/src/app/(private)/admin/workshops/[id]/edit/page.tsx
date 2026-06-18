@@ -248,7 +248,7 @@ export default function AdminEditWorkshopPage() {
         if (!session?.access_token) {
             throw new Error("Your session expired. Please log in again.");
         }
-        const result = await uploadMedia(session.access_token, file, { crop: "5:4" });
+        const result = await uploadMedia(session.access_token, file);
         return String(result.url || "");
     };
 
