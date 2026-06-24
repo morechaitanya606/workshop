@@ -153,7 +153,7 @@ export async function POST(request: Request) {
         return jsonError("Event header does not match payload event.", 400);
     }
 
-    const claimed = claimIdempotencyKey(RECEIVER_SCOPE, idempotencyKey, RECEIVER_TTL_MS);
+    const claimed = await claimIdempotencyKey(RECEIVER_SCOPE, idempotencyKey, RECEIVER_TTL_MS);
     if (!claimed) {
         return NextResponse.json({ received: true, duplicate: true });
     }

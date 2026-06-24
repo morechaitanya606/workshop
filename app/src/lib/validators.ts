@@ -295,6 +295,15 @@ export const supportChatRequestSchema = z.object({
 
 export type SupportChatRequestInput = z.infer<typeof supportChatRequestSchema>;
 
+export const supportTicketCreateSchema = z.object({
+    subject: z.string().trim().min(3).max(180),
+    description: z.string().trim().min(10).max(4000),
+    email: z.string().trim().email().max(320),
+    workshopId: z.string().trim().max(120).optional().default(""),
+});
+
+export type SupportTicketCreateInput = z.infer<typeof supportTicketCreateSchema>;
+
 export const supportTicketStatusSchema = z.object({
     status: z.enum(["open", "in_progress", "resolved"]),
 });

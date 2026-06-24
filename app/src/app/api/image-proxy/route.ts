@@ -16,11 +16,76 @@ const ALLOWED_HOST_SUFFIXES = [
 ];
 
 const MAX_BYTES = 25 * 1024 * 1024;
+const MAX_REDIRECTS = 3;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 function isAllowedHost(hostname: string) {
     const host = hostname.toLowerCase();
     if (ALLOWED_HOSTS.has(host)) return true;
     return ALLOWED_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+}
+
+function isAllowedImageUrl(url: URL) {
+    return url.protocol === "https:" && isAllowedHost(url.hostname);
+}
+
+async function fetchAllowedImage(initialUrl: URL) {
+    let currentUrl = initialUrl;
+
+    for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
+        const response = await fetch(currentUrl.toString(), { redirect: "manual" });
+        if (!REDIRECT_STATUSES.has(response.status)) {
+            return response;
+        }
+
+        const location = response.headers.get("location");
+        if (!location) {
+            return response;
+        }
+
+        const nextUrl = new URL(location, currentUrl);
+        if (!isAllowedImageUrl(nextUrl)) {
+            throw new Error("DISALLOWED_REDIRECT");
+        }
+
+        currentUrl = nextUrl;
+    }
+
+    throw new Error("TOO_MANY_REDIRECTS");
+}
+
+async function readLimitedResponseBuffer(response: Response) {
+    const contentLength = Number(response.headers.get("content-length") || "");
+    if (Number.isFinite(contentLength) && contentLength > MAX_BYTES) {
+        throw new Error("IMAGE_TOO_LARGE");
+    }
+
+    if (!response.body) {
+        const buffer = Buffer.from(await response.arrayBuffer());
+        if (buffer.byteLength > MAX_BYTES) {
+            throw new Error("IMAGE_TOO_LARGE");
+        }
+        return buffer;
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        totalBytes += value.byteLength;
+        if (totalBytes > MAX_BYTES) {
+            await reader.cancel();
+            throw new Error("IMAGE_TOO_LARGE");
+        }
+
+        chunks.push(Buffer.from(value));
+    }
+
+    return Buffer.concat(chunks, totalBytes);
 }
 
 export async function GET(request: NextRequest) {
@@ -36,14 +101,23 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Invalid url." }, { status: 400 });
     }
 
-    if (parsed.protocol !== "https:" || !isAllowedHost(parsed.hostname)) {
+    if (!isAllowedImageUrl(parsed)) {
         return NextResponse.json({ error: "Image host not allowed." }, { status: 400 });
     }
 
     let upstream: Response;
     try {
-        upstream = await fetch(parsed.toString(), { redirect: "follow" });
-    } catch {
+        upstream = await fetchAllowedImage(parsed);
+    } catch (error) {
+        if (error instanceof Error && error.message === "DISALLOWED_REDIRECT") {
+            return NextResponse.json(
+                { error: "Image redirect host not allowed." },
+                { status: 400 }
+            );
+        }
+        if (error instanceof Error && error.message === "TOO_MANY_REDIRECTS") {
+            return NextResponse.json({ error: "Too many image redirects." }, { status: 400 });
+        }
         return NextResponse.json({ error: "Failed to fetch image." }, { status: 502 });
     }
 
@@ -52,7 +126,16 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Upstream is not a valid image." }, { status: 502 });
     }
 
-    const buffer = Buffer.from(await upstream.arrayBuffer());
+    let buffer: Buffer;
+    try {
+        buffer = await readLimitedResponseBuffer(upstream);
+    } catch (error) {
+        if (error instanceof Error && error.message === "IMAGE_TOO_LARGE") {
+            return NextResponse.json({ error: "Image is too large to crop." }, { status: 413 });
+        }
+        return NextResponse.json({ error: "Failed to read image." }, { status: 502 });
+    }
+
     if (buffer.byteLength > MAX_BYTES) {
         return NextResponse.json({ error: "Image is too large to crop." }, { status: 413 });
     }

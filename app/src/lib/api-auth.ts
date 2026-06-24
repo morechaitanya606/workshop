@@ -37,7 +37,7 @@ function isDevAuthFallbackEnabled() {
         return false;
     }
 
-    return process.env.ENABLE_DEV_AUTH_FALLBACK !== "false";
+    return process.env.ENABLE_DEV_AUTH_FALLBACK === "true";
 }
 
 function getBearerToken(request: NextRequest) {

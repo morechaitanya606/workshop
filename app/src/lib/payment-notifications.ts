@@ -40,7 +40,11 @@ export async function sendPaymentNotification(payload: NotificationPayload) {
         return { sent: false as const, reason: "not_configured" as const };
     }
 
-    const claimed = claimIdempotencyKey(NOTIFICATION_SCOPE, payload.idempotencyKey, DEFAULT_TTL_MS);
+    const claimed = await claimIdempotencyKey(
+        NOTIFICATION_SCOPE,
+        payload.idempotencyKey,
+        DEFAULT_TTL_MS
+    );
     if (!claimed) {
         return { sent: false as const, reason: "duplicate" as const };
     }

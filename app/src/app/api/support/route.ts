@@ -2,8 +2,11 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireHostOrAdmin } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
+import { parseBody } from "@/lib/api-route";
 import type { Database } from "@/lib/database.types";
+import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { createSupabaseAnonServerClient } from "@/lib/supabase-server";
+import { supportTicketCreateSchema } from "@/lib/validators";
 import * as Sentry from "@sentry/nextjs";
 
 type SupportTicketRow = Database["public"]["Tables"]["support_tickets"]["Row"];
@@ -139,7 +142,9 @@ export async function GET(request: NextRequest) {
         if (ticketIds.length > 0) {
             const { data: replies, error: repliesError } = await service.client
                 .from("support_ticket_replies")
-                .select("id, ticket_id, message, author_role, author_user_id, created_at, updated_at")
+                .select(
+                    "id, ticket_id, message, author_role, author_user_id, created_at, updated_at"
+                )
                 .in("ticket_id", ticketIds)
                 .order("created_at", { ascending: true });
 
@@ -148,15 +153,12 @@ export async function GET(request: NextRequest) {
                     throw repliesError;
                 }
             } else {
-                repliesByTicketId = (Array.isArray(replies) ? replies : []).reduce(
-                    (map, reply) => {
-                        const current = map.get(reply.ticket_id) || [];
-                        current.push(reply as SupportReplyRow);
-                        map.set(reply.ticket_id, current);
-                        return map;
-                    },
-                    new Map<string, SupportReplyRow[]>()
-                );
+                repliesByTicketId = (Array.isArray(replies) ? replies : []).reduce((map, reply) => {
+                    const current = map.get(reply.ticket_id) || [];
+                    current.push(reply as SupportReplyRow);
+                    map.set(reply.ticket_id, current);
+                    return map;
+                }, new Map<string, SupportReplyRow[]>());
             }
         }
 
@@ -186,21 +188,36 @@ export async function GET(request: NextRequest) {
     }
 }
 
-export async function POST(request: Request) {
-    try {
-        const body = await request.json();
-        const { subject, description, email, userId, workshopId } = body;
+export async function POST(request: NextRequest) {
+    const rateLimitResult = await assertRateLimit({
+        key: getRateLimitKey(request, "support-ticket-create"),
+        limit: 10,
+        windowMs: 10 * 60_000,
+        message: "Too many support requests. Please wait a few minutes and try again.",
+    });
+    if (!rateLimitResult.ok) {
+        return rateLimitResult.response;
+    }
 
-        if (!subject || !description || !email) {
-            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-        }
+    const parsed = await parseBody(
+        request,
+        supportTicketCreateSchema,
+        "Invalid JSON payload.",
+        "Support ticket request is invalid."
+    );
+    if (!parsed.ok) {
+        return parsed.response;
+    }
+
+    try {
+        const { subject, description, email, workshopId } = parsed.data;
 
         const service = requireSupabaseService();
         const supabase = service.ok ? service.client : createSupabaseAnonServerClient();
 
         const { error } = await supabase.from("support_tickets").insert([
             {
-                user_id: userId || null,
+                user_id: null,
                 email,
                 subject,
                 description,

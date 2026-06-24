@@ -189,6 +189,7 @@ export async function resolveChatbotClient(
         clientApiKey?: string | null;
         clientId?: string | null;
         contextWorkshopId?: string | null;
+        allowClientIdLookup?: boolean;
     }
 ): Promise<ResolvedChatbotClient> {
     if (options.clientApiKey?.trim()) {
@@ -201,6 +202,14 @@ export async function resolveChatbotClient(
     }
 
     if (options.clientId?.trim()) {
+        if (!options.allowClientIdLookup) {
+            return {
+                client: null,
+                explicitLookupFailed: true,
+                source: "client_id",
+            };
+        }
+
         const client = await getChatbotClientById(serviceClient, options.clientId.trim());
         return {
             client,

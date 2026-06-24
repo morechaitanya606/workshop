@@ -13,6 +13,7 @@ import {
 } from "@/lib/image-conversion";
 
 const DEFAULT_BUCKET = "uploads";
+const ALLOWED_UPLOAD_BUCKETS = new Set([DEFAULT_BUCKET]);
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 60 * 10;
 const UPLOAD_TYPE_ERROR_MESSAGE =
     "Invalid file type. Allowed: image files (JPEG, PNG, WebP, GIF, AVIF, HEIC/HEIF, BMP, TIFF, SVG, ICO, JP2, JXL, RAW) and videos (MP4, WebM, MOV, M4V).";
@@ -206,6 +207,10 @@ export async function POST(request: NextRequest) {
 
         if (!file) {
             return jsonError("No file provided.", 400);
+        }
+
+        if (!ALLOWED_UPLOAD_BUCKETS.has(bucket)) {
+            return jsonError("Upload bucket is not allowed.", 400);
         }
 
         const fileInfo = getUploadFileInfo(file);
