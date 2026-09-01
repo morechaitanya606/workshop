@@ -12,7 +12,7 @@ env:
 
 jobs:
     deploy-preview:
-        if: github.event_name == 'workflow_dispatch' || github.ref != 'refs/heads/main'
+        if: (github.event_name == 'workflow_dispatch' || github.ref != 'refs/heads/main') && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
         runs-on: ubuntu-latest
         defaults:
             run:
@@ -39,7 +39,7 @@ jobs:
               run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
 
     deploy-production:
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
         runs-on: ubuntu-latest
         defaults:
             run:
