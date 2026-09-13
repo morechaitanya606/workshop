@@ -273,19 +273,23 @@ export function getMissingProductionEnvVars() {
     if (!env.RAZORPAY_KEY_SECRET) {
         missing.push("RAZORPAY_KEY_SECRET");
     }
-    // Without these two the app boots clean and then fails silently at runtime: every
-    // Razorpay webhook 500s on a missing secret, and no transactional mail is ever sent.
-    if (!env.RAZORPAY_WEBHOOK_SECRET) {
-        missing.push("RAZORPAY_WEBHOOK_SECRET");
-    }
-    if (!env.RESEND_API_KEY) {
-        missing.push("RESEND_API_KEY");
-    }
-    // The two below are needed by the live deployment, never by the build, and a preview
-    // environment legitimately does without them -- so they are required only where they
-    // actually matter. Demanding them of every production-MODE build blocked preview deploys
-    // outright while proving nothing about production.
+    // Everything below is needed by the LIVE deployment and never by the build, so it is
+    // required only where it actually matters. Demanding it of every production-MODE build
+    // blocks preview and branch deploys -- Vercel builds those with NODE_ENV=production too --
+    // while proving nothing about production. Each of these failed a preview deploy in turn.
+    //
+    // What stays unconditional above: the NEXT_PUBLIC_* values, which are baked into the
+    // client bundle, and the credentials used while prerendering. A preview genuinely cannot
+    // build without those.
     if (isProductionDeployment()) {
+        // Without these two the app boots clean and then fails silently at runtime: every
+        // Razorpay webhook 500s on a missing secret, and no transactional mail is ever sent.
+        if (!env.RAZORPAY_WEBHOOK_SECRET) {
+            missing.push("RAZORPAY_WEBHOOK_SECRET");
+        }
+        if (!env.RESEND_API_KEY) {
+            missing.push("RESEND_API_KEY");
+        }
         // Without a shared counter store, every guarded route falls back to a per-instance
         // Map. On Vercel that multiplies every limit by the number of live lambdas, so "20
         // holds per minute" becomes unbounded -- the seat-griefing and card-testing limits
