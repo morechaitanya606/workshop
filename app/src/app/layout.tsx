@@ -7,6 +7,7 @@ import ToastProvider from "@/components/ToastProvider";
 import { AuthProvider } from "@/lib/auth-context";
 import { getAppUrl } from "@/lib/env";
 import { PlatformSettingsProvider } from "@/lib/platform-settings-context";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const chunkLoadRecoveryScript = `
 (() => {
@@ -126,6 +127,7 @@ export default function RootLayout({
                         </ToastProvider>
                     </AnalyticsProvider>
                 </MotionProvider>
+                <SpeedInsights />
             </body>
         </html>
     );
