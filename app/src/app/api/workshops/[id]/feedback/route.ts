@@ -23,10 +23,7 @@ function isWorkshopPast(date: string, time: string | null) {
     return workshopDateTime.getTime() < Date.now();
 }
 
-export async function GET(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -98,10 +95,7 @@ export async function GET(
     }
 }
 
-export async function POST(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -190,9 +184,11 @@ export async function POST(
             return jsonError("Unable to save feedback.", 500, saveError);
         }
 
+        // Reviews now land unpublished and pass through the admin gate in
+        // /api/admin/feedback/[id], so say so rather than implying this is already live.
         return NextResponse.json({
             feedback: saved as FeedbackRow,
-            message: "Thanks for sharing your feedback.",
+            message: "Thanks for sharing your feedback. It will appear once reviewed.",
         });
     } catch (error) {
         return jsonError("Unable to save feedback.", 500, String(error));

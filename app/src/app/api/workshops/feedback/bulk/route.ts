@@ -5,12 +5,16 @@ import { requireSupabaseService } from "@/lib/api-helpers";
 import { parseBody } from "@/lib/api-route";
 import { z } from "zod";
 import { isMissingFeedbackTableError } from "@/lib/feedback-fallback";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const bulkFeedbackSchema = z.object({
     workshopIds: z.array(z.string()).max(100),
 });
 
 export async function POST(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "expensive", "api-feedback-bulk");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;

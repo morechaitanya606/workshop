@@ -58,8 +58,6 @@ export async function POST(request: NextRequest, { params }: Params) {
 
                 revalidatePath(`/admin/workshops`);
                 revalidatePath(`/admin/workshops/${id}`);
-                revalidatePath(`/workshops`);
-                revalidatePath(`/workshops/${id}`);
 
                 return NextResponse.json({
                     workshop: mapWorkshopRowToWorkshop(fallback.data),
@@ -76,8 +74,9 @@ export async function POST(request: NextRequest, { params }: Params) {
         revalidatePath(`/admin/workshops`);
         revalidatePath(`/admin/workshops/${id}`);
         revalidatePath(`/workshop/${id}`);
-        revalidatePath(`/workshops`);
-        revalidatePath(`/workshops/${id}`);
+        // Public listing surfaces that actually exist in this app.
+        revalidatePath("/explore");
+        revalidatePath("/");
 
         return NextResponse.json({
             workshop: mapWorkshopRowToWorkshop(data),

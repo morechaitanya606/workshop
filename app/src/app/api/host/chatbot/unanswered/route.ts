@@ -4,8 +4,12 @@ import { handleApiError } from "@/lib/api-route";
 import { requireHostOrAdmin } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { getOrCreateHostChatbotClient } from "@/lib/chatbot-clients";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "publicRead", "api-host-chatbot-unanswered");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {
         return auth.response;

@@ -12,6 +12,7 @@ const publicEnvSchema = z.object({
     NEXT_PUBLIC_POSTHOG_KEY: nonEmpty.optional(),
     NEXT_PUBLIC_POSTHOG_HOST: z.string().url().optional(),
     NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
+    NEXT_PUBLIC_MEDIA_BASE_URL: z.string().url().optional(),
 });
 
 const serverEnvSchema = z.object({
@@ -32,6 +33,7 @@ const serverEnvSchema = z.object({
     UPSTASH_REDIS_REST_URL: z.string().url().optional(),
     UPSTASH_REDIS_REST_TOKEN: nonEmpty.optional(),
     SENTRY_DSN: z.string().url().optional(),
+    CRON_SECRET: nonEmpty.optional(),
 });
 
 function parseOrThrow<T>(schema: z.ZodSchema<T>, raw: unknown, label: string) {
@@ -57,6 +59,7 @@ export const publicEnv = parseOrThrow(
         NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
         NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
         NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+        NEXT_PUBLIC_MEDIA_BASE_URL: process.env.NEXT_PUBLIC_MEDIA_BASE_URL,
     },
     "public env"
 );
@@ -82,6 +85,7 @@ export const env = parseOrThrow(
         UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
         UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
         SENTRY_DSN: process.env.SENTRY_DSN,
+        CRON_SECRET: process.env.CRON_SECRET,
     },
     "server env"
 );
@@ -251,6 +255,25 @@ export function getMissingProductionEnvVars() {
     }
     if (!env.RAZORPAY_KEY_SECRET) {
         missing.push("RAZORPAY_KEY_SECRET");
+    }
+    // Without these two the app boots clean and then fails silently at runtime: every
+    // Razorpay webhook 500s on a missing secret, and no transactional mail is ever sent.
+    if (!env.RAZORPAY_WEBHOOK_SECRET) {
+        missing.push("RAZORPAY_WEBHOOK_SECRET");
+    }
+    if (!env.RESEND_API_KEY) {
+        missing.push("RESEND_API_KEY");
+    }
+    // Without a shared counter store, every guarded route falls back to a per-instance Map.
+    // On Vercel that multiplies every limit by the number of live lambdas, so "20 holds per
+    // minute" becomes unbounded — the seat-griefing and card-testing limits are decorative.
+    if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
+        missing.push("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN");
+    }
+    // /api/cron/emails refuses to run in production without it, so an unset CRON_SECRET is a
+    // silently dead reminder-and-feedback pipeline that nothing else reports.
+    if (!env.CRON_SECRET) {
+        missing.push("CRON_SECRET");
     }
 
     return missing;

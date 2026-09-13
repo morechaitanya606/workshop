@@ -228,7 +228,7 @@ describe("POST /api/upload", () => {
         );
     });
 
-    it("stores the original HEIC file when conversion fails", async () => {
+    it("rejects the upload when conversion fails instead of storing the original", async () => {
         heicConvertMock.convert.mockRejectedValueOnce(new Error("unsupported HEIC payload"));
         const upload = vi.fn().mockResolvedValue({ error: { message: "Bucket not found" } });
         const serviceClient = {
@@ -266,8 +266,11 @@ describe("POST /api/upload", () => {
         const response = await POST(request);
         const body = await response.json();
 
-        expect(response.status).toBe(200);
-        expect(body.url).toMatch(/^\/uploads\/uploads\/user-1\/.+\.heic$/);
+        // Persisting bytes sharp could not decode meant an unverified payload was stored
+        // under a caller-influenced content type. Unprocessable input is now refused.
+        expect(response.status).toBe(400);
+        expect(body.error).toMatch(/could not be processed/i);
+        expect(upload).not.toHaveBeenCalled();
     });
 
     it("converts non-standard image formats (e.g. WebP) to JPEG", async () => {
@@ -378,7 +381,7 @@ describe("POST /api/upload", () => {
 
         expect(response.status).toBe(400);
         expect(body.error).toBe(
-            "Invalid file type. Allowed: image files (JPEG, PNG, WebP, GIF, AVIF, HEIC/HEIF, BMP, TIFF, SVG, ICO, JP2, JXL, RAW) and videos (MP4, WebM, MOV, M4V)."
+            "Invalid file type. Allowed: image files (JPEG, PNG, WebP, GIF, AVIF, HEIC/HEIF, BMP, TIFF, ICO, JP2, JXL, RAW) and videos (MP4, WebM, MOV, M4V)."
         );
         expect(serviceClient.storage.from).not.toHaveBeenCalled();
     });

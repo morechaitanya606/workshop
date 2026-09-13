@@ -8,7 +8,11 @@ import {
     SUPPORT_CHAT_POLICY,
 } from "@/lib/support-chat-config";
 import { warnDevFallback } from "@/lib/dev-warnings";
-import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
+import {
+    createSupabaseServiceClient,
+    isSupabaseServiceConfigured,
+    type SupabaseServerClient,
+} from "@/lib/supabase-server";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
 
@@ -139,7 +143,7 @@ const STOPWORDS = new Set([
 let workshopCache: WorkshopCacheEntry | null = null;
 
 async function loadLiveSupportChatWorkshopRows(
-    serviceClient: ReturnType<typeof createSupabaseServiceClient>,
+    serviceClient: SupabaseServerClient,
     includeApprovalFilter = true
 ) {
     let query = serviceClient.from("workshops").select("*");

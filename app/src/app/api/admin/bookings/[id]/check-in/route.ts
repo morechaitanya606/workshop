@@ -4,6 +4,7 @@ import { z } from "zod";
 import { handleApiError } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { requireAdminUser } from "@/lib/api-auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const checkInSchema = z.object({
     attended: z.boolean(),
@@ -32,6 +33,9 @@ function isMissingAttendedColumnError(error: unknown) {
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
+    const limited = await enforceRateLimit(request, "write", "api-admin-checkin");
+    if (!limited.ok) return limited.response;
+
     const { id } = await params;
     const auth = await requireAdminUser(request);
     if (!auth.ok) {

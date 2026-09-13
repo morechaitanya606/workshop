@@ -1,15 +1,11 @@
+import type { NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { applyAuthCookies, getAuthAppOrigin } from "@/lib/auth-origin";
+import { applyAuthCookies, getAuthAppOrigin, sanitizeInternalRedirect } from "@/lib/auth-origin";
 import type { Database } from "@/lib/database.types";
 import { getPublicSupabaseConfig } from "@/lib/env";
-
-function sanitizeRedirect(raw: string | null): string {
-    if (!raw) return "/";
-    if (!raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return "/";
-    return raw;
-}
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 function redirectToLoginWithError(request: Request, next: string, errorMessage: string) {
     const loginUrl = new URL("/auth/login", getAuthAppOrigin(request));
@@ -18,10 +14,14 @@ function redirectToLoginWithError(request: Request, next: string, errorMessage: 
     return NextResponse.redirect(loginUrl);
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "auth", "api-auth-google");
+    if (!limited.ok) return limited.response;
+
     const requestUrl = new URL(request.url);
-    const next = sanitizeRedirect(
-        requestUrl.searchParams.get("next") || requestUrl.searchParams.get("redirect")
+    const next = sanitizeInternalRedirect(
+        requestUrl.searchParams.get("next") || requestUrl.searchParams.get("redirect"),
+        getAuthAppOrigin(request)
     );
     const supabasePublicConfig = getPublicSupabaseConfig();
 

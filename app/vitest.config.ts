@@ -19,6 +19,12 @@ export default defineConfig({
     resolve: {
         alias: {
             "@": fileURLToPath(new URL("./src", import.meta.url)),
+            // See src/test/server-only-stub.ts: the real package throws outside a
+            // react-server bundle, which would break every suite that reaches a
+            // server-guarded module.
+            "server-only": fileURLToPath(
+                new URL("./src/test/server-only-stub.ts", import.meta.url)
+            ),
         },
     },
 });

@@ -3,6 +3,7 @@ import { BookingConfirmationEmail } from "@/emails/BookingConfirmation";
 import { WorkshopReminderEmail } from "@/emails/WorkshopReminder";
 import { FeedbackRequestEmail } from "@/emails/FeedbackRequest";
 import { createSupabaseServiceClient } from "./supabase-server";
+import { claimIdempotencyKey, releaseIdempotencyKey } from "./idempotency";
 import * as Sentry from "@sentry/nextjs";
 
 const FROM_EMAIL = "Only Workshops <no-reply@updates.onlyworkshop.com>"; // Replace with verified domain
@@ -29,11 +30,56 @@ interface SendEmailParams {
     referenceId?: string;
 }
 
+const EMAIL_IDEMPOTENCY_SCOPE = "transactional-email";
+const EMAIL_IDEMPOTENCY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * One send per (template, reference).
+ *
+ * `email_delivery_logs` records what happened but gates nothing, so every caller that can run
+ * twice mails twice. The Razorpay webhook is exactly that caller: it releases its idempotency
+ * key and asks for a redelivery whenever processing fails partway, and Razorpay retries for up
+ * to 24 hours -- so a booking whose confirmation had already gone out got another copy on
+ * every retry.
+ *
+ * Fails OPEN, unlike the payment paths. A dedup store that is unreachable must not cost a
+ * customer their booking confirmation: a duplicate email is a far cheaper mistake than a
+ * missing one.
+ */
+async function claimEmailSend(templateName: string, referenceId?: string) {
+    if (!referenceId) {
+        return { claimed: true, key: null as string | null };
+    }
+
+    const key = `${templateName}:${referenceId}`;
+
+    try {
+        const claimed = await claimIdempotencyKey(
+            EMAIL_IDEMPOTENCY_SCOPE,
+            key,
+            EMAIL_IDEMPOTENCY_TTL_MS
+        );
+        return { claimed, key };
+    } catch (error) {
+        Sentry.captureException(error, {
+            level: "warning",
+            tags: { layer: "email", subsystem: "idempotency" },
+            extra: { key },
+        });
+        return { claimed: true, key: null as string | null };
+    }
+}
+
 /**
  * Robust wrapper to send email and log it to the database
  */
 async function sendEmailAndLog({ to, subject, templateName, react, referenceId }: SendEmailParams) {
     const supabase = createSupabaseServiceClient();
+
+    const emailClaim = await claimEmailSend(templateName, referenceId);
+    if (!emailClaim.claimed) {
+        return { success: true as const, skipped: true as const };
+    }
 
     // 1. Create a "pending" log entry
     const { data: logEntry, error: logError } = await supabase
@@ -103,6 +149,12 @@ async function sendEmailAndLog({ to, subject, templateName, react, referenceId }
                     error_message: errorMessage,
                 })
                 .eq("id", logEntry.id);
+        }
+
+        // The send failed, so let a retry try again rather than burning the claim on a mail
+        // that was never delivered.
+        if (emailClaim.key) {
+            await releaseIdempotencyKey(EMAIL_IDEMPOTENCY_SCOPE, emailClaim.key);
         }
 
         return { success: false, error: errorMessage };

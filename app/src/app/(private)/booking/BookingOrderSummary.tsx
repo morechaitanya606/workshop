@@ -76,15 +76,18 @@ export default function BookingOrderSummary({
                     <h4 className="font-playfair font-semibold text-dark text-sm leading-tight">
                         {workshop.title}
                     </h4>
-                    <div className="flex items-center gap-1 mt-1">
-                        <Star className="w-3 h-3 text-terracotta fill-terracotta" />
-                        <span className="text-xs font-inter font-semibold text-dark">
-                            {workshop.rating}
-                        </span>
-                        <span className="text-xs font-inter text-dark-muted">
-                            ({workshop.reviewCount})
-                        </span>
-                    </div>
+                    {/* Never show a filled star beside "0" on the payment page. */}
+                    {workshop.reviewCount > 0 && (
+                        <div className="flex items-center gap-1 mt-1">
+                            <Star className="w-3 h-3 text-terracotta fill-terracotta" />
+                            <span className="text-xs font-inter font-semibold text-dark">
+                                {workshop.rating}
+                            </span>
+                            <span className="text-xs font-inter text-dark-muted">
+                                ({workshop.reviewCount})
+                            </span>
+                        </div>
+                    )}
                 </div>
             </div>
 

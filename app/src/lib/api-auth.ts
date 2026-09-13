@@ -108,6 +108,43 @@ function buildFallbackUserFromToken(token: string): User | null {
     } as User;
 }
 
+/**
+ * Fields a caller is allowed to read back out of `details` in production.
+ *
+ * Nulling `details` wholesale kept Postgres text out of responses but also deleted the
+ * structured answers the UI renders -- the workshop page reads `details.availableSeats` to
+ * say "only 2 seats left", and every `code` branch in the client stopped matching. These
+ * keys are values the route computed for the caller, not internals that leaked into an
+ * error object, so they cross the boundary in every environment.
+ */
+const CLIENT_SAFE_ERROR_DETAIL_KEYS = [
+    "code",
+    "availableSeats",
+    "requestedSeats",
+    "cutoffHours",
+    "retryAfterSeconds",
+] as const;
+
+function toClientSafeDetails(details: unknown) {
+    if (process.env.NODE_ENV !== "production") {
+        return details ?? null;
+    }
+
+    if (!details || typeof details !== "object" || Array.isArray(details)) {
+        return null;
+    }
+
+    const source = details as Record<string, unknown>;
+    const safe: Record<string, unknown> = {};
+    for (const key of CLIENT_SAFE_ERROR_DETAIL_KEYS) {
+        if (source[key] !== undefined) {
+            safe[key] = source[key];
+        }
+    }
+
+    return Object.keys(safe).length > 0 ? safe : null;
+}
+
 export function jsonError(message: string, status = 400, details?: unknown) {
     if (status >= 500) {
         Sentry.captureMessage(message, {
@@ -117,10 +154,13 @@ export function jsonError(message: string, status = 400, details?: unknown) {
         });
     }
 
+    // Same rule as handleApiError in api-route.ts: internal detail goes to Sentry above,
+    // never to the caller. Postgres and GoTrue messages name columns, constraints and
+    // relations, which maps the schema for an attacker.
     return NextResponse.json(
         {
             error: message,
-            details: details ?? null,
+            details: toClientSafeDetails(details),
         },
         { status }
     );

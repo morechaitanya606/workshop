@@ -62,10 +62,17 @@ export default function WorkshopGallery({
                 <div className="bg-white/90 rounded-3xl shadow-card border border-white/40 backdrop-blur-sm p-2">
                     <div
                         className={`grid grid-cols-1 gap-2 rounded-2xl overflow-hidden ${
-                            hasThumbnails ? "sm:grid-cols-[2fr,1fr]" : ""
+                            // A 3-column grid with the main image spanning 2 gives the same 2:1
+                            // split as an arbitrary `[2fr_1fr]` value, without depending on
+                            // arbitrary-value syntax (`[2fr,1fr]` emitted invalid CSS that the
+                            // browser dropped, which silently content-sized the thumbnail column).
+                            hasThumbnails ? "sm:grid-cols-3 sm:grid-rows-2" : ""
                         }`}
                     >
-                        <div className="relative aspect-[16/9] min-h-[240px] sm:row-span-2 sm:min-h-[420px] ring-1 ring-white/50">
+                        {/* `w-full` is load-bearing: with `aspect-[16/9]` and `min-h-[240px]` but no width
+                            constraint, once min-height wins the aspect-ratio drives the WIDTH to
+                            427px inside a ~327px mobile column, overflowing the page horizontally. */}
+                        <div className="relative aspect-[16/9] w-full min-h-[240px] sm:col-span-2 sm:row-span-2 sm:min-h-[420px] ring-1 ring-white/50">
                             <Image
                                 src={activeImageSrc}
                                 alt={workshop.title}
@@ -94,10 +101,24 @@ export default function WorkshopGallery({
                             return (
                                 <div
                                     key={`${item.src}-${item.index}`}
-                                    className="hidden cursor-pointer rounded-xl border border-clay/40 bg-cream-100 p-1 transition-all hover:ring-2 hover:ring-terracotta/30 sm:block"
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label={`Show image ${item.index + 1} of ${workshop.title}`}
+                                    onKeyDown={(event) => {
+                                        if (event.key === "Enter" || event.key === " ") {
+                                            event.preventDefault();
+                                            setActiveImage(item.index);
+                                        }
+                                    }}
+                                    // `h-full` makes the thumbnail fill its grid row. Without it the
+                                    // fixed aspect ratio left dead cream space under each one, because
+                                    // the rows are sized by the main image spanning both of them.
+                                    className={`hidden h-full cursor-pointer rounded-xl border border-clay/40 bg-cream-100 p-1 transition-all hover:ring-2 hover:ring-terracotta/30 sm:block ${
+                                        visibleThumbnails.length === 1 ? "sm:row-span-2" : ""
+                                    }`}
                                     onClick={() => setActiveImage(item.index)}
                                 >
-                                    <div className="relative aspect-[4/3] overflow-hidden rounded-lg">
+                                    <div className="relative h-full min-h-[120px] overflow-hidden rounded-lg">
                                         <Image
                                             src={item.src}
                                             alt={`${workshop.title} ${item.index + 1}`}

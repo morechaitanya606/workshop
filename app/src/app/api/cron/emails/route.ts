@@ -77,11 +77,21 @@ export async function GET(request: Request) {
     const supabase = service.client;
 
     try {
-        // Fetch recently sent logs to avoid duplicate emails.
+        // Only rows that actually reached the provider count as sent. Previously any row
+        // matched - including status 'failed' and 'pending' - so a feedback request that
+        // failed to send was treated as delivered and never retried, which is why reviews
+        // never accumulated. The query was also unbounded over the whole table; it is now
+        // scoped to the window this run can act on.
+        const logLookbackStart = new Date(
+            Date.now() - (FEEDBACK_DELAY_HOURS + WORKSHOP_DURATION_HOURS + 24 * 30) * 60 * 60 * 1000
+        ).toISOString();
+
         const { data: sentLogs, error: logError } = await supabase
             .from("email_delivery_logs")
             .select("reference_id, template_name")
-            .in("template_name", ["WorkshopReminder", "FeedbackRequest"]);
+            .in("template_name", ["WorkshopReminder", "FeedbackRequest"])
+            .eq("status", "sent")
+            .gte("created_at", logLookbackStart);
 
         if (logError) {
             throw logError;
@@ -165,7 +175,12 @@ export async function GET(request: Request) {
             }
         );
 
-        await Promise.allSettled(jobs);
+        // Bound the fan-out. Previously every due booking fired a Resend call at once, which
+        // at scale exhausts sockets and the function's time budget and silently drops mail.
+        const EMAIL_CONCURRENCY = 5;
+        for (let index = 0; index < jobs.length; index += EMAIL_CONCURRENCY) {
+            await Promise.allSettled(jobs.slice(index, index + EMAIL_CONCURRENCY));
+        }
 
         return NextResponse.json({
             success: true,

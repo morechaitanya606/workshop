@@ -9,9 +9,11 @@ import type { Workshop } from "@/lib/data";
 import { cardReveal, standardTransition, useMotionProps } from "@/lib/motion-presets";
 import { formatDate } from "@/lib/utils";
 import { SectionHeader } from "@/components/home/HomeSectionShared";
+import PastEventsMarquee, { type PastEventImage } from "@/components/home/PastEventsMarquee";
 
 export default function PastEventHighlight({
     pastWorkshop,
+    pastEventImages,
     shouldReduceMotion,
     notifyState,
     pastNotifyLoading,
@@ -20,6 +22,7 @@ export default function PastEventHighlight({
     notifyMessageTone,
 }: {
     pastWorkshop: Workshop;
+    pastEventImages: PastEventImage[];
     shouldReduceMotion: boolean;
     notifyState: { similar: boolean; creator: boolean };
     pastNotifyLoading: "similar" | "creator" | null;
@@ -39,10 +42,20 @@ export default function PastEventHighlight({
                 href="/past-events"
                 reduceMotion={shouldReduceMotion}
             />
+            <PastEventsMarquee images={pastEventImages} shouldReduceMotion={shouldReduceMotion} />
             <motion.div
                 {...pastEventMotionProps}
-                className="bg-white border border-gray-100 rounded-3xl shadow-soft overflow-hidden hover-lift cursor-pointer"
+                className="bg-white border border-gray-100 rounded-3xl shadow-soft overflow-hidden hover-lift cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-terracotta"
+                role="link"
+                tabIndex={0}
+                aria-label={`View ${pastWorkshop.title}`}
                 onClick={() => router.push(`/workshop/${pastWorkshop.id}`)}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        router.push(`/workshop/${pastWorkshop.id}`);
+                    }
+                }}
             >
                 <div className="grid grid-cols-1 lg:grid-cols-[360px,1fr]">
                     <div className="relative min-h-[260px] lg:min-h-full">
@@ -66,21 +79,27 @@ export default function PastEventHighlight({
                             {pastWorkshop.location}, {pastWorkshop.city}
                         </p>
 
-                        <div className="bg-cream-100 rounded-2xl p-4 sm:p-5 border border-clay/40 mb-5">
-                            <p className="text-[11px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                Attendee Feedback
-                            </p>
-                            <p className="text-sm sm:text-base font-inter text-dark-secondary leading-relaxed">
-                                &ldquo;
-                                {pastWorkshop.feedbackHighlight ||
-                                    `Rated ${pastWorkshop.rating}/5 from ${pastWorkshop.reviewCount} reviews.`}
-                                &rdquo;
-                            </p>
-                            <p className="text-xs font-inter text-dark-muted mt-2">
-                                {pastWorkshop.feedbackAuthor ||
-                                    `${pastWorkshop.reviewCount} verified reviews`}
-                            </p>
-                        </div>
+                        {/* Don't advertise "Rated 0/5 from 0 reviews" on the homepage. */}
+                        {pastWorkshop.reviewCount > 0 && (
+                            <div className="bg-cream-100 rounded-2xl p-4 sm:p-5 border border-clay/40 mb-5">
+                                <p className="text-[11px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                                    Attendee Feedback
+                                </p>
+                                <p className="text-sm sm:text-base font-inter text-dark-secondary leading-relaxed">
+                                    {pastWorkshop.feedbackHighlight ? (
+                                        <>&ldquo;{pastWorkshop.feedbackHighlight}&rdquo;</>
+                                    ) : (
+                                        `Rated ${pastWorkshop.rating}/5 by attendees.`
+                                    )}
+                                </p>
+                                <p className="text-xs font-inter text-dark-muted mt-2">
+                                    {pastWorkshop.feedbackAuthor ||
+                                        `${pastWorkshop.reviewCount} verified ${
+                                            pastWorkshop.reviewCount === 1 ? "review" : "reviews"
+                                        }`}
+                                </p>
+                            </div>
+                        )}
 
                         <div className="flex flex-wrap gap-3">
                             <button

@@ -1,8 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase-server";
 import { requireAdminUser, jsonError } from "@/lib/api-auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "publicRead", "api-coupons-list");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireAdminUser(request);
     if (!auth.ok) return auth.response;
 
@@ -24,6 +28,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "write", "api-coupons-create");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireAdminUser(request);
     if (!auth.ok) return auth.response;
 

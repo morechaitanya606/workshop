@@ -97,7 +97,9 @@ export async function POST(request: NextRequest) {
 
         revalidatePath("/admin/workshops");
         revalidatePath(`/workshop/${data.id}`);
-        revalidatePath("/workshops");
+        // Public listing surfaces that actually exist in this app.
+        revalidatePath("/explore");
+        revalidatePath("/");
 
         return NextResponse.json(
             {

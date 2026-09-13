@@ -5,6 +5,7 @@ import { requireSupabaseService } from "@/lib/api-helpers";
 import type { SupabaseServerClient } from "@/lib/supabase-server";
 import { handleApiError, parseBody } from "@/lib/api-route";
 import { supportTicketReplySchema } from "@/lib/validators";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 type Params = {
     params: Promise<{ id: string }>;
@@ -63,6 +64,9 @@ async function hostCanAccessTicket(
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
+    const limited = await enforceRateLimit(request, "write", "api-support-reply");
+    if (!limited.ok) return limited.response;
+
     const { id } = await params;
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {

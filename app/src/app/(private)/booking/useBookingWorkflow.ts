@@ -18,6 +18,7 @@ import type {
     FormErrors,
     RazorpayOrderResponse,
 } from "./types";
+import { computeEarlyBirdDiscount } from "@/lib/booking-time";
 
 function parseTimestamp(value: string | null) {
     if (!value) return null;
@@ -155,38 +156,33 @@ export function useBookingWorkflow() {
         };
     }, [workshopId]);
 
-    const isEbActive =
-        Boolean(workshop?.earlyBirdEnabled) && (workshop?.earlyBirdDiscountValue || 0) > 0;
-    const workshopCreatedAt = workshop?.createdAt ? new Date(workshop.createdAt) : null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const daysSinceCreated = workshopCreatedAt
-        ? Math.ceil((today.getTime() - workshopCreatedAt.getTime()) / (1000 * 60 * 60 * 24))
-        : 999;
-    const isEbEligible =
-        isEbActive && daysSinceCreated <= (workshop?.earlyBirdDaysAfterListing || 0);
-
-    let earlyBirdDiscountTotal = 0;
-    if (isEbEligible && workshop) {
-        if (workshop.earlyBirdDiscountType === "percentage") {
-            earlyBirdDiscountTotal = Math.floor(
-                ((workshop.price || 0) * guests * (workshop.earlyBirdDiscountValue || 0)) / 100
-            );
-        } else {
-            earlyBirdDiscountTotal = (workshop.earlyBirdDiscountValue || 0) * guests;
-        }
-    }
+    // Shared with the checkout route so the quoted price and the server-side price cannot
+    // drift. Local-midnight day maths used to be off by one against the UTC-based SQL, which
+    // is exactly the class of mismatch that fails confirmation after capture.
+    const earlyBirdDiscountTotal = computeEarlyBirdDiscount({
+        price: workshop?.price || 0,
+        guests,
+        enabled: workshop?.earlyBirdEnabled,
+        discountType: workshop?.earlyBirdDiscountType,
+        discountValue: workshop?.earlyBirdDiscountValue,
+        daysAfterListing: workshop?.earlyBirdDaysAfterListing,
+        createdAt: workshop?.createdAt,
+    });
+    const isEbEligible = earlyBirdDiscountTotal > 0;
 
     const subtotalOriginal = (workshop?.price || 0) * guests;
     const subtotal = Math.max(0, subtotalOriginal - earlyBirdDiscountTotal);
 
     let discountAmount = 0;
     if (appliedCoupon) {
-        if (appliedCoupon.type === "percentage") {
-            discountAmount = subtotal * (appliedCoupon.discount / 100);
-        } else {
-            discountAmount = appliedCoupon.discount;
-        }
+        // Mirrors the server and the SQL exactly: multiply first, then round and clamp.
+        // Dividing first drifts by a rupee on some percentages, which would quote the buyer
+        // a total that differs from what is actually charged.
+        const rawDiscount =
+            appliedCoupon.type === "percentage"
+                ? (subtotal * Number(appliedCoupon.discount)) / 100
+                : Number(appliedCoupon.discount);
+        discountAmount = Math.min(subtotal, Math.max(0, Math.round(rawDiscount)));
     }
 
     const total = Math.max(0, subtotal - discountAmount) + serviceFee;

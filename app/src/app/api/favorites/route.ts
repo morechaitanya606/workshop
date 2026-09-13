@@ -5,18 +5,33 @@ import { handleApiError, parseBody } from "@/lib/api-route";
 import { requireAuthenticatedUser } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
+import type { SupabaseServerClient } from "@/lib/supabase-server";
 
 const favoritesBodySchema = z.object({
     workshopId: z.string().trim().min(1).max(120),
 });
 
-const memoryFavorites = new Map<string, Set<string>>();
+/**
+ * There is no in-memory fallback here any more.
+ *
+ * `public.user_favorites` has existed since 20260308_platform_hardening, so the Map this
+ * route used to fall back to was never a compatibility shim — it was a per-lambda store on a
+ * serverless platform. A write landed on one instance and the next read hit another, so
+ * wishlists appeared and disappeared at random, and because every failure fell through to it
+ * silently, a genuinely broken database read back as a simply-empty wishlist. Surfacing the
+ * error is the only honest answer.
+ */
+async function loadFavorites(serviceClient: SupabaseServerClient, userId: string) {
+    const { data, error } = await serviceClient
+        .from("user_favorites" as any)
+        .select("workshop_id")
+        .eq("user_id", userId);
 
-function getMemoryFavorites(userId: string) {
-    if (!memoryFavorites.has(userId)) {
-        memoryFavorites.set(userId, new Set<string>());
-    }
-    return memoryFavorites.get(userId)!;
+    if (error) throw error;
+
+    return (Array.isArray(data) ? data : [])
+        .map((item: any) => String(item.workshop_id || ""))
+        .filter(Boolean);
 }
 
 async function assertFavoritesWriteLimit(request: NextRequest, userId: string) {
@@ -35,31 +50,18 @@ export async function GET(request: NextRequest) {
     }
 
     const service = requireSupabaseService();
-    if (service.ok) {
-        try {
-            const serviceClient = service.client;
-            const { data, error } = await serviceClient
-                .from("user_favorites" as any)
-                .select("workshop_id")
-                .eq("user_id", auth.user.id);
-
-            if (!error && Array.isArray(data)) {
-                return NextResponse.json({
-                    favorites: data
-                        .map((item: any) => String(item.workshop_id || ""))
-                        .filter(Boolean),
-                    source: "supabase",
-                });
-            }
-        } catch {
-            // fallback to in-memory below
-        }
+    if (!service.ok) {
+        return service.response;
     }
 
-    return NextResponse.json({
-        favorites: Array.from(getMemoryFavorites(auth.user.id)),
-        source: "memory",
-    });
+    try {
+        return NextResponse.json({
+            favorites: await loadFavorites(service.client, auth.user.id),
+            source: "supabase",
+        });
+    } catch (error) {
+        return handleApiError("Failed to load your wishlist.", error);
+    }
 }
 
 export async function POST(request: NextRequest) {
@@ -84,40 +86,28 @@ export async function POST(request: NextRequest) {
     }
 
     const service = requireSupabaseService();
-    if (service.ok) {
-        try {
-            const serviceClient = service.client;
-            const { error } = await serviceClient.from("user_favorites" as any).upsert(
-                {
-                    user_id: auth.user.id,
-                    workshop_id: parsed.data.workshopId,
-                },
-                { onConflict: "user_id,workshop_id" }
-            );
-
-            if (!error) {
-                const { data } = await serviceClient
-                    .from("user_favorites" as any)
-                    .select("workshop_id")
-                    .eq("user_id", auth.user.id);
-                return NextResponse.json({
-                    favorites: (data || [])
-                        .map((item: any) => String(item.workshop_id || ""))
-                        .filter(Boolean),
-                    source: "supabase",
-                });
-            }
-        } catch {
-            // fallback to in-memory below
-        }
+    if (!service.ok) {
+        return service.response;
     }
 
-    const userFavorites = getMemoryFavorites(auth.user.id);
-    userFavorites.add(parsed.data.workshopId);
-    return NextResponse.json({
-        favorites: Array.from(userFavorites),
-        source: "memory",
-    });
+    try {
+        const { error } = await service.client.from("user_favorites" as any).upsert(
+            {
+                user_id: auth.user.id,
+                workshop_id: parsed.data.workshopId,
+            },
+            { onConflict: "user_id,workshop_id" }
+        );
+
+        if (error) throw error;
+
+        return NextResponse.json({
+            favorites: await loadFavorites(service.client, auth.user.id),
+            source: "supabase",
+        });
+    } catch (error) {
+        return handleApiError("Failed to save favorite.", error);
+    }
 }
 
 export async function DELETE(request: NextRequest) {
@@ -142,37 +132,24 @@ export async function DELETE(request: NextRequest) {
     }
 
     const service = requireSupabaseService();
-    if (service.ok) {
-        try {
-            const serviceClient = service.client;
-            const { error } = await serviceClient
-                .from("user_favorites" as any)
-                .delete()
-                .eq("user_id", auth.user.id)
-                .eq("workshop_id", parsed.data.workshopId);
-
-            if (!error) {
-                const { data } = await serviceClient
-                    .from("user_favorites" as any)
-                    .select("workshop_id")
-                    .eq("user_id", auth.user.id);
-
-                return NextResponse.json({
-                    favorites: (data || [])
-                        .map((item: any) => String(item.workshop_id || ""))
-                        .filter(Boolean),
-                    source: "supabase",
-                });
-            }
-        } catch (error) {
-            return handleApiError("Failed to remove favorite.", error);
-        }
+    if (!service.ok) {
+        return service.response;
     }
 
-    const userFavorites = getMemoryFavorites(auth.user.id);
-    userFavorites.delete(parsed.data.workshopId);
-    return NextResponse.json({
-        favorites: Array.from(userFavorites),
-        source: "memory",
-    });
+    try {
+        const { error } = await service.client
+            .from("user_favorites" as any)
+            .delete()
+            .eq("user_id", auth.user.id)
+            .eq("workshop_id", parsed.data.workshopId);
+
+        if (error) throw error;
+
+        return NextResponse.json({
+            favorites: await loadFavorites(service.client, auth.user.id),
+            source: "supabase",
+        });
+    } catch (error) {
+        return handleApiError("Failed to remove favorite.", error);
+    }
 }

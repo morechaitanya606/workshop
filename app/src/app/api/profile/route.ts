@@ -5,6 +5,7 @@ import { requireAuthenticatedUser, jsonError, ensureUserProfile } from "@/lib/ap
 import { parseBody } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { profileUpdateSchema } from "@/lib/validators";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 type ProfilePayload = {
     fullName: string | null;
@@ -65,6 +66,9 @@ function buildProfilePayload(
 }
 
 export async function GET(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "publicRead", "api-profile-get");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -107,6 +111,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "write", "api-profile-update");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;

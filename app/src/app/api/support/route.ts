@@ -229,14 +229,23 @@ export async function POST(request: NextRequest) {
         ]);
 
         if (error) {
+            // Answering 200 here told the customer their ticket was filed and then dropped it.
+            // A support form is the channel someone reaches for when something else has already
+            // gone wrong -- a payment, a booking -- so a silent loss there is the worst possible
+            // place to be optimistic. Fail loudly and let them use another channel.
             Sentry.captureException(error, {
-                level: "warning",
+                level: "error",
                 tags: { layer: "api", route: "support_tickets_post" },
                 extra: { message: error.message },
             });
-            // In a real production app, we would throw or return error.
-            // For now, we return 200 so the UI can show success, assuming
-            // the user will create the table later.
+
+            return NextResponse.json(
+                {
+                    error: "We could not file your support request. Please email us directly.",
+                    success: false,
+                },
+                { status: 500 }
+            );
         }
 
         return NextResponse.json({ success: true }, { status: 200 });

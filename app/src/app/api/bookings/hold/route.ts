@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { handleApiError, parseBody } from "@/lib/api-route";
 import { jsonError, requireAuthenticatedUser } from "@/lib/api-auth";
 import { bookingHoldSchema } from "@/lib/validators";
@@ -13,6 +14,67 @@ import {
 } from "@/lib/workshop-approval-compat";
 
 const HOLD_DURATION_MINUTES = 15;
+
+/**
+ * True only when the RPC itself is not installed -- never when it ran and raised.
+ *
+ * Treating every RPC error as "not installed" sent business rejections AND transient
+ * failures down the read-then-insert fallback below. That fallback has no lock between
+ * the seat check and the insert, so under the very lock contention that produces those
+ * transient errors, concurrent requests all read the same `seats_remaining` and all
+ * succeed: a guaranteed oversell at exactly peak load.
+ */
+function isMissingHoldRpc(error: { code?: string; message?: string } | null) {
+    if (!error) return false;
+    if (error.code === "PGRST202") return true;
+
+    const message = (error.message || "").toLowerCase();
+    return (
+        message.includes("could not find the function") ||
+        (message.includes("create_booking_hold") && message.includes("schema cache"))
+    );
+}
+
+/** Maps an RPC exception onto the same response shape the fallback path produced. */
+function holdRpcErrorResponse(error: { message?: string }) {
+    const message = error.message || "";
+
+    if (message.includes("INSUFFICIENT_SEATS")) {
+        // create_booking_hold raises 'INSUFFICIENT_SEATS:<remaining>'. Older deployments of
+        // the function raise the bare code, so the count is optional.
+        const remaining = /INSUFFICIENT_SEATS:([0-9]+)/.exec(message)?.[1];
+        const availableSeats = remaining === undefined ? undefined : Number(remaining);
+
+        const message409 =
+            availableSeats === undefined
+                ? "Not enough seats left for this workshop."
+                : availableSeats === 0
+                  ? "This workshop is sold out. All spots are taken."
+                  : `Only ${availableSeats} seat${availableSeats === 1 ? "" : "s"} left for this workshop.`;
+
+        return jsonError(message409, 409, {
+            code: availableSeats === 0 ? "WORKSHOP_SOLD_OUT" : "INSUFFICIENT_SEATS",
+            ...(availableSeats === undefined ? {} : { availableSeats }),
+        });
+    }
+    if (message.includes("WORKSHOP_NOT_APPROVED")) {
+        return jsonError("This workshop is not open for bookings yet.", 409, {
+            code: "WORKSHOP_PENDING_APPROVAL",
+        });
+    }
+    if (message.includes("WORKSHOP_NOT_FOUND")) {
+        return jsonError("Workshop not found.", 404);
+    }
+    if (message.includes("INVALID_GUEST_COUNT")) {
+        return jsonError("Invalid guest count.", 400);
+    }
+
+    // Transient: lock timeout, deadlock, statement timeout. Ask the client to retry
+    // rather than reserving the seat through an unsynchronised path.
+    return jsonError("Could not reserve seats right now. Please try again.", 503, {
+        code: "HOLD_UNAVAILABLE",
+    });
+}
 
 type WorkshopTimingRow = {
     id: string;
@@ -141,15 +203,16 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        // Release any existing active holds by the SAME user for THIS workshop
-        // To prevent the user from locking themselves out if they press back and retry.
-        await serviceClient
-            .from("booking_holds")
-            .update({ status: "released" })
-            .eq("status", "active")
-            .eq("user_id", auth.user.id)
-            .eq("workshop_id", workshopId);
-
+        // Releasing the caller's own superseded hold is now part of create_booking_hold, in
+        // the same transaction as the seat check (20260912180000_payment_and_hold_uniqueness).
+        // That migration must be applied BEFORE this code is deployed, or nothing releases.
+        //
+        // It used to happen here, unconditionally, before the seat check ran -- and it
+        // committed on its own. So a user who already held 2 seats and asked for 8 on a
+        // nearly-full workshop had their valid 2-seat hold destroyed and then got a 409:
+        // they lost the seats they had by asking for more. Inside the RPC the release rolls
+        // back with the exception, so a rejected request leaves the caller exactly as it
+        // found them.
         let holdId: string | null = null;
 
         const { data: rpcHoldId, error: rpcError } = await serviceClient.rpc(
@@ -166,12 +229,62 @@ export async function POST(request: NextRequest) {
             holdId = rpcHoldId;
         }
 
+        // The RPC ran and rejected: honour that answer. Only a genuinely absent function
+        // may fall through to the non-atomic path below.
+        if (rpcError && !isMissingHoldRpc(rpcError)) {
+            return holdRpcErrorResponse(rpcError);
+        }
+
         if (!holdId) {
-            // Fallback if RPC was not installed yet.
+            // Fallback for a database that has not had the hold migration applied yet.
+            // This path is NOT atomic and can oversell; it exists only so a fresh
+            // environment is usable before migrations run.
+            //
+            // Which makes it unusable in production. An unmigrated production database is
+            // not a reason to start selling seats through an unsynchronised read-then-insert
+            // -- it is a deploy that must be stopped. Refuse rather than oversell, and make
+            // the missing migration the visible failure.
+            if (process.env.NODE_ENV === "production") {
+                Sentry.captureMessage(
+                    "create_booking_hold RPC is missing in production; refusing the non-atomic fallback.",
+                    {
+                        level: "fatal",
+                        tags: { layer: "api", subsystem: "booking_hold" },
+                        extra: { workshopId, rpcError: rpcError?.message || null },
+                    }
+                );
+
+                return jsonError("Bookings are temporarily unavailable. Please try again.", 503, {
+                    code: "HOLD_UNAVAILABLE",
+                });
+            }
+
+            Sentry.captureMessage(
+                "create_booking_hold RPC is missing; using non-atomic seat-hold fallback.",
+                {
+                    level: "warning",
+                    tags: { layer: "api", subsystem: "booking_hold" },
+                    extra: { workshopId },
+                }
+            );
+
+            // The RPC does both of these internally. On this path nothing has, so the
+            // fallback has to release the caller own prior hold itself or they lock
+            // themselves out of re-reserving.
+            await serviceClient
+                .from("booking_holds")
+                .update({ status: "released" })
+                .eq("status", "active")
+                .eq("user_id", auth.user.id)
+                .eq("workshop_id", workshopId);
+
+            // Scoped to this workshop. A table-wide sweep is an unindexed full-table write on
+            // every request -- the exact pattern migration 20260906130000 removed from the RPC.
             await serviceClient
                 .from("booking_holds")
                 .update({ status: "expired" })
                 .eq("status", "active")
+                .eq("workshop_id", workshopId)
                 .lt("expires_at", new Date().toISOString());
 
             const { data: workshop, error: workshopError } =

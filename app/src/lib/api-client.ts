@@ -131,9 +131,9 @@ export function getChatbotConfig(params?: {
     }
 
     const query = searchParams.toString();
-    return apiRequest<ChatbotConfigResponse>(`/api/chatbot/config${query ? `?${query}` : ""}`, {
-        cache: "no-store",
-    });
+    // Response varies only by the query params above, all of which the CDN keys on, so let
+    // it be cached rather than forcing an origin hit every time the widget opens.
+    return apiRequest<ChatbotConfigResponse>(`/api/chatbot/config${query ? `?${query}` : ""}`, {});
 }
 
 export type FaqsResponse = {
@@ -141,9 +141,8 @@ export type FaqsResponse = {
 };
 
 export function getFaqs() {
-    return apiRequest<FaqsResponse>("/api/faqs", {
-        cache: "no-store",
-    });
+    // Global, rarely-changing content: let the browser and CDN cache it.
+    return apiRequest<FaqsResponse>("/api/faqs", {});
 }
 
 export type SupportChatResponse = {
@@ -632,10 +631,20 @@ export type MyBookingsResponse = {
         };
     }>;
     source: "supabase";
+    pagination?: {
+        limit: number;
+        offset: number;
+        hasMore: boolean;
+    };
 };
 
-export function getMyBookings(accessToken: string) {
-    return apiRequest<MyBookingsResponse>("/api/bookings", {
+export function getMyBookings(accessToken: string, options?: { limit?: number; offset?: number }) {
+    const query = new URLSearchParams();
+    if (options?.limit !== undefined) query.set("limit", String(options.limit));
+    if (options?.offset !== undefined) query.set("offset", String(options.offset));
+    const search = query.toString();
+
+    return apiRequest<MyBookingsResponse>(`/api/bookings${search ? `?${search}` : ""}`, {
         accessToken,
         cache: "no-store",
     });

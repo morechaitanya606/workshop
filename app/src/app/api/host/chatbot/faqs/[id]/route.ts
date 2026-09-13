@@ -8,6 +8,7 @@ import { generateChatbotFaqEmbedding, toVectorLiteral } from "@/lib/chatbot-vect
 import { getHuggingFaceEmbeddingConfig } from "@/lib/env";
 import { FAQ_ADMIN_SELECT_FIELDS } from "@/lib/faqs";
 import { faqEntryUpdateSchema } from "@/lib/validators";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 type RouteContext = {
     params: Promise<{
@@ -16,6 +17,9 @@ type RouteContext = {
 };
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
+    const limited = await enforceRateLimit(request, "write", "api-host-chatbot-faqs-update");
+    if (!limited.ok) return limited.response;
+
     const { id } = await context.params;
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {
@@ -92,6 +96,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
+    const limited = await enforceRateLimit(request, "write", "api-host-chatbot-faqs-delete");
+    if (!limited.ok) return limited.response;
+
     const { id } = await context.params;
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {

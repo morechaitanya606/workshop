@@ -5,6 +5,7 @@ import { handleApiError } from "@/lib/api-route";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import type { SupabaseServerClient } from "@/lib/supabase-server";
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const WORKSHOP_DETAIL_CACHE_HEADERS = {
     "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
@@ -23,10 +24,10 @@ async function loadWorkshopRow(
 
     return await query.maybeSingle();
 }
-export async function GET(
-    _request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const limited = await enforceRateLimit(request, "publicRead", "api-workshop-detail");
+    if (!limited.ok) return limited.response;
+
     const { id: workshopId } = await params;
 
     const service = requireSupabaseService();

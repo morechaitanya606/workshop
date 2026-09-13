@@ -1,13 +1,20 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+
 import * as Sentry from "@sentry/nextjs";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { workshopQuerySchema } from "@/lib/validators";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
-import { normalizeFilterCategoryLabel, PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
+import {
+    normalizeGroupFilterLabel,
+    PAST_EVENTS_CATEGORY_LABEL,
+    resolveCategoryFilterValues,
+} from "@/lib/data";
 import type { Workshop } from "@/lib/data";
 import type { SpecialPageSettings } from "@/lib/special-page";
+import { WORKSHOPS_LIST_TAG } from "@/lib/cached-reads";
 
 export type WorkshopPageSource = "supabase" | "error";
 
@@ -78,7 +85,13 @@ function buildExploreWorkshopQuery(
     const isPastEventsCategory =
         normalizedCategory.toLowerCase() === PAST_EVENTS_CATEGORY_LABEL.toLowerCase();
     if (normalizedCategory && !isPastEventsCategory) {
-        dbQuery = dbQuery.eq("category", normalizedCategory);
+        // A browse group can cover several stored category values, so match the whole set.
+        const categoryValues = resolveCategoryFilterValues(normalizedCategory);
+        if (categoryValues.length === 1) {
+            dbQuery = dbQuery.eq("category", categoryValues[0]);
+        } else if (categoryValues.length > 1) {
+            dbQuery = dbQuery.in("category", categoryValues);
+        }
     }
     if (isPastEventsCategory) {
         const today = new Date().toISOString().slice(0, 10);
@@ -187,33 +200,12 @@ export async function loadHomeWorkshops(): Promise<HomeWorkshopsResult> {
     };
 }
 
-export async function loadExploreWorkshops(searchParams: {
-    [key: string]: string | string[] | undefined;
-}): Promise<ExploreWorkshopsResult> {
-    const rawQuery = {
-        q: searchParams.q ?? "",
-        category: searchParams.category ?? "",
-        city: searchParams.city ?? "",
-        dateFrom: searchParams.dateFrom ?? "",
-        dateTo: searchParams.dateTo ?? "",
-        minPrice: searchParams.minPrice ?? undefined,
-        maxPrice: searchParams.maxPrice ?? undefined,
-        sort: searchParams.sort ?? "date_asc",
-        page: searchParams.page ?? 1,
-        pageSize: searchParams.pageSize ?? 8,
-    };
+type ExploreQuery = ReturnType<typeof workshopQuerySchema.parse>;
 
-    const parsed = workshopQuerySchema.safeParse(rawQuery);
-    if (!parsed.success) {
-        return {
-            data: [],
-            total: 0,
-            source: "error",
-        };
-    }
-
-    const query = parsed.data;
-    const normalizedCategory = normalizeFilterCategoryLabel(query.category);
+async function fetchExploreWorkshops(
+    query: ExploreQuery,
+    normalizedCategory: string
+): Promise<ExploreWorkshopsResult> {
     const from = (query.page - 1) * query.pageSize;
     const to = from + query.pageSize - 1;
 
@@ -268,6 +260,48 @@ export async function loadExploreWorkshops(searchParams: {
         total: 0,
         source: "error",
     };
+}
+
+/**
+ * /explore is a dynamic segment (it awaits `searchParams`), so `export const revalidate`
+ * cannot help it. Caching the data layer instead gives the same effect where it matters:
+ * repeated identical filter tuples share one Postgres round trip for 60s. The key is built
+ * from the POST-zod query, so `?sort=date_asc&page=1` and `?page=1` collapse to one entry.
+ */
+export async function loadExploreWorkshops(searchParams: {
+    [key: string]: string | string[] | undefined;
+}): Promise<ExploreWorkshopsResult> {
+    const rawQuery = {
+        q: searchParams.q ?? "",
+        category: searchParams.category ?? "",
+        city: searchParams.city ?? "",
+        dateFrom: searchParams.dateFrom ?? "",
+        dateTo: searchParams.dateTo ?? "",
+        minPrice: searchParams.minPrice ?? undefined,
+        maxPrice: searchParams.maxPrice ?? undefined,
+        sort: searchParams.sort ?? "date_asc",
+        page: searchParams.page ?? 1,
+        pageSize: searchParams.pageSize ?? 8,
+    };
+
+    const parsed = workshopQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+        return {
+            data: [],
+            total: 0,
+            source: "error",
+        };
+    }
+
+    const query = parsed.data;
+    const normalizedCategory = normalizeGroupFilterLabel(query.category);
+    const cacheKey = JSON.stringify({ ...query, category: normalizedCategory });
+
+    return unstable_cache(
+        () => fetchExploreWorkshops(query, normalizedCategory),
+        ["explore-workshops", cacheKey],
+        { revalidate: 60, tags: [WORKSHOPS_LIST_TAG] }
+    )();
 }
 
 export type PlatformSettingsType = {

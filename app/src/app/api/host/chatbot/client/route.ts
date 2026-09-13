@@ -11,6 +11,7 @@ import {
     rotateHostChatbotApiKey,
 } from "@/lib/chatbot-clients";
 import { chatbotClientUpdateSchema } from "@/lib/validators";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 function formatClientResponse(client: {
     id: string;
@@ -32,6 +33,9 @@ function formatClientResponse(client: {
 }
 
 export async function GET(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "publicRead", "api-host-chatbot-client");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {
         return auth.response;
@@ -55,6 +59,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "write", "api-host-chatbot-client-update");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {
         return auth.response;

@@ -1,9 +1,26 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createSupabaseAnonServerClient } from "@/lib/supabase-server";
 import { requireAuthenticatedUser } from "@/lib/api-auth";
+import { requireSupabaseService } from "@/lib/api-helpers";
 import * as Sentry from "@sentry/nextjs";
+import { enforceRateLimit } from "@/lib/rate-limit";
+
+/**
+ * One opaque rejection for every failure mode.
+ *
+ * Distinct messages ("nonexistent" vs "expired" vs "maximum uses") let an attacker
+ * separate "real code, not usable right now" from "no such code" and walk the namespace
+ * a wordlist at a time, revealing the naming scheme and then live codes.
+ */
+const COUPON_REJECTED = "This coupon code is not valid for this order.";
+
+function rejectCoupon() {
+    return NextResponse.json({ valid: false, message: COUPON_REJECTED }, { status: 400 });
+}
 
 export async function POST(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "money", "api-coupon-validate");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -13,14 +30,19 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { code, workshopId, subtotal } = body;
 
-        if (!code) {
+        if (typeof code !== "string" || !code.trim()) {
             return NextResponse.json(
                 { valid: false, message: "Coupon code is required" },
                 { status: 400 }
             );
         }
 
-        const supabase = createSupabaseAnonServerClient();
+        // Coupons are no longer readable by the anon/authenticated roles: the table holds
+        // bearer secrets. Validation runs under the service role behind this
+        // authenticated, rate-limited endpoint instead.
+        const service = requireSupabaseService();
+        if (!service.ok) return service.response;
+        const supabase = service.client;
 
         // Check if coupon exists and is valid
         const { data: coupon, error } = await supabase
@@ -30,41 +52,28 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (error || !coupon) {
-            return NextResponse.json(
-                { valid: false, message: "Invalid or nonexistent coupon code." },
-                { status: 400 }
-            );
+            return rejectCoupon();
         }
 
         if (!coupon.is_active) {
-            return NextResponse.json(
-                { valid: false, message: "This coupon is no longer active." },
-                { status: 400 }
-            );
+            return rejectCoupon();
         }
 
         const now = new Date();
         if (coupon.valid_from && new Date(coupon.valid_from) > now) {
-            return NextResponse.json(
-                { valid: false, message: "This coupon is not yet valid." },
-                { status: 400 }
-            );
+            return rejectCoupon();
         }
 
         if (coupon.valid_until && new Date(coupon.valid_until) < now) {
-            return NextResponse.json(
-                { valid: false, message: "This coupon has expired." },
-                { status: 400 }
-            );
+            return rejectCoupon();
         }
 
         if (coupon.max_uses !== null && (coupon.used_count || 0) >= coupon.max_uses) {
-            return NextResponse.json(
-                { valid: false, message: "This coupon has reached its maximum uses." },
-                { status: 400 }
-            );
+            return rejectCoupon();
         }
 
+        // The minimum-order rule is the one case worth naming: the shopper can act on it,
+        // and it leaks nothing they could not already infer from their own cart.
         if (coupon.min_order_amount && subtotal && subtotal < coupon.min_order_amount) {
             return NextResponse.json(
                 {
@@ -78,10 +87,7 @@ export async function POST(request: NextRequest) {
         // Workshop specific validation
         if (coupon.applicable_workshop_ids && coupon.applicable_workshop_ids.length > 0) {
             if (!workshopId || !coupon.applicable_workshop_ids.includes(workshopId)) {
-                return NextResponse.json(
-                    { valid: false, message: "This coupon is not valid for this workshop." },
-                    { status: 400 }
-                );
+                return rejectCoupon();
             }
         }
 

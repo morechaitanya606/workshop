@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Bot, MessageCircle, PhoneCall, Send, X } from "lucide-react";
 import { useParams, usePathname } from "next/navigation";
 import { askChatbot, getChatbotConfig } from "@/lib/api-client";
-import { normalizePhoneNumber, type ChatbotStage } from "@/lib/chatbot";
+import { normalizePhoneNumber, type ChatbotStage } from "@/lib/chatbot-text";
 import { CONTACT_PHONE_NUMBERS } from "@/lib/contact";
 
 type SupportChatbotProps = {
@@ -122,8 +122,12 @@ export default function SupportChatbot({
         }
     }, [messages.length, mode]);
 
+    // Only fetch once the widget is actually opened. This used to run on mount for every
+    // visitor on every route (the widget is mounted from the root layout), which cost one
+    // uncacheable API call and 1-3 service-role queries per page view for the ~99% of
+    // visitors who never open it.
     useEffect(() => {
-        if (shouldHideFloatingWidget) {
+        if (shouldHideFloatingWidget || !isOpen || chatbotConfig) {
             return;
         }
 
@@ -173,7 +177,7 @@ export default function SupportChatbot({
         return () => {
             cancelled = true;
         };
-    }, [clientApiKey, contextWorkshopId, shouldHideFloatingWidget]);
+    }, [chatbotConfig, clientApiKey, contextWorkshopId, isOpen, shouldHideFloatingWidget]);
 
     const bookingHref =
         chatbotConfig?.bookingUrl ||

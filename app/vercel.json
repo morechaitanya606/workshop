@@ -1,9 +1,33 @@
 {
     "$schema": "https://openapi.vercel.sh/vercel.json",
+    "_regionNote": "Must track the Supabase project region. The database is in ap-northeast-1 (Tokyo); bom1 (Mumbai) added ~120ms to every query and checkout makes several sequential round trips. sin1 is the closest Vercel region to Tokyo. Preferred long-term fix: move the database to ap-south-1 and set this back to bom1.",
+    "regions": ["sin1"],
     "crons": [
         {
             "path": "/api/cron/emails",
             "schedule": "0 0 * * *"
         }
-    ]
+    ],
+    "functions": {
+        "src/app/api/cron/emails/route.ts": {
+            "maxDuration": 300
+        },
+        "src/app/api/upload/route.ts": {
+            "maxDuration": 60,
+            "memory": 2048
+        },
+        "src/app/api/bookings/checkout/route.ts": {
+            "maxDuration": 30
+        },
+        "src/app/api/payments/razorpay/webhook/route.ts": {
+            "maxDuration": 30
+        },
+        "src/app/api/chat/route.ts": {
+            "maxDuration": 30
+        },
+        "src/app/api/image-proxy/route.ts": {
+            "maxDuration": 20,
+            "memory": 1024
+        }
+    }
 }

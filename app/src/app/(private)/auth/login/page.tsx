@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { sanitizeInternalRedirect } from "@/lib/auth-origin";
 import { getAuthMe } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
 import { cardReveal, standardTransition, useMotionProps } from "@/lib/motion-presets";
@@ -49,18 +50,20 @@ function LoginContent() {
         whileInView: false,
     });
 
+    // A bare startsWith("/") let "//evil.example" through, and router.push("//evil.example")
+    // leaves the site entirely -- straight after a successful sign-in. /api/auth/callback
+    // forwards its own next parameter into this one, so the two chained: a crafted OAuth link
+    // landed the victim here with the attacker string already in the query.
     const rawRedirect = searchParams.get("redirect");
-    let redirectPath = "/";
+    let decodedRedirect: string | null = rawRedirect;
     if (rawRedirect) {
         try {
-            const decoded = decodeURIComponent(rawRedirect);
-            if (decoded.startsWith("/")) {
-                redirectPath = decoded;
-            }
+            decodedRedirect = decodeURIComponent(rawRedirect);
         } catch {
-            redirectPath = "/";
+            decodedRedirect = null;
         }
     }
+    const redirectPath = sanitizeInternalRedirect(decodedRedirect);
 
     const oauthError = searchParams.get("error");
     const handleSubmit = async (event: React.FormEvent) => {

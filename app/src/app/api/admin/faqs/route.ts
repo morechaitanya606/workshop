@@ -14,8 +14,12 @@ import {
     loadAdminFaqRows,
 } from "@/lib/faqs";
 import { faqEntrySchema } from "@/lib/validators";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "publicRead", "api-admin-faqs-list");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -34,6 +38,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "write", "api-admin-faqs-create");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;

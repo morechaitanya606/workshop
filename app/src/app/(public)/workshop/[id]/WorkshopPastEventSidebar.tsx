@@ -107,20 +107,41 @@ export default function WorkshopPastEventSidebar({
                 {workshopCity}
             </p>
 
-            <div className="bg-cream-100 rounded-2xl p-4 border border-clay/40 mb-5">
-                <p className="text-[11px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                    Attendee Feedback
-                </p>
-                <p className="text-sm font-inter text-dark-secondary leading-relaxed">
-                    &ldquo;
-                    {feedbackHighlight ||
-                        `Rated ${workshopRating}/5 from ${workshopReviewCount} reviews.`}
-                    &rdquo;
-                </p>
-                <p className="text-xs font-inter text-dark-muted mt-2">
-                    {feedbackAuthor || `${workshopReviewCount} verified reviews`}
-                </p>
-            </div>
+            {/* Only claim attendee feedback when some exists. Previously this box always
+                rendered, and because feedbackHighlight was never populated the quoted string
+                was permanently "Rated 0/5 from 0 reviews." - which reads as a bad event
+                rather than one nobody has reviewed yet. */}
+            {workshopReviewCount > 0 ? (
+                <div className="bg-cream-100 rounded-2xl p-4 border border-clay/40 mb-5">
+                    <p className="text-[11px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                        Attendee Feedback
+                    </p>
+                    {feedbackHighlight ? (
+                        <p className="text-sm font-inter text-dark-secondary leading-relaxed">
+                            &ldquo;{feedbackHighlight}&rdquo;
+                        </p>
+                    ) : (
+                        <p className="text-sm font-inter text-dark-secondary leading-relaxed">
+                            Rated {workshopRating}/5 by attendees.
+                        </p>
+                    )}
+                    <p className="text-xs font-inter text-dark-muted mt-2">
+                        {feedbackAuthor ||
+                            `${workshopReviewCount} verified ${
+                                workshopReviewCount === 1 ? "review" : "reviews"
+                            }`}
+                    </p>
+                </div>
+            ) : (
+                <div className="bg-cream-100 rounded-2xl p-4 border border-clay/40 mb-5">
+                    <p className="text-[11px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
+                        Attendee Feedback
+                    </p>
+                    <p className="text-sm font-inter text-dark-secondary leading-relaxed">
+                        No reviews yet. If you attended, your feedback will show up here.
+                    </p>
+                </div>
+            )}
 
             <div className="space-y-3">
                 <button

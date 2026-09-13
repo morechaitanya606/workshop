@@ -5,10 +5,14 @@ import type { Tables } from "@/lib/database.types";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { adminRegistrationsQuerySchema } from "@/lib/validators";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const BOOKING_STATUSES: Tables<"bookings">["status"][] = ["confirmed", "cancelled", "refunded"];
 
 export async function GET(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "publicRead", "api-admin-registrations");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;

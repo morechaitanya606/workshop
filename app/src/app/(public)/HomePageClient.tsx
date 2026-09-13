@@ -9,6 +9,7 @@ import Footer from "@/components/Footer";
 import HeroSection from "@/components/home/HeroSection";
 import WorkshopGridSection from "@/components/home/WorkshopGridSection";
 import PastEventHighlight from "@/components/home/PastEventHighlight";
+import type { PastEventImage } from "@/components/home/PastEventsMarquee";
 import HowItWorksSection from "@/components/home/HowItWorksSection";
 import SocialProofSection from "@/components/home/SocialProofSection";
 import PartnersMarquee from "@/components/home/PartnersMarquee";
@@ -25,6 +26,7 @@ import { usePlatformSettings } from "@/lib/platform-settings-context";
 import { getRecentlyViewed } from "@/lib/recently-viewed";
 
 const OTHER_CATEGORY_VALUE = "__other__";
+const PAST_EVENT_MARQUEE_LIMIT = 12;
 
 export default function HomePageClient({
     initialWorkshops,
@@ -61,8 +63,14 @@ export default function HomePageClient({
         return selectedCategory;
     }, [selectedCategory]);
 
-    const upcomingWorkshops = allWorkshops.filter((workshop) => workshop.date >= todayIso);
-    const pastWorkshops = allWorkshops.filter((workshop) => workshop.date < todayIso);
+    const upcomingWorkshops = useMemo(
+        () => allWorkshops.filter((workshop) => workshop.date >= todayIso),
+        [allWorkshops, todayIso]
+    );
+    const pastWorkshops = useMemo(
+        () => allWorkshops.filter((workshop) => workshop.date < todayIso),
+        [allWorkshops, todayIso]
+    );
     const isPastEventsCategory =
         selectedCategoryLabel.toLowerCase() === PAST_EVENTS_CATEGORY_LABEL.toLowerCase();
     const categoryWorkshops = isPastEventsCategory
@@ -70,32 +78,34 @@ export default function HomePageClient({
         : selectedCategoryLabel
           ? upcomingWorkshops.filter((workshop) => workshop.category === selectedCategoryLabel)
           : upcomingWorkshops;
-    const trendingTitle = useMemo(() => {
-        if (isPastEventsCategory) {
-            return PAST_EVENTS_CATEGORY_LABEL;
-        }
-        const citySet = new Set(
-            categoryWorkshops
-                .map((workshop) => workshop.city?.trim())
-                .filter((city): city is string => Boolean(city))
-        );
-        if (citySet.size === 1) {
-            return `Trending in ${Array.from(citySet)[0]}`;
-        }
-        if (citySet.size > 1) {
-            return "Trending Across Cities";
-        }
-        return "Trending Workshops";
-    }, [categoryWorkshops, isPastEventsCategory]);
 
-    const trendingWorkshops = categoryWorkshops;
     const newWorkshops = categoryWorkshops.slice(0, 4);
     const upcomingGridClassName =
         "grid grid-flow-col auto-cols-[minmax(240px,280px)] gap-4 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide snap-x snap-mandatory";
-    const pastWorkshop = allWorkshops
-        .filter((workshop) => workshop.date < todayIso)
-        .sort((a, b) => b.date.localeCompare(a.date))
-        .at(0);
+    const recentPastWorkshops = useMemo(
+        () => [...pastWorkshops].sort((a, b) => b.date.localeCompare(a.date)),
+        [pastWorkshops]
+    );
+    const pastWorkshop = recentPastWorkshops.at(0);
+
+    // Flatten the most recent past events into a single strip of images for the
+    // marquee, newest first and de-duplicated so a shared cover/gallery photo is
+    // not repeated across the track.
+    const pastEventImages = useMemo(() => {
+        const seen = new Set<string>();
+        const images: PastEventImage[] = [];
+
+        for (const workshop of recentPastWorkshops) {
+            for (const candidate of [workshop.coverImage, ...(workshop.galleryImages || [])]) {
+                const src = candidate?.trim();
+                if (!src || seen.has(src)) continue;
+                seen.add(src);
+                images.push({ src, workshopId: workshop.id, title: workshop.title });
+            }
+        }
+
+        return images.slice(0, PAST_EVENT_MARQUEE_LIMIT);
+    }, [recentPastWorkshops]);
 
     const handlePastNotify = async (mode: "similar" | "creator") => {
         if (!pastWorkshop) return;
@@ -226,29 +236,14 @@ export default function HomePageClient({
                     workshops={recentlyViewedWorkshops}
                     emptyTitle=""
                     emptyDescription=""
+                    showCardBadgeLabels={false}
                 />
             )}
-
-            <WorkshopGridSection
-                title={trendingTitle}
-                eyebrow="Trending"
-                sectionClassName="section-padding mt-24 sm:mt-16"
-                gridClassName="grid grid-flow-col auto-cols-[minmax(240px,280px)] gap-4 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide snap-x snap-mandatory"
-                cardWrapperClassName="snap-start"
-                gridKeyPrefix="trending"
-                selectedCategory={selectedCategory}
-                todayIso={todayIso}
-                shouldReduceMotion={shouldReduceMotion}
-                workshops={trendingWorkshops}
-                emptyTitle="No trending workshops yet"
-                emptyDescription="We do not have trending items for this category right now. Try another category or browse all workshops."
-                selectedCategoryLabel={selectedCategoryLabel}
-                onTryAnotherCategory={() => setSelectedCategory("trending")}
-            />
 
             {pastWorkshop && (
                 <PastEventHighlight
                     pastWorkshop={pastWorkshop}
+                    pastEventImages={pastEventImages}
                     shouldReduceMotion={shouldReduceMotion}
                     notifyState={notifyState[pastWorkshop.id] || { similar: false, creator: false }}
                     pastNotifyLoading={pastNotifyLoading}

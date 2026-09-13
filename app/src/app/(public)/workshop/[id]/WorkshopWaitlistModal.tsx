@@ -6,10 +6,8 @@ export interface WorkshopWaitlistModalProps {
     showWaitlistModal: boolean;
     setShowWaitlistModal: (show: boolean) => void;
     waitlistEmail: string;
-    setWaitlistEmail: (email: string) => void;
     waitlistLoading: boolean;
     waitlistError: string | null;
-    setWaitlistError: (error: string | null) => void;
     waitlistSuccess: boolean;
     onJoinWaitlist: (e: React.FormEvent) => void;
 }
@@ -18,10 +16,8 @@ export default function WorkshopWaitlistModal({
     showWaitlistModal,
     setShowWaitlistModal,
     waitlistEmail,
-    setWaitlistEmail,
     waitlistLoading,
     waitlistError,
-    setWaitlistError,
     waitlistSuccess,
     onJoinWaitlist,
 }: WorkshopWaitlistModalProps) {
@@ -79,17 +75,13 @@ export default function WorkshopWaitlistModal({
                             <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
                                 Email Address
                             </label>
-                            <input
-                                type="email"
-                                value={waitlistEmail}
-                                onChange={(e) => {
-                                    setWaitlistEmail(e.target.value);
-                                    setWaitlistError(null);
-                                }}
-                                required
-                                placeholder="Enter your email"
-                                className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter focus:outline-none focus:border-terracotta/50 focus:ring-1 focus:ring-terracotta/30"
-                            />
+                            {/* Read-only on purpose. The API notifies the signed-in
+                                account’s own address and ignores anything sent in the body,
+                                so an editable field could only confirm back an address that
+                                was never stored. */}
+                            <p className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter text-dark-muted">
+                                {waitlistEmail || "Sign in to join the waitlist"}
+                            </p>
                             {waitlistError && (
                                 <p className="text-xs font-inter text-red-600 mt-1.5">
                                     {waitlistError}
