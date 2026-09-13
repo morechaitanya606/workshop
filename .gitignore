@@ -64,9 +64,11 @@ next-env.d.ts
 # Agent skill tooling (local only; not part of the deployed app)
 .agents/
 
-# Hero video renditions (~40MB). They are served from NEXT_PUBLIC_MEDIA_BASE_URL, not from
-# the repo: 40MB of binaries in git is paid for on every clone, every CI checkout and every
-# deployment bundle, forever, because git never forgets a blob. Masters stay on disk here and
-# are pushed with `node scripts/upload-hero-media.mjs`.
-# See app/public/videos/README.md.
+# Hero video renditions. The four the homepage actually uses are committed and served from
+# Vercel's CDN -- see app/public/videos/README.md for why that beats the alternatives on this
+# plan. Everything else here is source material that nothing references, and stays out.
 app/public/videos/*.mp4
+!app/public/videos/hero-triptych.mp4
+!app/public/videos/hero-1-mobile.mp4
+!app/public/videos/hero-2-mobile.mp4
+!app/public/videos/hero-3-mobile.mp4

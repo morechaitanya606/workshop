@@ -1,26 +1,36 @@
 # Homepage Hero Video Assets
 
-**These files are not in git.** `.gitignore` excludes `app/public/videos/*.mp4`, because 40MB
-of binaries in the repo is paid for on every clone, every CI checkout and every deployment
-bundle, forever -- git never forgets a blob. The masters live here on disk; the served copies
-live in object storage.
+**The four renditions the homepage uses are committed** and served from Vercel's CDN. Every
+other .mp4 in this folder is source material and is gitignored.
 
-To deploy the hero video:
+Why here rather than object storage, on the current plan:
 
-1. `node scripts/upload-hero-media.mjs` from `app/` -- pushes every rendition in this folder
-   to the public `media` Supabase Storage bucket under `hero/`, upserting, with a one-year
-   cache header.
-2. Set `NEXT_PUBLIC_MEDIA_BASE_URL` to the bucket prefix it prints, e.g.
-   `https://<project>.supabase.co/storage/v1/object/public/media/hero`.
+|               | Egress/month                                 | Desktop views before exhaustion |
+| ------------- | -------------------------------------------- | ------------------------------- |
+| Vercel Hobby  | 100 GB                                       | ~17,000                         |
+| Supabase Free | 5 GB, **shared with API, auth and database** | ~850                            |
 
-Until that variable is set the hero falls back to `public/images/background.webp` -- the same
-poster it already shows while a clip loads, on reduced-motion, and when a clip fails. The page
-is not broken without it; it just has no video.
+Supabase's quota is the trap: exhausting it throttles the whole project, not just video. Point
+`NEXT_PUBLIC_MEDIA_BASE_URL` at object storage when traffic justifies it -- Cloudflare R2 has
+no egress charge and is already allow-listed in next.config.mjs -- and the code switches over
+with no change here.
 
-Mind the egress. These clips are 4-8MB each: one desktop homepage view pulls ~8.3MB and one
-mobile view ~14MB, so on Supabase's free tier (5GB/month, shared with all other traffic) a few
-hundred visitors exhaust it. Cloudflare R2 charges nothing for egress, is already allow-listed
-in `next.config.mjs` and the image proxy, and is the better home once traffic is real.
+## Encoding
+
+Compressed 2026-09-13, 22.46 MB -> 15.66 MB (30%), no visible quality loss behind the overlay:
+
+```bash
+# desktop triptych: keep 1920x1080 so it stays sharp on large monitors
+ffmpeg -i in.mp4 -c:v libx264 -crf 36 -preset slow -r 24 -profile:v high -pix_fmt yuv420p -an -movflags +faststart hero-triptych.mp4
+
+# mobile clips: keep 720x1280
+ffmpeg -i in.mp4 -c:v libx264 -crf 35 -preset slow -profile:v high -pix_fmt yuv420p -an -movflags +faststart hero-N-mobile.mp4
+```
+
+`-movflags +faststart` puts the moov atom first so playback starts before the file finishes
+downloading. `-an` drops audio, which the hero never plays. The sources were already well
+encoded at 24 fps, so CRF 30 came out _larger_ than the input -- do not assume a low CRF means
+a smaller file, measure it.
 
 The component picks a rendition at `(max-width: 640px)`:
 

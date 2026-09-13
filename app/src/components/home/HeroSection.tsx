@@ -20,11 +20,12 @@ const HERO_MOBILE_QUERY = "(max-width: 640px)";
 /**
  * Where the hero renditions are served from.
  *
- * The mp4s are not in the repo -- .gitignore excludes `app/public/videos/*.mp4`, because
- * 40MB of binaries is paid for on every clone, every CI checkout and every deployment
- * bundle, forever, since git never forgets a blob. So NEXT_PUBLIC_MEDIA_BASE_URL is how the
- * hero gets video at all; unset, the `/videos/...` paths below simply 404 and the poster
- * image stays up, which is the same state a slow or failed clip already produces.
+ * Unset (the default) serves them from `public/videos`, which is where the four renditions
+ * the homepage uses actually live -- Vercel's CDN includes 100GB/month on this plan, against
+ * 5GB on Supabase's free tier that is shared with API, auth and database traffic.
+ *
+ * Setting NEXT_PUBLIC_MEDIA_BASE_URL moves them to an object store without touching this
+ * file. Worth doing once traffic is real; see app/public/videos/README.md.
  *
  * Pick that origin deliberately: these clips are 4-8MB each, so on a metered store they
  * dominate the egress bill. Cloudflare R2 (already allow-listed in next.config.mjs and the
