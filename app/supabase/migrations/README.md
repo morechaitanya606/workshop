@@ -11,6 +11,20 @@ Parses every migration with Postgres's own grammar, including plpgsql function b
 needs no database and runs in CI. Syntax only — it cannot tell you whether a unique index
 will find duplicates in real data.
 
+## The one rule
+
+**Never apply SQL to the hosted database by hand.** Every change goes in a file here and is
+applied with `db push`. The dashboard SQL editor does not write to
+`supabase_migrations.schema_migrations`, so a change made there is invisible to the CLI --
+and once local and remote disagree, `db push` refuses to run at all, which pushes the next
+person back to the SQL editor. That loop is how this project ended up with 30 unrecorded
+versions and 9 migrations applied but never recorded (reconciled 2026-09-13).
+
+Filenames are `<14-digit timestamp>_<name>.sql`. The CLI treats the digits before the first
+underscore as the version, so an 8-digit `20260306_x.sql` declares version `20260306`, which
+can never match a remote row recorded as `20260306185054`. `supabase migration new <name>`
+generates a correct one.
+
 ## Applying to the hosted project
 
 ```bash
