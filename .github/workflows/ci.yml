@@ -24,6 +24,13 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Parses every migration with Postgres own grammar (libpg_query via WASM), including
+      # plpgsql function bodies. CI has no database, so without this a plain syntax error
+      # stays green until `supabase db push` fails partway through a transaction against
+      # live data. Syntax only - it cannot know whether a unique index will find duplicates.
+      - name: Validate migrations parse
+        run: npm run db:validate
+
       - name: Typecheck
         run: npx tsc --noEmit --pretty false
 
