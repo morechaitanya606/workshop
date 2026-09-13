@@ -1,9 +1,32 @@
 {
     "$schema": "https://openapi.vercel.sh/vercel.json",
+    "regions": ["sin1"],
     "crons": [
         {
             "path": "/api/cron/emails",
             "schedule": "0 0 * * *"
         }
-    ]
+    ],
+    "functions": {
+        "src/app/api/cron/emails/route.ts": {
+            "maxDuration": 300
+        },
+        "src/app/api/upload/route.ts": {
+            "maxDuration": 60,
+            "memory": 2048
+        },
+        "src/app/api/bookings/checkout/route.ts": {
+            "maxDuration": 30
+        },
+        "src/app/api/payments/razorpay/webhook/route.ts": {
+            "maxDuration": 30
+        },
+        "src/app/api/chat/route.ts": {
+            "maxDuration": 30
+        },
+        "src/app/api/image-proxy/route.ts": {
+            "maxDuration": 20,
+            "memory": 1024
+        }
+    }
 }
