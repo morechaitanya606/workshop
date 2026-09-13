@@ -31,6 +31,13 @@ jobs:
       - name: Validate migrations parse
         run: npm run db:validate
 
+      # vercel.json has additionalProperties: false, so a stray key makes Vercel reject the
+      # configuration and fail the deployment before it builds. Nothing else here reads that
+      # file -- not typecheck, not lint, not next build -- so without this the first sign is
+      # a red deploy.
+      - name: Validate vercel.json
+        run: npm run vercel:validate
+
       - name: Typecheck
         run: npx tsc --noEmit --pretty false
 

@@ -22,7 +22,8 @@
         "gen:supabase-types": "node scripts/gen-supabase-types.cjs",
         "prepare": "cd .. && npx --prefix app husky .husky",
         "db:validate": "node scripts/validate-migrations.mjs",
-        "db:push": "supabase db push"
+        "db:push": "supabase db push",
+        "vercel:validate": "node scripts/validate-vercel-config.mjs"
     },
     "dependencies": {
         "@react-email/components": "1.0.12",
