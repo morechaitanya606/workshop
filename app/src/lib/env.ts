@@ -100,6 +100,23 @@ function getVercelAppUrl() {
     return /^https?:\/\//i.test(vercelUrl) ? vercelUrl : `https://${vercelUrl}`;
 }
 
+/**
+ * True only for a real production deployment, not merely a production-mode build.
+ *
+ * Vercel builds previews and production identically with NODE_ENV=production, so NODE_ENV
+ * alone cannot tell them apart -- and requiring production-only operational secrets on that
+ * basis breaks every preview and branch deploy, which is exactly what it did. VERCEL_ENV is
+ * set at build and at runtime and does distinguish them. Off Vercel, NODE_ENV is all there is.
+ */
+function isProductionDeployment() {
+    const vercelEnv = process.env.VERCEL_ENV?.trim();
+    if (vercelEnv) {
+        return vercelEnv === "production";
+    }
+
+    return process.env.NODE_ENV === "production";
+}
+
 function isLocalProductionRuntime() {
     return (
         process.env.NODE_ENV === "production" &&
@@ -264,16 +281,23 @@ export function getMissingProductionEnvVars() {
     if (!env.RESEND_API_KEY) {
         missing.push("RESEND_API_KEY");
     }
-    // Without a shared counter store, every guarded route falls back to a per-instance Map.
-    // On Vercel that multiplies every limit by the number of live lambdas, so "20 holds per
-    // minute" becomes unbounded — the seat-griefing and card-testing limits are decorative.
-    if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
-        missing.push("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN");
-    }
-    // /api/cron/emails refuses to run in production without it, so an unset CRON_SECRET is a
-    // silently dead reminder-and-feedback pipeline that nothing else reports.
-    if (!env.CRON_SECRET) {
-        missing.push("CRON_SECRET");
+    // The two below are needed by the live deployment, never by the build, and a preview
+    // environment legitimately does without them -- so they are required only where they
+    // actually matter. Demanding them of every production-MODE build blocked preview deploys
+    // outright while proving nothing about production.
+    if (isProductionDeployment()) {
+        // Without a shared counter store, every guarded route falls back to a per-instance
+        // Map. On Vercel that multiplies every limit by the number of live lambdas, so "20
+        // holds per minute" becomes unbounded -- the seat-griefing and card-testing limits
+        // are decorative.
+        if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
+            missing.push("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN");
+        }
+        // /api/cron/emails refuses to run in production without it, so an unset CRON_SECRET
+        // is a silently dead reminder-and-feedback pipeline that nothing else reports.
+        if (!env.CRON_SECRET) {
+            missing.push("CRON_SECRET");
+        }
     }
 
     return missing;
