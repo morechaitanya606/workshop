@@ -68,6 +68,23 @@ It will refuse to run if `bookings` already contains two rows sharing a `payment
 and name them. That means one payment produced two bookings, which needs a person to reconcile
 before any unique index can exist.
 
+## Migrations are NOT wrapped in a transaction
+
+Supabase applies each statement of a migration on its own. There is no implicit transaction
+around the file, so:
+
+- `lock table` at file scope fails with
+  `ERROR: LOCK TABLE can only be used in transaction blocks (SQLSTATE 25P01)`. Put it in a
+  `do $ ... $` block together with everything it protects -- a DO body always runs inside a
+  transaction, and the lock is released when that body ends.
+- A migration that fails halfway leaves the statements before it applied. Prefer idempotent
+  statements (`if not exists`, `create or replace`) so a re-run after a fix is safe.
+
+This is easy to get wrong because `supabase db query --file` DOES run the whole file in one
+implicit transaction, so a migration can pass there and still fail under `db push`. The
+preview-branch check in CI replays every migration from scratch and is the thing that catches
+it.
+
 ## Verifying afterwards
 
 ```sql

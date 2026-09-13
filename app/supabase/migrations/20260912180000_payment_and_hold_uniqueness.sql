@@ -18,25 +18,33 @@
 -- time -- which the checkout route answers with an automatic refund. The money comes back,
 -- but the booking does not happen.
 
--- Everything below assumes it runs inside one transaction (`supabase db push` wraps each
--- migration file). The lock is what makes the pre-flight checks meaningful: without it, a
--- request served by the still-running old code can insert a conflicting row between the dedup
--- and the index build, and the migration dies on a raw 23505 instead of its own diagnostics.
--- SHARE ROW EXCLUSIVE blocks writers while leaving plain SELECTs alone, and is compatible
--- with the SHARE that CREATE INDEX takes in this same transaction.
-lock table public.bookings, public.booking_holds in share row exclusive mode;
-
--- ---------------------------------------------------------------------------
--- 1. At most one booking per payment
--- ---------------------------------------------------------------------------
-
--- A duplicate here means real money was turned into two bookings and needs a human, not an
--- automatic merge. Fail with the offending ids rather than the index's generic message, so
--- whoever runs this knows exactly what to reconcile.
+-- The lock, the pre-flight checks, the dedup and both index builds run as one unit inside
+-- this DO block.
+--
+-- It cannot be a bare `lock table` at file scope: Supabase applies each statement of a
+-- migration on its own, NOT inside a wrapping transaction, so that raises
+--   ERROR: LOCK TABLE can only be used in transaction blocks (SQLSTATE 25P01)
+-- and the migration dies before it starts. A DO body always runs inside a transaction, and the
+-- lock is held until that body ends -- which is why everything the lock protects has to live
+-- in here with it rather than following it at file scope.
+--
+-- Why lock at all: without it a request served by the still-running old code can insert a
+-- conflicting row between the dedup and the index build, and the migration dies on a raw 23505
+-- instead of its own diagnostics. SHARE ROW EXCLUSIVE blocks writers while leaving plain
+-- SELECTs alone, and is compatible with the SHARE that CREATE INDEX takes.
 do $$
 declare
     v_duplicates text;
 begin
+    lock table public.bookings, public.booking_holds in share row exclusive mode;
+
+    -- -----------------------------------------------------------------------
+    -- 1. At most one booking per payment
+    -- -----------------------------------------------------------------------
+
+    -- A duplicate here means real money was turned into two bookings and needs a human, not
+    -- an automatic merge. Fail with the offending ids rather than the index generic message,
+    -- so whoever runs this knows exactly what to reconcile.
     select string_agg(payment_intent_id, ', ')
     into v_duplicates
     from (
@@ -53,42 +61,42 @@ begin
             'Cannot add unique index: bookings already share a payment_intent_id (%). Reconcile these payments before applying this migration.',
             v_duplicates;
     end if;
+
+    -- The existing idx_bookings_payment_intent_id is a plain lookup index and enforces nothing.
+    execute 'create unique index if not exists idx_bookings_payment_intent_id_unique
+        on public.bookings (payment_intent_id)
+        where payment_intent_id is not null';
+
+    -- -----------------------------------------------------------------------
+    -- 2. At most one ACTIVE hold per user per workshop
+    -- -----------------------------------------------------------------------
+
+    -- Unlike the payment duplicates above, extra active holds are expected -- they are exactly
+    -- the bug being fixed -- and they are disposable: a hold is a 15-minute reservation, not a
+    -- record of anything that happened. Collapse each (user, workshop) group down to its newest
+    -- hold, which is what the route was already trying to do non-atomically.
+    --
+    -- `newer` is read under this statement snapshot, so rows this UPDATE is releasing still
+    -- count as active while it runs. Exactly one row per group -- the maximum of
+    -- (created_at, id) -- therefore has no strictly greater peer and survives. The id breaks
+    -- ties on created_at, so the survivor is always unique.
+    update public.booking_holds as stale
+    set status = 'released'
+    where status = 'active'
+      and exists (
+          select 1
+          from public.booking_holds as newer
+          where newer.user_id = stale.user_id
+            and newer.workshop_id = stale.workshop_id
+            and newer.status = 'active'
+            and (newer.created_at, newer.id) > (stale.created_at, stale.id)
+      );
+
+    execute 'create unique index if not exists idx_booking_holds_one_active_per_user_workshop
+        on public.booking_holds (user_id, workshop_id)
+        where status = ''active''';
 end;
 $$;
-
--- The existing idx_bookings_payment_intent_id is a plain lookup index and enforces nothing.
-create unique index if not exists idx_bookings_payment_intent_id_unique
-    on public.bookings (payment_intent_id)
-    where payment_intent_id is not null;
-
--- ---------------------------------------------------------------------------
--- 2. At most one ACTIVE hold per user per workshop
--- ---------------------------------------------------------------------------
-
--- Unlike the payment duplicates above, extra active holds are expected -- they are exactly
--- the bug being fixed -- and they are disposable: a hold is a 15-minute reservation, not a
--- record of anything that happened. Collapse each (user, workshop) group down to its newest
--- hold, which is what the route was already trying to do non-atomically.
---
--- `newer` is read under this statement's snapshot, so rows this UPDATE is releasing still
--- count as active while it runs. Exactly one row per group -- the maximum of
--- (created_at, id) -- therefore has no strictly greater peer and survives. The id breaks
--- ties on created_at, so the survivor is always unique.
-update public.booking_holds as stale
-set status = 'released'
-where status = 'active'
-  and exists (
-      select 1
-      from public.booking_holds as newer
-      where newer.user_id = stale.user_id
-        and newer.workshop_id = stale.workshop_id
-        and newer.status = 'active'
-        and (newer.created_at, newer.id) > (stale.created_at, stale.id)
-  );
-
-create unique index if not exists idx_booking_holds_one_active_per_user_workshop
-    on public.booking_holds (user_id, workshop_id)
-    where status = 'active';
 
 -- ---------------------------------------------------------------------------
 -- 3. Fold the self-release into create_booking_hold
