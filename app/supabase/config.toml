@@ -145,9 +145,18 @@ max_catalogs = 2
 # Analytics Buckets is available to Supabase Pro plan.
 # [storage.analytics.buckets.my-warehouse]
 
-# Store vector embeddings in S3 for large and durable datasets
+# Store vector embeddings in S3 for large and durable datasets.
+#
+# OFF deliberately. This is a paid Supabase feature, and the CLI scaffolds it on by default.
+# The GitHub branching integration reads this file when it builds a preview branch, so leaving
+# the default here made every preview branch fail with
+#   unexpected status 402: Please upgrade the project to a paid tier to enable vector buckets
+# which in turn failed the Vercel preview deploy that depends on that branch.
+#
+# The chatbot RAG uses a pgvector column on an ordinary table, not S3 vector buckets, so
+# nothing in this app needs it. Turn it on only alongside a plan that includes it.
 [storage.vector]
-enabled = true
+enabled = false
 max_buckets = 10
 max_indexes = 5
 
