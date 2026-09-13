@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { handleApiError, parseBody } from "@/lib/api-route";
+import { requireAuthenticatedUser } from "@/lib/api-auth";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import {
     buildCommunityInsertPayload,
@@ -16,8 +17,16 @@ import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/
 import { communityCreateSchema } from "@/lib/validators";
 
 export async function POST(request: NextRequest) {
+    // The submission form lives under the (private) route group, so the UI already
+    // assumes a session. The route did not enforce it, which left anonymous callers able
+    // to publish to a public page with no author to trace or ban.
+    const auth = await requireAuthenticatedUser(request);
+    if (!auth.ok) {
+        return auth.response;
+    }
+
     const rateLimitResult = await assertRateLimit({
-        key: getRateLimitKey(request, "community-create"),
+        key: getRateLimitKey(request, "community-create", auth.user.id),
         limit: 8,
         windowMs: 60_000,
         message: "Too many community submissions. Please wait and try again.",

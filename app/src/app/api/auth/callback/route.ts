@@ -1,22 +1,13 @@
+import type { NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import * as Sentry from "@sentry/nextjs";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { applyAuthCookies, getAuthAppOrigin } from "@/lib/auth-origin";
+import { applyAuthCookies, getAuthAppOrigin, sanitizeInternalRedirect } from "@/lib/auth-origin";
 import { getUserRole } from "@/lib/api-auth";
 import type { Database } from "@/lib/database.types";
 import { getPublicSupabaseConfig } from "@/lib/env";
-
-/** BUG-2 fix: Validate redirect target to prevent open redirect attacks. */
-function sanitizeRedirect(raw: string | null): string {
-    const fallback = "/";
-    if (!raw) return fallback;
-    // Must start with "/" and must NOT start with "//" (protocol-relative URL)
-    if (!raw.startsWith("/") || raw.startsWith("//")) return fallback;
-    // Block any URL-encoded protocol-relative patterns
-    if (raw.includes("\\")) return fallback;
-    return raw;
-}
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 function getUserFacingAuthError(errorMessage: string) {
     const normalizedMessage = errorMessage.toLowerCase();
@@ -51,10 +42,14 @@ function redirectToLoginWithError(
     return createRedirectResponse(request, loginUrl, cookiesToSet);
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "auth", "api-auth-callback");
+    if (!limited.ok) return limited.response;
+
     const requestUrl = new URL(request.url);
     const code = requestUrl.searchParams.get("code");
-    const next = sanitizeRedirect(requestUrl.searchParams.get("next"));
+    const appOrigin = getAuthAppOrigin(request);
+    const next = sanitizeInternalRedirect(requestUrl.searchParams.get("next"), appOrigin);
     const oauthError =
         requestUrl.searchParams.get("error_description") || requestUrl.searchParams.get("error");
 

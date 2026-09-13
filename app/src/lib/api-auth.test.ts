@@ -10,6 +10,7 @@ const authMocks = vi.hoisted(() => ({
 vi.mock("@sentry/nextjs", () => ({
     captureException: vi.fn(),
     captureMessage: vi.fn(),
+    setTag: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase-server", () => ({

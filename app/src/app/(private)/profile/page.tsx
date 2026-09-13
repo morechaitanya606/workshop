@@ -43,6 +43,8 @@ import {
 } from "@/lib/api-client";
 import type { Workshop } from "@/lib/data";
 
+const BOOKINGS_PAGE_SIZE = 50;
+
 type BookingItem = {
     id: string;
     guests: number;
@@ -96,6 +98,10 @@ export default function ProfilePage() {
     const [favoriteWorkshops, setFavoriteWorkshops] = useState<Workshop[]>([]);
     const [ledger, setLedger] = useState<HostLedgerResponse | null>(null);
     const [fetching, setFetching] = useState(false);
+    // /api/bookings pages at 50. Without these the page would quietly show the first 50 of a
+    // long history and give no sign the rest existed.
+    const [hasMoreBookings, setHasMoreBookings] = useState(false);
+    const [loadingMoreBookings, setLoadingMoreBookings] = useState(false);
     const [loadingFavorites, setLoadingFavorites] = useState(false);
     const [loadingLedger, setLoadingLedger] = useState(false);
     const [removingFavoriteId, setRemovingFavoriteId] = useState<string | null>(null);
@@ -187,8 +193,13 @@ export default function ProfilePage() {
             setFetching(true);
             setError(null);
             try {
-                const result = await getMyBookings(session.access_token);
-                if (!cancelled) setBookings((result.data || []) as BookingItem[]);
+                const result = await getMyBookings(session.access_token, {
+                    limit: BOOKINGS_PAGE_SIZE,
+                });
+                if (!cancelled) {
+                    setBookings((result.data || []) as BookingItem[]);
+                    setHasMoreBookings(Boolean(result.pagination?.hasMore));
+                }
             } catch (e) {
                 if (!cancelled) {
                     setError(toApiErrorMessage(e, "Unable to load bookings."));
@@ -202,6 +213,23 @@ export default function ProfilePage() {
             cancelled = true;
         };
     }, [user, session, reloadKey]);
+
+    const handleLoadMoreBookings = async () => {
+        if (!session?.access_token || loadingMoreBookings) return;
+        setLoadingMoreBookings(true);
+        try {
+            const result = await getMyBookings(session.access_token, {
+                limit: BOOKINGS_PAGE_SIZE,
+                offset: bookings.length,
+            });
+            setBookings((current) => [...current, ...((result.data || []) as BookingItem[])]);
+            setHasMoreBookings(Boolean(result.pagination?.hasMore));
+        } catch (e) {
+            setError(toApiErrorMessage(e, "Unable to load more bookings."));
+        } finally {
+            setLoadingMoreBookings(false);
+        }
+    };
 
     // Fetch existing feedback for past events
     useEffect(() => {
@@ -1349,6 +1377,20 @@ export default function ProfilePage() {
                                                 </div>
                                             );
                                         })}
+
+                                        {hasMoreBookings && (
+                                            <div className="flex justify-center pt-2">
+                                                <button
+                                                    onClick={handleLoadMoreBookings}
+                                                    disabled={loadingMoreBookings}
+                                                    className="btn-secondary disabled:opacity-70 disabled:cursor-not-allowed"
+                                                >
+                                                    {loadingMoreBookings
+                                                        ? "Loading..."
+                                                        : "Load more bookings"}
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </motion.div>

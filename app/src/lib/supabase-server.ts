@@ -1,3 +1,5 @@
+import "server-only";
+
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { env, getPublicSupabaseConfig, getServiceRoleKey } from "@/lib/env";

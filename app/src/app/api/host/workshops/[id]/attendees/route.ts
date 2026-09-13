@@ -3,16 +3,17 @@ import { NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { requireHostOrAdmin } from "@/lib/api-auth";
-import {
-    getConfirmedWorkshopAttendees,
-    getWorkshopOwnerLookup,
-} from "@/lib/workshop-attendees";
+import { getConfirmedWorkshopAttendees, getWorkshopOwnerLookup } from "@/lib/workshop-attendees";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 type Params = {
     params: Promise<{ id: string }>;
 };
 
 export async function GET(request: NextRequest, { params }: Params) {
+    const limited = await enforceRateLimit(request, "publicRead", "api-host-attendees");
+    if (!limited.ok) return limited.response;
+
     const { id } = await params;
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {

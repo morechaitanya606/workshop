@@ -1,5 +1,7 @@
 -- Migration: 20260325_support_tickets.sql
 -- Description: Add support tickets backing the support dashboard and chatbot escalation flow.
+-- Note: workshop_id is TEXT. public.workshops.id is text, so the original uuid column
+-- could not create its foreign key and this migration failed to apply.
 
 do $$
 begin
@@ -12,7 +14,7 @@ $$;
 create table if not exists public.support_tickets (
     id uuid primary key default gen_random_uuid(),
     user_id uuid references auth.users (id) on delete set null,
-    workshop_id uuid references public.workshops (id) on delete set null,
+    workshop_id text references public.workshops (id) on delete set null,
     email text not null,
     subject text not null,
     description text not null,
@@ -23,7 +25,7 @@ create table if not exists public.support_tickets (
 
 alter table public.support_tickets
     add column if not exists user_id uuid references auth.users (id) on delete set null,
-    add column if not exists workshop_id uuid references public.workshops (id) on delete set null,
+    add column if not exists workshop_id text references public.workshops (id) on delete set null,
     add column if not exists email text,
     add column if not exists subject text,
     add column if not exists description text,

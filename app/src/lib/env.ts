@@ -12,6 +12,7 @@ const publicEnvSchema = z.object({
     NEXT_PUBLIC_POSTHOG_KEY: nonEmpty.optional(),
     NEXT_PUBLIC_POSTHOG_HOST: z.string().url().optional(),
     NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
+    NEXT_PUBLIC_MEDIA_BASE_URL: z.string().url().optional(),
 });
 
 const serverEnvSchema = z.object({
@@ -32,6 +33,7 @@ const serverEnvSchema = z.object({
     UPSTASH_REDIS_REST_URL: z.string().url().optional(),
     UPSTASH_REDIS_REST_TOKEN: nonEmpty.optional(),
     SENTRY_DSN: z.string().url().optional(),
+    CRON_SECRET: nonEmpty.optional(),
 });
 
 function parseOrThrow<T>(schema: z.ZodSchema<T>, raw: unknown, label: string) {
@@ -57,6 +59,7 @@ export const publicEnv = parseOrThrow(
         NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
         NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
         NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+        NEXT_PUBLIC_MEDIA_BASE_URL: process.env.NEXT_PUBLIC_MEDIA_BASE_URL,
     },
     "public env"
 );
@@ -82,6 +85,7 @@ export const env = parseOrThrow(
         UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
         UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
         SENTRY_DSN: process.env.SENTRY_DSN,
+        CRON_SECRET: process.env.CRON_SECRET,
     },
     "server env"
 );
@@ -94,6 +98,23 @@ function getVercelAppUrl() {
     }
 
     return /^https?:\/\//i.test(vercelUrl) ? vercelUrl : `https://${vercelUrl}`;
+}
+
+/**
+ * True only for a real production deployment, not merely a production-mode build.
+ *
+ * Vercel builds previews and production identically with NODE_ENV=production, so NODE_ENV
+ * alone cannot tell them apart -- and requiring production-only operational secrets on that
+ * basis breaks every preview and branch deploy, which is exactly what it did. VERCEL_ENV is
+ * set at build and at runtime and does distinguish them. Off Vercel, NODE_ENV is all there is.
+ */
+function isProductionDeployment() {
+    const vercelEnv = process.env.VERCEL_ENV?.trim();
+    if (vercelEnv) {
+        return vercelEnv === "production";
+    }
+
+    return process.env.NODE_ENV === "production";
 }
 
 function isLocalProductionRuntime() {
@@ -251,6 +272,36 @@ export function getMissingProductionEnvVars() {
     }
     if (!env.RAZORPAY_KEY_SECRET) {
         missing.push("RAZORPAY_KEY_SECRET");
+    }
+    // Everything below is needed by the LIVE deployment and never by the build, so it is
+    // required only where it actually matters. Demanding it of every production-MODE build
+    // blocks preview and branch deploys -- Vercel builds those with NODE_ENV=production too --
+    // while proving nothing about production. Each of these failed a preview deploy in turn.
+    //
+    // What stays unconditional above: the NEXT_PUBLIC_* values, which are baked into the
+    // client bundle, and the credentials used while prerendering. A preview genuinely cannot
+    // build without those.
+    if (isProductionDeployment()) {
+        // Without these two the app boots clean and then fails silently at runtime: every
+        // Razorpay webhook 500s on a missing secret, and no transactional mail is ever sent.
+        if (!env.RAZORPAY_WEBHOOK_SECRET) {
+            missing.push("RAZORPAY_WEBHOOK_SECRET");
+        }
+        if (!env.RESEND_API_KEY) {
+            missing.push("RESEND_API_KEY");
+        }
+        // Without a shared counter store, every guarded route falls back to a per-instance
+        // Map. On Vercel that multiplies every limit by the number of live lambdas, so "20
+        // holds per minute" becomes unbounded -- the seat-griefing and card-testing limits
+        // are decorative.
+        if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
+            missing.push("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN");
+        }
+        // /api/cron/emails refuses to run in production without it, so an unset CRON_SECRET
+        // is a silently dead reminder-and-feedback pipeline that nothing else reports.
+        if (!env.CRON_SECRET) {
+            missing.push("CRON_SECRET");
+        }
     }
 
     return missing;

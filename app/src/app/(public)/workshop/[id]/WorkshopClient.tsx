@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ChangeEvent } from "react";
+import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -511,9 +511,35 @@ export default function WorkshopClient({
         }
     }, [workshop.id]);
 
+    // A workshop with no reviews has nothing to fetch. This fired on every workshop page
+    // view regardless, costing two service-role queries to return an empty list.
+    // workshop.feedbackHighlight/feedbackAuthor exist on the type but are never populated by
+    // any mapper or DB column, so derive the highlight from the reviews already loaded here.
+    const topFeedback = useMemo(() => {
+        const withComment = publicFeedback.filter(
+            (item) => typeof item.rating === "number" && (item.comment || "").trim().length > 0
+        );
+        if (withComment.length === 0) return null;
+
+        const best = withComment.reduce((current, candidate) =>
+            (candidate.rating ?? 0) > (current.rating ?? 0) ? candidate : current
+        );
+
+        return {
+            highlight: best.comment.trim(),
+            author: best.userDisplayName,
+        };
+    }, [publicFeedback]);
+
     useEffect(() => {
+        if (workshop.reviewCount <= 0) {
+            setPublicFeedback([]);
+            setPublicFeedbackLoading(false);
+            return;
+        }
+
         void loadPublicFeedback();
-    }, [loadPublicFeedback]);
+    }, [loadPublicFeedback, workshop.reviewCount]);
 
     useEffect(() => {
         if (user && user.email) {
@@ -524,20 +550,31 @@ export default function WorkshopClient({
     const handleJoinWaitlist = async (e: React.FormEvent) => {
         e.preventDefault();
         setWaitlistError(null);
-        if (!waitlistEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(waitlistEmail)) {
-            setWaitlistError("Please enter a valid email address.");
+
+        // The route derives both the user and the notification address from the session:
+        // leaving it open let anyone enrol arbitrary third-party addresses. Same shape as
+        // handlePastNotify below.
+        if (!user) {
+            const redirectPath = encodeURIComponent(`/workshop/${workshop.id}`);
+            router.push(`/auth/login?redirect=${redirectPath}`);
+            toast.info("Log in required", "Please sign in to join the waitlist.");
             return;
         }
-
+        if (!accessToken) {
+            const message = "Your session expired. Please log in again.";
+            setWaitlistError(message);
+            toast.error("Session expired", message);
+            return;
+        }
         setWaitlistLoading(true);
         try {
             const res = await fetch(`/api/workshops/${workshop.id}/waitlist`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    email: waitlistEmail,
-                    userId: user?.id,
-                }),
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({}),
             });
             const data = await res.json();
 
@@ -879,13 +916,18 @@ export default function WorkshopClient({
         }
     };
 
+    // Rows written before the rating column existed have rating = null. The rollup already
+    // excludes them from review_count, so rendering them would show "- / 5" beside five empty
+    // stars and contradict the count. Belt and braces: the API filters these too.
+    const ratedPublicFeedback = publicFeedback.filter((item) => typeof item.rating === "number");
+
     const visiblePublicFeedback = userFeedback
-        ? publicFeedback.filter(
+        ? ratedPublicFeedback.filter(
               (item) =>
                   item.comment !== userFeedback.comment ||
                   item.createdAt !== userFeedback.created_at
           )
-        : publicFeedback;
+        : ratedPublicFeedback;
 
     return (
         <div className="min-h-full pb-44 min-[900px]:pb-0">
@@ -946,12 +988,34 @@ export default function WorkshopClient({
                                 )}
                                 <h1 className="heading-lg font-inter mb-3">{workshop.title}</h1>
                                 <div className="flex flex-wrap items-center gap-4 text-sm font-inter text-dark-secondary">
+                                    {/* A workshop with no ratings must not render a filled star next
+                                        to "0" - that reads as a one-star review rather than "not
+                                        rated yet". Mirrors the guard in WorkshopCard. */}
                                     <div className="flex items-center gap-1.5">
-                                        <Star className="w-4 h-4 text-terracotta fill-terracotta" />
-                                        <span className="font-semibold">{workshop.rating}</span>
-                                        <span className="text-dark-muted">
-                                            ({workshop.reviewCount} reviews)
-                                        </span>
+                                        {workshop.reviewCount > 0 ? (
+                                            <>
+                                                <Star className="w-4 h-4 text-terracotta fill-terracotta" />
+                                                <span className="font-semibold">
+                                                    {workshop.rating}
+                                                </span>
+                                                <span className="text-dark-muted">
+                                                    ({workshop.reviewCount}{" "}
+                                                    {workshop.reviewCount === 1
+                                                        ? "review"
+                                                        : "reviews"}
+                                                    )
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Star className="w-4 h-4 text-dark-muted" />
+                                                <span className="text-dark-muted">
+                                                    {isPastWorkshop
+                                                        ? "No reviews yet"
+                                                        : "Newly listed"}
+                                                </span>
+                                            </>
+                                        )}
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         <MapPin className="w-4 h-4 text-dark-muted" />{" "}
@@ -1496,8 +1560,10 @@ export default function WorkshopClient({
                                     workshopCity={workshop.city}
                                     workshopRating={workshop.rating}
                                     workshopReviewCount={workshop.reviewCount}
-                                    feedbackHighlight={workshop.feedbackHighlight}
-                                    feedbackAuthor={workshop.feedbackAuthor}
+                                    feedbackHighlight={
+                                        topFeedback?.highlight ?? workshop.feedbackHighlight
+                                    }
+                                    feedbackAuthor={topFeedback?.author ?? workshop.feedbackAuthor}
                                     notifyState={notifyState}
                                     notifyLoadingMode={notifyLoadingMode}
                                     notifyMessage={notifyMessage}
@@ -1633,8 +1699,8 @@ export default function WorkshopClient({
                         workshopCity={workshop.city}
                         workshopRating={workshop.rating}
                         workshopReviewCount={workshop.reviewCount}
-                        feedbackHighlight={workshop.feedbackHighlight}
-                        feedbackAuthor={workshop.feedbackAuthor}
+                        feedbackHighlight={topFeedback?.highlight ?? workshop.feedbackHighlight}
+                        feedbackAuthor={topFeedback?.author ?? workshop.feedbackAuthor}
                         notifyState={notifyState}
                         notifyLoadingMode={notifyLoadingMode}
                         notifyMessage={notifyMessage}
@@ -1711,10 +1777,8 @@ export default function WorkshopClient({
                 showWaitlistModal={showWaitlistModal}
                 setShowWaitlistModal={setShowWaitlistModal}
                 waitlistEmail={waitlistEmail}
-                setWaitlistEmail={setWaitlistEmail}
                 waitlistLoading={waitlistLoading}
                 waitlistError={waitlistError}
-                setWaitlistError={setWaitlistError}
                 waitlistSuccess={waitlistSuccess}
                 onJoinWaitlist={handleJoinWaitlist}
             />

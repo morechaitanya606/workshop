@@ -7,6 +7,7 @@ import ToastProvider from "@/components/ToastProvider";
 import { AuthProvider } from "@/lib/auth-context";
 import { getAppUrl } from "@/lib/env";
 import { PlatformSettingsProvider } from "@/lib/platform-settings-context";
+import { getCachedPlatformSettings } from "@/lib/cached-reads";
 
 const chunkLoadRecoveryScript = `
 (() => {
@@ -99,11 +100,13 @@ export const metadata: Metadata = {
     },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
     children,
 }: Readonly<{
     children: React.ReactNode;
 }>) {
+    const settings = await getCachedPlatformSettings();
+
     return (
         <html lang="en">
             <body className="min-h-screen bg-cream antialiased" suppressHydrationWarning>
@@ -118,7 +121,7 @@ export default function RootLayout({
                     <AnalyticsProvider>
                         <ToastProvider>
                             <AuthProvider>
-                                <PlatformSettingsProvider>
+                                <PlatformSettingsProvider initialSettings={settings}>
                                     {children}
                                     <GlobalFloatingWidgets />
                                 </PlatformSettingsProvider>

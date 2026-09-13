@@ -193,6 +193,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             patch.early_bird_days_after_listing = input.earlyBirdDaysAfterListing;
         }
 
+        // `seats_remaining` is derived from bookings, so writing it as an absolute value
+        // computed from a read taken one round trip earlier silently un-decrements any booking
+        // confirmed in that window and oversells the workshop. The edit form always sends
+        // maxSeats, so this used to happen on EVERY save, not just seat resizes.
+        let seatsGuard: number | null = null;
+
         if (typeof input.maxSeats === "number") {
             const currentMaxSeats = Number(existing.max_seats || 0);
             const currentSeatsRemaining = Number(existing.seats_remaining || 0);
@@ -205,16 +211,29 @@ export async function PATCH(request: NextRequest, { params }: Params) {
                 );
             }
 
-            patch.max_seats = input.maxSeats;
-            patch.seats_remaining = input.maxSeats - bookedSeats;
+            // Only touch capacity when it actually changed.
+            if (input.maxSeats !== currentMaxSeats) {
+                patch.max_seats = input.maxSeats;
+                patch.seats_remaining = input.maxSeats - bookedSeats;
+                // Optimistic concurrency: the write only lands if seats_remaining is still
+                // what we based the arithmetic on.
+                seatsGuard = currentSeatsRemaining;
+            }
         }
 
-        let { data, error } = await serviceClient
-            .from("workshops")
-            .update(patch)
-            .eq("id", id)
-            .select("*")
-            .single();
+        const buildWorkshopUpdate = () => {
+            let query = serviceClient.from("workshops").update(patch).eq("id", id);
+            if (seatsGuard !== null) {
+                query = query.eq("seats_remaining", seatsGuard);
+            }
+            return query.select("*").maybeSingle();
+        };
+
+        let { data, error } = await buildWorkshopUpdate();
+
+        if (!error && !data && seatsGuard !== null) {
+            return jsonError("Seats changed while you were editing. Reload and try again.", 409);
+        }
 
         if (error && isMissingColumnError(error)) {
             ({ data, error } = await serviceClient
@@ -235,8 +254,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         revalidatePath("/host/workshops");
         revalidatePath(`/host/workshops/${id}/edit`);
         revalidatePath(`/workshop/${id}`);
-        revalidatePath("/workshops");
-        revalidatePath(`/workshops/${id}`);
+        // Public listing surfaces that actually exist in this app.
+        revalidatePath("/explore");
+        revalidatePath("/");
 
         return NextResponse.json({
             workshop: mapWorkshopRowToWorkshop(data),
@@ -308,8 +328,9 @@ export async function DELETE(request: NextRequest, { params }: Params) {
         revalidatePath("/host/workshops");
         revalidatePath(`/host/workshops/${id}/edit`);
         revalidatePath(`/workshop/${id}`);
-        revalidatePath("/workshops");
-        revalidatePath(`/workshops/${id}`);
+        // Public listing surfaces that actually exist in this app.
+        revalidatePath("/explore");
+        revalidatePath("/");
 
         return NextResponse.json({
             success: true,

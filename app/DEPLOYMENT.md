@@ -16,6 +16,41 @@ npm run lint
 npm run build
 ```
 
+## Serverless region
+
+`vercel.json` pins `regions: ["sin1"]`. That must track the Supabase project's region: the
+database is in `ap-northeast-1` (Tokyo), and `bom1` (Mumbai) added roughly 120 ms to every
+query -- which checkout pays several times over, because it makes sequential round trips.
+`sin1` is the closest Vercel region to Tokyo.
+
+The better long-term fix is to move the database to `ap-south-1` and set this back to
+`bom1`, putting both next to the users rather than next to each other.
+
+**Currently NOT pinned.** `regions` and per-function `maxDuration`/`memory` are paid-plan
+features on Vercel. They were added to `vercel.json` on a branch and every deployment carrying
+them failed, so the file is back to the configuration that deploys. Re-add them only after
+confirming the plan allows it, and watch the first deployment:
+
+```json
+"regions": ["sin1"],
+"functions": {
+    "src/app/api/cron/emails/route.ts": { "maxDuration": 300 },
+    "src/app/api/upload/route.ts": { "maxDuration": 60, "memory": 2048 },
+    "src/app/api/bookings/checkout/route.ts": { "maxDuration": 30 },
+    "src/app/api/payments/razorpay/webhook/route.ts": { "maxDuration": 30 },
+    "src/app/api/chat/route.ts": { "maxDuration": 30 },
+    "src/app/api/image-proxy/route.ts": { "maxDuration": 20, "memory": 1024 }
+}
+```
+
+Without them the cron runs under the default function timeout, so if the reminder job starts
+timing out that is the first thing to restore.
+
+A note like this one cannot live in `vercel.json`: its schema declares
+`additionalProperties: false`, so an extra key is not an inert comment -- Vercel rejects the
+configuration and the deployment fails before it builds. `npm run vercel:validate` checks for
+that. JSON has no comments; the reasoning goes in Markdown.
+
 ## Required production environment variables
 
 These must be set in Vercel before promoting live:

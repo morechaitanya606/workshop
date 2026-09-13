@@ -27,6 +27,9 @@ vi.mock("@/lib/workshop-utils", () => ({
 vi.mock("@/lib/booking-time", () => ({
     BOOKING_CUTOFF_HOURS: 3,
     isBookingClosedNow: vi.fn(() => false),
+    // These fixtures carry no early-bird configuration, so the discount is zero. The helper
+    // itself is covered by its own unit tests.
+    computeEarlyBirdDiscount: vi.fn(() => 0),
 }));
 
 vi.mock("@/lib/payment-notifications", () => ({
@@ -36,6 +39,7 @@ vi.mock("@/lib/payment-notifications", () => ({
 vi.mock("@sentry/nextjs", () => ({
     captureException: vi.fn(),
     captureMessage: vi.fn(),
+    setTag: vi.fn(),
 }));
 
 vi.mock("@/lib/razorpay-server", () => ({
@@ -43,6 +47,9 @@ vi.mock("@/lib/razorpay-server", () => ({
     getRazorpayServerClient: vi.fn(),
     isRazorpayConfigured: true,
     verifyRazorpayOrderSignature: vi.fn(() => true),
+    RAZORPAY_TIMEOUT_MS: 8000,
+    // Pass-through: the timeout guard is transport concern, not checkout logic.
+    withRazorpayTimeout: vi.fn(<T>(operation: () => Promise<T>) => operation()),
 }));
 
 function createQueryBuilder<T>(result: T) {
@@ -376,11 +383,15 @@ describe("POST /api/bookings/checkout", () => {
             p_total: 1899,
             p_coupon_id: couponId,
             p_discount_applied: 200,
+            p_early_bird_discount: 0,
         });
-        expect(serviceClient.rpc).not.toHaveBeenCalledWith("increment_coupon_usage", expect.anything());
+        expect(serviceClient.rpc).not.toHaveBeenCalledWith(
+            "increment_coupon_usage",
+            expect.anything()
+        );
     });
 
-    it("does not confirm discounted payments when the atomic RPC fails", async () => {
+    it("refunds the captured payment when the atomic confirmation RPC fails", async () => {
         const holdId = "11111111-1111-4111-8111-111111111111";
         const couponId = "33333333-3333-4333-8333-333333333333";
 
@@ -475,6 +486,7 @@ describe("POST /api/bookings/checkout", () => {
                     currency: "INR",
                     status: "captured",
                 }),
+                refund: vi.fn().mockResolvedValue({ id: "rfnd_1", status: "processed" }),
             },
         };
 
@@ -510,11 +522,274 @@ describe("POST /api/bookings/checkout", () => {
         );
         const body = await response.json();
 
-        expect(response.status).toBe(500);
-        expect(body.error).toContain("atomic booking confirmation failed");
-        expect(body.couponId).toBe(couponId);
+        // The payment was captured before confirmation, so a failed confirmation must
+        // give the money back rather than leaving the customer charged for nothing.
+        expect(response.status).toBe(409);
+        expect(body.error).toContain("refunded");
+        expect(razorpay.payments.refund).toHaveBeenCalledWith("pay_123", {
+            amount: 189900,
+            speed: "normal",
+            notes: { reason: "booking_confirmation_failed" },
+        });
         expect(bookingsTable.insert).not.toHaveBeenCalled();
         expect(bookingsTable.update).not.toHaveBeenCalled();
         expect(serviceClient.rpc).toHaveBeenCalledTimes(1);
+
+        // The Sentry context behind this response names the user, the hold, the payment and
+        // the raw RPC text. None of it belongs in a body any caller can read back.
+        expect(body).not.toHaveProperty("userId");
+        expect(body).not.toHaveProperty("holdId");
+        expect(body).not.toHaveProperty("paymentId");
+        expect(body).not.toHaveProperty("couponId");
+        expect(body).not.toHaveProperty("details");
+        expect(body).not.toHaveProperty("refunded");
+    });
+
+    /**
+     * confirm_booking_from_hold takes the hold FOR UPDATE, so a double-submitted confirmation
+     * -- the UI's own "Retry confirmation" button, a double click, a retried fetch -- has the
+     * winner insert the booking and the loser raise HOLD_NOT_ACTIVE. Treating that as "the
+     * booking failed, refund it" handed the money back for a booking that exists and is still
+     * holding a seat.
+     */
+    it("returns the existing booking instead of refunding when a concurrent confirm won the race", async () => {
+        const holdId = "11111111-1111-4111-8111-111111111111";
+        const bookingId = "booking-1";
+
+        const holdBuilder = createQueryBuilder({
+            data: {
+                id: holdId,
+                workshop_id: "workshop-1",
+                user_id: "user-1",
+                guests: 2,
+                status: "active",
+                expires_at: "2099-05-10T12:15:00.000Z",
+                workshop: {
+                    id: "workshop-1",
+                    title: "Intro to Wheel Throwing",
+                    category: "Pottery",
+                    price: 1000,
+                    seats_remaining: 8,
+                    approval_status: "approved",
+                    date: "2099-05-10",
+                    time: "11:00",
+                },
+            },
+            error: null,
+        });
+        const settingsBuilder = createQueryBuilder({ data: { setting_value: 99 }, error: null });
+        const confirmedBooking = {
+            id: bookingId,
+            user_id: "user-1",
+            guests: 2,
+            total: 2099,
+            status: "confirmed",
+            payment_intent_id: "pay_123",
+            first_name: "Chait",
+            last_name: "Tester",
+            email: "chait@example.com",
+            phone: "9876543210",
+            created_at: "2099-05-10T12:15:00.000Z",
+            workshop: null,
+        };
+
+        // The winner's row is invisible on the first lookup (it had not committed yet) and
+        // visible on the re-check after the RPC raises -- exactly the real ordering, because
+        // the hold's row lock is only released at the winner's commit.
+        let idLookups = 0;
+        const bookingsTable = {
+            select: vi.fn((fields?: string) => {
+                if (String(fields || "").trim() === "id") {
+                    idLookups += 1;
+                    return createQueryBuilder({
+                        data: idLookups === 1 ? null : { id: bookingId },
+                        error: null,
+                    });
+                }
+                return createQueryBuilder({ data: confirmedBooking, error: null });
+            }),
+            insert: vi.fn(),
+            update: vi.fn(),
+        };
+
+        const serviceClient = {
+            from: vi.fn((table: string) => {
+                if (table === "booking_holds") return { select: vi.fn(() => holdBuilder) };
+                if (table === "platform_settings") return { select: vi.fn(() => settingsBuilder) };
+                if (table === "bookings") return bookingsTable;
+                throw new Error(`Unexpected table ${table}`);
+            }),
+            rpc: vi.fn(() =>
+                Promise.resolve({
+                    data: null,
+                    error: { message: 'raise exception "HOLD_NOT_ACTIVE"' },
+                })
+            ),
+        };
+
+        const razorpay = {
+            orders: {
+                fetch: vi.fn().mockResolvedValue({
+                    id: "order_123",
+                    amount: 209900,
+                    currency: "INR",
+                    receipt: holdId,
+                }),
+            },
+            payments: {
+                fetch: vi.fn().mockResolvedValue({
+                    id: "pay_123",
+                    order_id: "order_123",
+                    amount: 209900,
+                    currency: "INR",
+                    status: "captured",
+                }),
+                refund: vi.fn(),
+            },
+        };
+
+        vi.mocked(requireAuthenticatedUser).mockResolvedValue({
+            ok: true,
+            user: { id: "user-1" } as any,
+            accessToken: "token",
+        });
+        vi.mocked(assertRateLimit).mockResolvedValue({ ok: true } as any);
+        vi.mocked(requireSupabaseService).mockReturnValue({
+            ok: true,
+            client: serviceClient as any,
+        });
+        vi.mocked(ensureWorkshopSeededFromMock).mockResolvedValue(true);
+        vi.mocked(getRazorpayServerClient).mockReturnValue(razorpay as any);
+
+        const response = await POST(
+            new NextRequest("http://localhost/api/bookings/checkout", {
+                method: "POST",
+                body: JSON.stringify({
+                    holdId,
+                    workshopId: "workshop-1",
+                    firstName: "Chait",
+                    lastName: "Tester",
+                    email: "chait@example.com",
+                    phone: "9876543210",
+                    razorpayOrderId: "order_123",
+                    razorpayPaymentId: "pay_123",
+                    razorpaySignature: "sig",
+                }),
+            })
+        );
+        const body = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(body.mode).toBe("already_confirmed");
+        expect(body.booking.id).toBe(bookingId);
+        // The decisive assertion: the winner's booking keeps its money.
+        expect(razorpay.payments.refund).not.toHaveBeenCalled();
+    });
+
+    /**
+     * withRazorpayTimeout bounds the await but cannot abort the in-flight request, so a
+     * capture that "timed out" may well have succeeded. Returning "Checkout failed." without
+     * asking Razorpay left the customer charged with no booking and no refund.
+     */
+    it("refunds a capture that succeeded after the confirmation path threw", async () => {
+        const holdId = "11111111-1111-4111-8111-111111111111";
+
+        const holdBuilder = createQueryBuilder({
+            data: {
+                id: holdId,
+                workshop_id: "workshop-1",
+                user_id: "user-1",
+                guests: 2,
+                status: "active",
+                expires_at: "2099-05-10T12:15:00.000Z",
+                workshop: {
+                    id: "workshop-1",
+                    title: "Intro to Wheel Throwing",
+                    category: "Pottery",
+                    price: 1000,
+                    seats_remaining: 8,
+                    approval_status: "approved",
+                    date: "2099-05-10",
+                    time: "11:00",
+                },
+            },
+            error: null,
+        });
+        const settingsBuilder = createQueryBuilder({ data: { setting_value: 99 }, error: null });
+
+        const serviceClient = {
+            from: vi.fn((table: string) => {
+                if (table === "booking_holds") return { select: vi.fn(() => holdBuilder) };
+                if (table === "platform_settings") return { select: vi.fn(() => settingsBuilder) };
+                if (table === "bookings") {
+                    return { select: vi.fn(() => createQueryBuilder({ data: null, error: null })) };
+                }
+                throw new Error(`Unexpected table ${table}`);
+            }),
+            rpc: vi.fn(() => {
+                throw new Error("Razorpay request timed out after 8000ms.");
+            }),
+        };
+
+        const razorpay = {
+            orders: {
+                fetch: vi.fn().mockResolvedValue({
+                    id: "order_123",
+                    amount: 209900,
+                    currency: "INR",
+                    receipt: holdId,
+                }),
+            },
+            payments: {
+                fetch: vi.fn().mockResolvedValue({
+                    id: "pay_123",
+                    order_id: "order_123",
+                    amount: 209900,
+                    currency: "INR",
+                    status: "captured",
+                    amount_refunded: 0,
+                }),
+                refund: vi.fn().mockResolvedValue({ id: "rfnd_1", status: "processed" }),
+            },
+        };
+
+        vi.mocked(requireAuthenticatedUser).mockResolvedValue({
+            ok: true,
+            user: { id: "user-1" } as any,
+            accessToken: "token",
+        });
+        vi.mocked(assertRateLimit).mockResolvedValue({ ok: true } as any);
+        vi.mocked(requireSupabaseService).mockReturnValue({
+            ok: true,
+            client: serviceClient as any,
+        });
+        vi.mocked(ensureWorkshopSeededFromMock).mockResolvedValue(true);
+        vi.mocked(getRazorpayServerClient).mockReturnValue(razorpay as any);
+
+        const response = await POST(
+            new NextRequest("http://localhost/api/bookings/checkout", {
+                method: "POST",
+                body: JSON.stringify({
+                    holdId,
+                    workshopId: "workshop-1",
+                    firstName: "Chait",
+                    lastName: "Tester",
+                    email: "chait@example.com",
+                    phone: "9876543210",
+                    razorpayOrderId: "order_123",
+                    razorpayPaymentId: "pay_123",
+                    razorpaySignature: "sig",
+                }),
+            })
+        );
+        const body = await response.json();
+
+        expect(response.status).toBe(409);
+        expect(body.error).toContain("refunded");
+        expect(razorpay.payments.refund).toHaveBeenCalledWith("pay_123", {
+            amount: 209900,
+            speed: "normal",
+            notes: { reason: "booking_confirmation_failed" },
+        });
     });
 });

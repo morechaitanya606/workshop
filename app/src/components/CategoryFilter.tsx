@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { categories } from "@/lib/data";
+import { categoryGroups } from "@/lib/data";
 
 const OTHER_CATEGORY_VALUE = "__other__";
 
@@ -15,10 +15,10 @@ export default function CategoryFilter({ onCategoryChange, activeCategory }: Cat
     const [localActive, setLocalActive] = useState("trending");
     const [customCategory, setCustomCategory] = useState("");
     const active = activeCategory ?? localActive;
-    const isCustomActive = Boolean(active) && !categories.some((cat) => cat.id === active);
+    const isCustomActive = Boolean(active) && !categoryGroups.some((cat) => cat.id === active);
     const activeId = isCustomActive ? OTHER_CATEGORY_VALUE : active;
     const filterCategories = [
-        ...categories,
+        ...categoryGroups,
         { id: OTHER_CATEGORY_VALUE, label: "Other", icon: "+" },
     ];
 
@@ -47,7 +47,7 @@ export default function CategoryFilter({ onCategoryChange, activeCategory }: Cat
     useEffect(() => {
         if (!activeCategory) return;
         if (!activeCategory || activeCategory === OTHER_CATEGORY_VALUE) return;
-        const isKnown = categories.some((cat) => cat.id === activeCategory);
+        const isKnown = categoryGroups.some((cat) => cat.id === activeCategory);
         setCustomCategory(isKnown ? "" : activeCategory);
     }, [activeCategory]);
 

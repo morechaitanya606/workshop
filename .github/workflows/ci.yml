@@ -24,6 +24,20 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Parses every migration with Postgres own grammar (libpg_query via WASM), including
+      # plpgsql function bodies. CI has no database, so without this a plain syntax error
+      # stays green until `supabase db push` fails partway through a transaction against
+      # live data. Syntax only - it cannot know whether a unique index will find duplicates.
+      - name: Validate migrations parse
+        run: npm run db:validate
+
+      # vercel.json has additionalProperties: false, so a stray key makes Vercel reject the
+      # configuration and fail the deployment before it builds. Nothing else here reads that
+      # file -- not typecheck, not lint, not next build -- so without this the first sign is
+      # a red deploy.
+      - name: Validate vercel.json
+        run: npm run vercel:validate
+
       - name: Typecheck
         run: npx tsc --noEmit --pretty false
 
@@ -43,3 +57,59 @@ jobs:
           NEXT_PUBLIC_APP_URL: "https://onlyworkshops.com"
           NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_ci_placeholder"
+
+  migration-drift:
+    # Every P0 in the September 2026 production audit traced to one cause: migrations
+    # sitting untracked in a working tree while CI stayed green. The app checks above
+    # cannot see the database, so they reported healthy while the live project was
+    # missing the grants that keep `anon` out of the booking RPCs. This job makes that
+    # gap fail the build instead of shipping.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Fail on uncommitted migrations
+        run: |
+          untracked=$(git ls-files --others --exclude-standard supabase/migrations)
+          if [ -n "$untracked" ]; then
+            echo "::error::Untracked migration files found. Commit them before merging:"
+            echo "$untracked"
+            exit 1
+          fi
+
+      - name: Check migrations are applied to the linked project
+        # Skipped on forks and anywhere the credentials are absent. A missing secret is
+        # reported loudly rather than passing silently, so "green" never means "unchecked".
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_PROJECT_ID" ]; then
+            echo "::warning::Supabase credentials unavailable; migration drift NOT verified."
+            exit 0
+          fi
+
+          npx supabase link --project-ref "$SUPABASE_PROJECT_ID"
+          npx supabase migration list --linked | tee /tmp/migrations.txt
+
+          # `migration list` prints one row per version with Local and Remote columns.
+          # A row carrying a local version but no remote one has never been applied.
+          if awk -F'|' 'NR>2 && $1 ~ /[0-9]/ && $2 !~ /[0-9]/ { found=1 } END { exit !found }' /tmp/migrations.txt; then
+            echo "::error::Local migrations are missing from the linked project. Run: npx supabase db push"
+            exit 1
+          fi

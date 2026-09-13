@@ -54,6 +54,16 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         if (typeof parsed.data.comment === "string") {
             patch.comment = parsed.data.comment;
         }
+        if (typeof parsed.data.isPublished === "boolean") {
+            const moderationPatch = patch as TablesUpdate<"workshop_feedback"> &
+                Record<string, unknown>;
+            moderationPatch.is_published = parsed.data.isPublished;
+            moderationPatch.moderated_by = auth.user.id;
+            moderationPatch.moderated_at = new Date().toISOString();
+            if (parsed.data.isPublished) {
+                moderationPatch.published_at = new Date().toISOString();
+            }
+        }
 
         let updateResult = await serviceClient
             .from("workshop_feedback")

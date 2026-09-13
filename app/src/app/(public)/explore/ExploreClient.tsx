@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useReducedMotion } from "framer-motion";
 import { Sheet } from "@/components/ui/sheet";
-import { categories, findCategory, normalizeFilterCategoryLabel } from "@/lib/data";
+import { categoryGroups, findCategoryGroup, normalizeGroupFilterLabel } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
 import { trackEvent } from "@/lib/analytics";
 import {
@@ -44,8 +44,13 @@ const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
 ];
 
 const OTHER_CATEGORY_VALUE = "__other__";
-const CATEGORY_OPTIONS = categories.filter((item) => item.id !== "trending");
+const CATEGORY_OPTIONS = categoryGroups.filter((item) => item.id !== "trending");
 const CITY_OPTIONS = ["", "City", "Mumbai", "Bangalore", "Delhi", "Hyderabad"];
+// Headline marketing figures, deliberately fixed rather than derived from the live counts.
+const EXPLORE_STATS = [
+    { label: "Categories", value: "25+" },
+    { label: "Workshops", value: "150+" },
+];
 const PAGE_SIZE = 8;
 
 function buildFilterParams(next: FilterState) {
@@ -84,7 +89,7 @@ export default function ExploreClient({
 
     const parsedQuery = useMemo(() => {
         const urlSort = searchParams.get("sort") as SortOption | null;
-        const parsedCategory = normalizeFilterCategoryLabel(searchParams.get("category") || "");
+        const parsedCategory = normalizeGroupFilterLabel(searchParams.get("category") || "");
 
         return {
             q: searchParams.get("q") || "",
@@ -105,7 +110,7 @@ export default function ExploreClient({
         };
     }, [searchParams]);
 
-    const initialCategoryMatch = findCategory(parsedQuery.category);
+    const initialCategoryMatch = findCategoryGroup(parsedQuery.category);
     const [searchQuery, setSearchQuery] = useState(parsedQuery.q);
     const [showFilters, setShowFilters] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState(parsedQuery.category);
@@ -133,7 +138,7 @@ export default function ExploreClient({
     useEffect(() => {
         setSearchQuery(parsedQuery.q);
         setSelectedCategory(parsedQuery.category);
-        const parsedCategoryMatch = findCategory(parsedQuery.category);
+        const parsedCategoryMatch = findCategoryGroup(parsedQuery.category);
         setCategorySelection(
             parsedQuery.category
                 ? parsedCategoryMatch
@@ -265,12 +270,6 @@ export default function ExploreClient({
     };
 
     const categoryOptions = CATEGORY_OPTIONS;
-    const cityCount = CITY_OPTIONS.filter(Boolean).length;
-    const exploreStats = [
-        { label: "Workshops", value: String(total) },
-        { label: "Categories", value: String(categoryOptions.length) },
-        { label: "Cities", value: String(cityCount) },
-    ];
     const appliedFilterSummary = [
         parsedQuery.city,
         parsedQuery.category,
@@ -285,7 +284,7 @@ export default function ExploreClient({
             return;
         }
 
-        const normalizedValue = normalizeFilterCategoryLabel(value);
+        const normalizedValue = normalizeGroupFilterLabel(value);
         setCustomCategory("");
         setSelectedCategory(normalizedValue);
         pushFilters({ category: normalizedValue, page: 1 });
@@ -308,10 +307,10 @@ export default function ExploreClient({
             return;
         }
 
-        const nextCategory = normalizeFilterCategoryLabel(
+        const nextCategory = normalizeGroupFilterLabel(
             categorySelection === OTHER_CATEGORY_VALUE ? trimmedCustomCategory : categorySelection
         );
-        const nextCategoryMatch = findCategory(nextCategory);
+        const nextCategoryMatch = findCategoryGroup(nextCategory);
 
         setCategorySelection(nextCategoryMatch?.id ?? categorySelection);
         setCustomCategory(nextCategoryMatch ? "" : trimmedCustomCategory);
@@ -505,7 +504,7 @@ export default function ExploreClient({
                     filterBarMotionProps={filterBarMotionProps}
                     filterPanelMotionProps={filterPanelMotionProps}
                     appliedFilterSummary={appliedFilterSummary}
-                    exploreStats={exploreStats}
+                    exploreStats={EXPLORE_STATS}
                     searchQuery={searchQuery}
                     onSearchQueryChange={setSearchQuery}
                     onSearchEnter={handleSearch}

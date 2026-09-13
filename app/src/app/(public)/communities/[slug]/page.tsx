@@ -16,10 +16,27 @@ import Footer from "@/components/Footer";
 import CommunityListCard from "@/components/communities/CommunityListCard";
 import CommunitySpotlightCard from "@/components/communities/CommunitySpotlightCard";
 import { getCommunitySocialPreviewImage } from "@/lib/communities";
-import { loadPublicCommunityBySlug, loadRelatedPublicCommunities } from "@/lib/community-page-data";
+import {
+    loadPublicCommunities,
+    loadPublicCommunityBySlug,
+    loadRelatedPublicCommunities,
+} from "@/lib/community-page-data";
 import { getAbsoluteUrl } from "@/lib/env";
 
 export const revalidate = 60;
+
+/**
+ * Same reason as /workshop/[id]: a dynamic segment with no generateStaticParams is treated as
+ * fully dynamic and never enters the ISR cache. Unlisted slugs still render on demand.
+ */
+export async function generateStaticParams() {
+    try {
+        const { data } = await loadPublicCommunities(100);
+        return (data || []).map((community) => ({ slug: String(community.slug) }));
+    } catch {
+        return [];
+    }
+}
 
 export async function generateMetadata({
     params,

@@ -89,6 +89,15 @@ export async function parseBody<TSchema extends z.ZodTypeAny>(
     return { ok: true, data: parsed.data };
 }
 
+/**
+ * The per-request id the middleware stamps onto every `/api/*` request, echoed on the
+ * response and readable here so a Sentry event can carry the same id the customer sees.
+ * Falls back to Vercel's own id when middleware did not run (a direct invocation, a test).
+ */
+export function getRequestId(request: Request) {
+    return request.headers.get("x-request-id") || request.headers.get("x-vercel-id") || null;
+}
+
 function formatErrorDetails(error: unknown) {
     if (error instanceof Error) {
         return error.message;
@@ -107,10 +116,13 @@ export function handleApiError(message: string, error: unknown, status = 500) {
         },
     });
 
+    // Internal error text is for Sentry, not the caller. Postgres messages carry column,
+    // constraint and relation names, which hand an attacker a map of the schema to aim
+    // direct PostgREST requests at.
     return NextResponse.json(
         {
             error: message,
-            details: formatErrorDetails(error),
+            details: process.env.NODE_ENV === "production" ? null : formatErrorDetails(error),
         },
         { status }
     );

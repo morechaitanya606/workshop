@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase-server";
 import { requireAdminUser, jsonError } from "@/lib/api-auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
-export async function PATCH(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const limited = await enforceRateLimit(request, "write", "api-coupons-update");
+    if (!limited.ok) return limited.response;
+
     const { id } = await params;
     const auth = await requireAdminUser(request);
     if (!auth.ok) return auth.response;

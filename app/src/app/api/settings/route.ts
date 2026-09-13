@@ -1,9 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
 import { createSupabaseServiceClient } from "@/lib/supabase-server";
 import { requireAdminUser, jsonError } from "@/lib/api-auth";
 import type { Json } from "@/lib/database.types";
+import { PLATFORM_SETTINGS_TAG } from "@/lib/cached-reads";
+import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
+    const limit = await assertRateLimit({
+        key: getRateLimitKey(request, "api-settings-get"),
+        limit: 120,
+        windowMs: 60_000,
+    });
+    if (!limit.ok) return limit.response;
+
     try {
         const supabase = createSupabaseServiceClient();
         const { data, error } = await supabase.from("platform_settings").select("*");
@@ -20,7 +30,18 @@ export async function GET(_request: NextRequest) {
             {} as Record<string, Json>
         );
 
-        return NextResponse.json({ settings }, { status: 200 });
+        // Non-personal, changes a few times a month: let the CDN absorb it. The app itself
+        // now reads settings server-side via getCachedPlatformSettings, so this endpoint only
+        // serves the admin client and any straggling caller.
+        return NextResponse.json(
+            { settings },
+            {
+                status: 200,
+                headers: {
+                    "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
+                },
+            }
+        );
     } catch {
         return jsonError("Internal Server Error", 500);
     }
@@ -54,6 +75,8 @@ export async function PATCH(request: NextRequest) {
         if (error) {
             return jsonError(error.message, 500);
         }
+
+        revalidateTag(PLATFORM_SETTINGS_TAG);
 
         return NextResponse.json({ success: true }, { status: 200 });
     } catch {

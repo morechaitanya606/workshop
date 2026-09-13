@@ -23,6 +23,7 @@ export default function WorkshopGridSection({
     emptyDescription,
     selectedCategoryLabel,
     onTryAnotherCategory,
+    showCardBadgeLabels = true,
 }: {
     title: string;
     eyebrow?: string;
@@ -40,6 +41,7 @@ export default function WorkshopGridSection({
     emptyDescription: string;
     selectedCategoryLabel: string;
     onTryAnotherCategory: () => void;
+    showCardBadgeLabels?: boolean;
 }) {
     const gridSwapMotionProps = useMotionProps(shouldReduceMotion, fadeIn, quickTransition, {
         whileInView: false,
@@ -81,6 +83,7 @@ export default function WorkshopGridSection({
                                         todayIso={todayIso}
                                         index={index}
                                         animateOnScroll={false}
+                                        showBadgeLabels={showCardBadgeLabels}
                                     />
                                 );
                             }
@@ -91,6 +94,7 @@ export default function WorkshopGridSection({
                                         todayIso={todayIso}
                                         index={index}
                                         animateOnScroll={false}
+                                        showBadgeLabels={showCardBadgeLabels}
                                     />
                                 </div>
                             );

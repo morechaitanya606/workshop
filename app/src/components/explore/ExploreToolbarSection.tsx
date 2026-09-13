@@ -73,7 +73,7 @@ export default function ExploreToolbarSection({
                         Using filters: {appliedFilterSummary.join(" | ")}
                     </p>
                 )}
-                <div className="mt-6 grid grid-cols-3 gap-3">
+                <div className="mt-6 grid grid-cols-2 gap-3 sm:max-w-md">
                     {exploreStats.map((stat) => (
                         <div
                             key={stat.label}

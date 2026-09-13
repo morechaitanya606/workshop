@@ -8,8 +8,12 @@ import { generateChatbotFaqEmbedding, toVectorLiteral } from "@/lib/chatbot-vect
 import { getHuggingFaceEmbeddingConfig } from "@/lib/env";
 import { FAQ_ADMIN_SELECT_FIELDS, isMissingFaqTableError } from "@/lib/faqs";
 import { faqEntrySchema } from "@/lib/validators";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "publicRead", "api-host-chatbot-faqs");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {
         return auth.response;
@@ -45,6 +49,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "write", "api-host-chatbot-faqs-create");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {
         return auth.response;

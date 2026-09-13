@@ -3,8 +3,12 @@ import type { NextRequest } from "next/server";
 import { requireHostOrAdmin } from "@/lib/api-auth";
 import { handleApiError } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "publicRead", "api-host-ledger");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) return auth.response;
 

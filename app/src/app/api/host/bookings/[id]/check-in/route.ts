@@ -5,6 +5,7 @@ import { requireSupabaseService } from "@/lib/api-helpers";
 import { requireHostOrAdmin } from "@/lib/api-auth";
 import { getWorkshopOwnerLookup } from "@/lib/workshop-attendees";
 import { z } from "zod";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const checkInSchema = z.object({
     attended: z.boolean(),
@@ -33,6 +34,9 @@ function isMissingAttendedColumnError(error: unknown) {
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
+    const limited = await enforceRateLimit(request, "write", "api-host-checkin");
+    if (!limited.ok) return limited.response;
+
     const { id } = await params;
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {

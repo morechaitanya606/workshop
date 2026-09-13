@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
+import { sanitizeInternalRedirect } from "@/lib/auth-origin";
 import { User, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./supabase";
 import { getAuthMe } from "@/lib/api-client";
@@ -259,7 +260,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         await clearInvalidSessionBeforeAuth();
-        const safeRedirectPath = redirectPath.startsWith("/") ? redirectPath : "/";
+        // Same parse-and-compare rule as the server routes; see sanitizeInternalRedirect.
+        // A startsWith("/") test alone accepts "//evil.example".
+        const safeRedirectPath = sanitizeInternalRedirect(redirectPath);
         const googleUrl = new URL("/api/auth/google", window.location.origin);
         googleUrl.searchParams.set("next", safeRedirectPath);
         window.location.assign(googleUrl.toString());

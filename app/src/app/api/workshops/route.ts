@@ -4,8 +4,9 @@ import { handleApiError, parseQuery } from "@/lib/api-route";
 import { workshopQuerySchema } from "@/lib/validators";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import { isMissingColumnError } from "@/lib/workshop-approval-compat";
-import { normalizeFilterCategoryLabel } from "@/lib/data";
+import { normalizeGroupFilterLabel, resolveCategoryFilterValues } from "@/lib/data";
 import { createSupabaseAnonServerClient, isSupabasePublicConfigured } from "@/lib/supabase-server";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const WORKSHOP_LIST_CACHE_HEADERS = {
     "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
@@ -41,7 +42,13 @@ function buildWorkshopListQuery(
         );
     }
     if (normalizedCategory) {
-        dbQuery = dbQuery.eq("category", normalizedCategory);
+        // Browse groups fan out to several stored category values.
+        const categoryValues = resolveCategoryFilterValues(normalizedCategory);
+        if (categoryValues.length === 1) {
+            dbQuery = dbQuery.eq("category", categoryValues[0]);
+        } else if (categoryValues.length > 1) {
+            dbQuery = dbQuery.in("category", categoryValues);
+        }
     }
     if (query.city) {
         dbQuery = dbQuery.eq("city", query.city);
@@ -63,13 +70,16 @@ function buildWorkshopListQuery(
 }
 
 export async function GET(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "publicRead", "api-workshops-list");
+    if (!limited.ok) return limited.response;
+
     const parsed = parseQuery(request, workshopQuerySchema, "Invalid workshop search query.");
     if (!parsed.ok) {
         return parsed.response;
     }
 
     const query = parsed.data;
-    const normalizedCategory = normalizeFilterCategoryLabel(query.category);
+    const normalizedCategory = normalizeGroupFilterLabel(query.category);
     const from = (query.page - 1) * query.pageSize;
     const to = from + query.pageSize - 1;
 

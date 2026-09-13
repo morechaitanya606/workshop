@@ -10,8 +10,12 @@ import {
     mapCommunityPhotoRow,
 } from "@/lib/community-photos";
 import { communityPhotoCreateSchema } from "@/lib/validators";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "publicRead", "api-admin-photos-list");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -41,6 +45,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "write", "api-admin-photos-create");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;

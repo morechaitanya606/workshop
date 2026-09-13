@@ -5,6 +5,7 @@ import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { adminFeedbackQuerySchema } from "@/lib/validators";
 import { isMissingFeedbackTableError } from "@/lib/feedback-fallback";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 type WorkshopInfo = {
     id: string;
@@ -64,6 +65,9 @@ function applyFeedbackFilters(query: any, q: string, workshopId: string) {
 }
 
 export async function GET(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "publicRead", "api-admin-feedback-list");
+    if (!limited.ok) return limited.response;
+
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;

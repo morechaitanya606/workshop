@@ -1,11 +1,27 @@
-import type { Workshop } from "@/lib/data";
+﻿import type { Workshop } from "@/lib/data";
 import type { Tables } from "@/lib/database.types";
 import { resolveSupportChatReply } from "@/lib/support-chat";
+import {
+    isValidLeadName,
+    isValidPhoneNumber,
+    normalizeChatText,
+    normalizeName,
+    normalizePhoneNumber,
+    type ChatbotStage,
+} from "@/lib/chatbot-text";
 
-export type ChatbotStage = "idle" | "asking_name" | "asking_phone" | "completed";
+// Re-exported from the client-safe module so existing server imports of this file keep
+// working. Client components must import from "@/lib/chatbot-text" directly.
+export {
+    normalizeChatText,
+    normalizeName,
+    normalizePhoneNumber,
+    isValidPhoneNumber,
+    isValidLeadName,
+} from "@/lib/chatbot-text";
+export type { ChatbotStage } from "@/lib/chatbot-text";
 
 export type ChatbotFaq = Pick<Tables<"faq">, "id" | "question" | "answer">;
-export type ChatbotLanguageMode = "english" | "hinglish" | "hindi" | "marathi";
 
 export type ChatbotLeadDraft = {
     name?: string;
@@ -149,22 +165,19 @@ const TOKEN_ALIASES: Record<string, string> = {
 const BOOKING_KEYWORDS = ["book", "register", "join", "fee", "fees", "price"];
 const GROQ_TIMEOUT_MS = 8000;
 
-const HINGLISH_MARKERS = ["aap", "ap", "ka", "kya", "hai", "nahi", "kar", "karna"];
-
-const HINDI_DEVANAGARI_MARKERS = ["है", "क्या", "आप", "मुझे", "कृपया", "नहीं"];
-const MARATHI_DEVANAGARI_MARKERS = ["आहे", "काय", "तुम्ही", "मराठी", "होईल", "नाही"];
-
 export const CHATBOT_SYSTEM_PROMPT = `You are a friendly workshop assistant chatbot for a SaaS support widget.
 
 Rules:
 
 * Answer ONLY using provided context.
 * Keep answers short, clear, and warm.
-* Default to English unless the user clearly asks in another language.
-* If the user clearly writes in Hindi, Hinglish, or Marathi, reply in that same style.
+* Always reply in English, even when the user writes in another language.
 * If user shows interest in joining, encourage booking in a natural way.
 * If the answer is not present in the context, clearly say you could not find the exact info and ask them to contact support.
 * Do not make up answers.`;
+
+export const CHATBOT_STYLE_INSTRUCTION =
+    "Reply in clear English, friendly and conversational, regardless of the language the user writes in.";
 
 export const CHATBOT_FALLBACK_REPLY = "I couldn't find the exact info. Please contact support.";
 export const CHATBOT_GREETING_REPLY =
@@ -198,135 +211,18 @@ export const DEFAULT_CHATBOT_FAQS: Array<{
     },
 ];
 
-function containsDevanagari(value: string) {
-    return /[\u0900-\u097f]/.test(value);
-}
-
-function containsLatin(value: string) {
-    return /[a-z]/i.test(value);
-}
-
-export function detectChatbotLanguageMode(value: string): ChatbotLanguageMode {
-    const trimmed = value.trim();
-    const hasDevanagari = containsDevanagari(trimmed);
-    const hasLatin = containsLatin(trimmed);
-    const normalizedTokens = new Set(normalizeChatText(trimmed).split(" ").filter(Boolean));
-
-    if (hasDevanagari) {
-        if (MARATHI_DEVANAGARI_MARKERS.some((marker) => trimmed.includes(marker))) {
-            return "marathi";
-        }
-
-        if (HINDI_DEVANAGARI_MARKERS.some((marker) => trimmed.includes(marker))) {
-            return hasLatin ? "hinglish" : "hindi";
-        }
-
-        return hasLatin ? "hinglish" : "hindi";
-    }
-
-    if (HINGLISH_MARKERS.some((marker) => normalizedTokens.has(marker))) {
-        return "hinglish";
-    }
-
-    return "english";
-}
-
-export function getChatbotStyleInstruction(languageMode: ChatbotLanguageMode) {
-    switch (languageMode) {
-        case "hindi":
-            return "Reply in simple Hindi. Keep it natural, short, and helpful.";
-        case "marathi":
-            return "Reply in simple Marathi with light English only when it feels natural.";
-        case "hinglish":
-            return "Reply in simple Hinglish, friendly and conversational.";
-        default:
-            return "Reply in clear English, friendly and conversational.";
-    }
-}
-
-function getLocalizedChatbotCopy(languageMode: ChatbotLanguageMode) {
-    switch (languageMode) {
-        case "hindi":
-            return {
-                fallback: "मुझे exact जानकारी नहीं मिली. कृपया support से contact करें.",
-                greeting:
-                    "Hi! आप मुझसे workshop fee, booking, materials, parking, या cancellation के बारे में पूछ सकते हैं.",
-                guidance:
-                    "आप workshop के बारे में specific सवाल पूछ सकते हैं, जैसे fee, booking, materials, parking, या cancellation.",
-                askName: "Booking शुरू करने के लिए कृपया अपना नाम बताइए.",
-                invalidName: "आगे बढ़ने से पहले कृपया अपना सही नाम बताइए.",
-                askPhone: "Perfect. अब कृपया अपना 10-digit phone number share कीजिए.",
-                missingName: "Phone number share करने से पहले कृपया अपना नाम बताइए.",
-                invalidPhone: "कृपया valid 10-digit phone number share कीजिए.",
-                bookingComplete: "Thanks! नीचे दिए गए button से आप booking complete कर सकते हैं.",
-            };
-        case "marathi":
-            return {
-                fallback: "मला exact माहिती मिळाली नाही. कृपया support शी contact करा.",
-                greeting:
-                    "Hi! तुम्ही मला workshop fee, booking, materials, parking, किंवा cancellation बद्दल विचारू शकता.",
-                guidance:
-                    "तुम्ही workshop बद्दल specific प्रश्न विचारू शकता, जसे fee, booking, materials, parking, किंवा cancellation.",
-                askName: "Booking सुरू करण्यासाठी कृपया तुमचं नाव share करा.",
-                invalidName: "पुढे जाण्यापूर्वी कृपया valid नाव share करा.",
-                askPhone: "Perfect. आता कृपया तुमचा 10-digit phone number share करा.",
-                missingName: "Phone number share करण्यापूर्वी कृपया तुमचं नाव सांगा.",
-                invalidPhone: "कृपया valid 10-digit phone number share करा.",
-                bookingComplete: "Thanks! खालील button वरून तुम्ही booking complete करू शकता.",
-            };
-        case "hinglish":
-            return {
-                fallback: "Mujhe exact info nahi mila. Please contact support.",
-                greeting:
-                    "Hi! Aap mujhse workshop fee, booking, materials, parking, ya cancellation ke baare mein pooch sakte ho.",
-                guidance:
-                    "Aap workshop ke baare mein specific question pooch sakte ho, jaise fee, booking, materials, parking, ya cancellation.",
-                askName: "Booking start karne ke liye please apna name batao.",
-                invalidName: "Aage badhne se pehle please apna valid name share karo.",
-                askPhone: "Perfect. Ab please apna 10-digit phone number share karo.",
-                missingName: "Phone number share karne se pehle please apna name batao.",
-                invalidPhone: "Please valid 10-digit phone number share karo.",
-                bookingComplete: "Thanks! Neeche button se aap booking complete kar sakte ho.",
-            };
-        default:
-            return {
-                fallback: CHATBOT_FALLBACK_REPLY,
-                greeting: CHATBOT_GREETING_REPLY,
-                guidance: CHATBOT_GUIDANCE_REPLY,
-                askName: "To start the booking, please share your name.",
-                invalidName: "Before we continue, please share a valid name.",
-                askPhone: "Perfect. Now please share your 10-digit phone number.",
-                missingName: "Before you share your phone number, please tell me your name.",
-                invalidPhone: "Please share a valid 10-digit phone number.",
-                bookingComplete: "Thanks! You can complete your booking using the button below.",
-            };
-    }
-}
-
-export function normalizeChatText(value: string) {
-    return value
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-}
-
-export function normalizeName(value: string) {
-    return value.replace(/\s+/g, " ").trim();
-}
-
-export function normalizePhoneNumber(value: string) {
-    return value.replace(/\D/g, "");
-}
-
-export function isValidPhoneNumber(value: string) {
-    return /^\d{10}$/.test(normalizePhoneNumber(value));
-}
-
-export function isValidLeadName(value: string) {
-    const normalized = normalizeName(value);
-    return normalized.length >= 2;
-}
+/** The assistant is English-only, so there is a single set of canned replies. */
+const CHATBOT_COPY = {
+    fallback: CHATBOT_FALLBACK_REPLY,
+    greeting: CHATBOT_GREETING_REPLY,
+    guidance: CHATBOT_GUIDANCE_REPLY,
+    askName: "To start the booking, please share your name.",
+    invalidName: "Before we continue, please share a valid name.",
+    askPhone: "Perfect. Now please share your 10-digit phone number.",
+    missingName: "Before you share your phone number, please tell me your name.",
+    invalidPhone: "Please share a valid 10-digit phone number.",
+    bookingComplete: "Thanks! You can complete your booking using the button below.",
+} as const;
 
 export function detectBookingIntent(value: string) {
     const normalized = normalizeChatText(value);
@@ -516,18 +412,13 @@ export function buildFaqContext(faqs: ChatbotFaq[]) {
 }
 
 export function buildGroqUserPrompt(message: string, faqs: ChatbotFaq[]) {
-    const languageMode = detectChatbotLanguageMode(message);
-
-    return `Reply Style:\n${getChatbotStyleInstruction(
-        languageMode
-    )}\n\nContext:\n${buildFaqContext(faqs)}\n\nUser Question:\n${message}`;
+    return `Reply Style:\n${CHATBOT_STYLE_INSTRUCTION}\n\nContext:\n${buildFaqContext(
+        faqs
+    )}\n\nUser Question:\n${message}`;
 }
 
-export function buildFaqFallbackReply(
-    faqs: ChatbotFaq[],
-    languageMode: ChatbotLanguageMode = "english"
-) {
-    return faqs[0]?.answer?.trim() || getLocalizedChatbotCopy(languageMode).fallback;
+export function buildFaqFallbackReply(faqs: ChatbotFaq[]) {
+    return faqs[0]?.answer?.trim() || CHATBOT_COPY.fallback;
 }
 
 async function requestGroqReply(
@@ -586,15 +477,11 @@ export async function generateChatbotReply(
 ): Promise<ChatbotApiResponse> {
     const message = input.message.trim();
     const lead = input.lead || {};
-    const languageMode = detectChatbotLanguageMode(
-        [lead.query, message].filter(Boolean).join(" ").trim()
-    );
-    const localizedCopy = getLocalizedChatbotCopy(languageMode);
 
     if (input.stage === "asking_name") {
         if (!isValidLeadName(message)) {
             return {
-                reply: localizedCopy.invalidName,
+                reply: CHATBOT_COPY.invalidName,
                 showBookingButton: false,
                 askName: true,
                 askPhone: false,
@@ -602,7 +489,7 @@ export async function generateChatbotReply(
         }
 
         return {
-            reply: localizedCopy.askPhone,
+            reply: CHATBOT_COPY.askPhone,
             showBookingButton: false,
             askName: false,
             askPhone: true,
@@ -613,7 +500,7 @@ export async function generateChatbotReply(
         const name = normalizeName(lead.name || "");
         if (!isValidLeadName(name)) {
             return {
-                reply: localizedCopy.missingName,
+                reply: CHATBOT_COPY.missingName,
                 showBookingButton: false,
                 askName: true,
                 askPhone: false,
@@ -622,7 +509,7 @@ export async function generateChatbotReply(
 
         if (!isValidPhoneNumber(message)) {
             return {
-                reply: localizedCopy.invalidPhone,
+                reply: CHATBOT_COPY.invalidPhone,
                 showBookingButton: false,
                 askName: false,
                 askPhone: true,
@@ -636,7 +523,7 @@ export async function generateChatbotReply(
         });
 
         return {
-            reply: localizedCopy.bookingComplete,
+            reply: CHATBOT_COPY.bookingComplete,
             showBookingButton: true,
             askName: false,
             askPhone: false,
@@ -645,7 +532,7 @@ export async function generateChatbotReply(
 
     if (isGreetingMessage(message)) {
         return {
-            reply: localizedCopy.greeting,
+            reply: CHATBOT_COPY.greeting,
             showBookingButton: false,
             askName: false,
             askPhone: false,
@@ -654,7 +541,7 @@ export async function generateChatbotReply(
 
     if (detectBookingIntent(message)) {
         return {
-            reply: localizedCopy.askName,
+            reply: CHATBOT_COPY.askName,
             showBookingButton: false,
             askName: true,
             askPhone: false,
@@ -677,7 +564,7 @@ export async function generateChatbotReply(
 
     if (isGenericWorkshopPrompt(message)) {
         return {
-            reply: localizedCopy.guidance,
+            reply: CHATBOT_COPY.guidance,
             showBookingButton: false,
             askName: false,
             askPhone: false,
@@ -694,7 +581,7 @@ export async function generateChatbotReply(
         }
     } catch {
         return {
-            reply: localizedCopy.fallback,
+            reply: CHATBOT_COPY.fallback,
             showBookingButton: false,
             askName: false,
             askPhone: false,
@@ -705,7 +592,7 @@ export async function generateChatbotReply(
         await input.onUnansweredQuestion?.(message);
 
         return {
-            reply: localizedCopy.fallback,
+            reply: CHATBOT_COPY.fallback,
             showBookingButton: false,
             askName: false,
             askPhone: false,
@@ -713,7 +600,7 @@ export async function generateChatbotReply(
     }
 
     const fetchImpl = input.fetchImpl || fetch;
-    let reply = buildFaqFallbackReply(relevantFaqs, languageMode);
+    let reply = buildFaqFallbackReply(relevantFaqs);
 
     if (input.groq?.apiKey) {
         try {
@@ -722,7 +609,7 @@ export async function generateChatbotReply(
                 reply = groqReply;
             }
         } catch {
-            reply = buildFaqFallbackReply(relevantFaqs, languageMode);
+            reply = buildFaqFallbackReply(relevantFaqs);
         }
     }
 

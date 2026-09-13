@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
@@ -14,6 +14,54 @@ import {
     standardTransition,
     useMotionProps,
 } from "@/lib/motion-presets";
+
+const HERO_MOBILE_QUERY = "(max-width: 640px)";
+
+/**
+ * Where the hero renditions are served from.
+ *
+ * The mp4s are not in the repo -- .gitignore excludes `app/public/videos/*.mp4`, because
+ * 40MB of binaries is paid for on every clone, every CI checkout and every deployment
+ * bundle, forever, since git never forgets a blob. So NEXT_PUBLIC_MEDIA_BASE_URL is how the
+ * hero gets video at all; unset, the `/videos/...` paths below simply 404 and the poster
+ * image stays up, which is the same state a slow or failed clip already produces.
+ *
+ * Pick that origin deliberately: these clips are 4-8MB each, so on a metered store they
+ * dominate the egress bill. Cloudflare R2 (already allow-listed in next.config.mjs and the
+ * image proxy) charges nothing for egress and is the intended home.
+ */
+const MEDIA_BASE_URL = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL || "").replace(/\/+$/, "");
+
+function heroVideoUrl(fileName: string) {
+    return MEDIA_BASE_URL ? `${MEDIA_BASE_URL}/${fileName}` : `/videos/${fileName}`;
+}
+
+/**
+ * Desktop shows all three clips at once as a pre-composited 1920x1080 triptych, so the
+ * vertical footage keeps its full frame instead of being cropped to a narrow 16:9 band.
+ * It is a single looping file — there is no sequence to advance on wide screens.
+ */
+const HERO_VIDEO_DESKTOP = heroVideoUrl("hero-triptych.mp4");
+
+/**
+ * A phone is too narrow for three panels, so it plays the portrait clips one at a time,
+ * in order, looping back to the first.
+ */
+const HERO_MOBILE_CLIPS = [
+    heroVideoUrl("hero-1-mobile.mp4"),
+    heroVideoUrl("hero-2-mobile.mp4"),
+    heroVideoUrl("hero-3-mobile.mp4"),
+];
+
+/**
+ * How long to wait for a clip to actually start playing before giving up on it.
+ *
+ * A slow connection does not fire `error` - the request just hangs, so the poster stays up
+ * while the browser keeps pulling megabytes the visitor will never see. Past this deadline
+ * the element is unmounted, which aborts the download and leaves the poster as the final
+ * state instead of a permanently "loading" hero.
+ */
+const HERO_PLAYBACK_DEADLINE_MS = 8000;
 
 export default function HeroSection({
     source,
@@ -57,6 +105,72 @@ export default function HeroSection({
     const headlineWords = ["A", "Better", "Weekend"];
     const heroImageSrc = heroImageUrl?.trim() || "/images/background.webp";
 
+    // Rendition is resolved after mount so the server render always emits the poster
+    // image only. `readySrc`/`failedSrc` are tracked per-source so advancing to the next
+    // clip (or switching crop on resize) re-runs the fade instead of flashing a
+    // half-loaded frame.
+    const [isMobileRendition, setIsMobileRendition] = useState<boolean | null>(null);
+    const [clipIndex, setClipIndex] = useState(0);
+    const [readySrc, setReadySrc] = useState<string | null>(null);
+    const [failedSrcs, setFailedSrcs] = useState<ReadonlySet<string>>(() => new Set());
+
+    useEffect(() => {
+        if (shouldReduceMotion) {
+            setIsMobileRendition(null);
+            return;
+        }
+
+        const mediaQuery = window.matchMedia(HERO_MOBILE_QUERY);
+        const applyRendition = () => setIsMobileRendition(mediaQuery.matches);
+
+        applyRendition();
+        mediaQuery.addEventListener("change", applyRendition);
+        return () => mediaQuery.removeEventListener("change", applyRendition);
+    }, [shouldReduceMotion]);
+
+    const videoSrc =
+        isMobileRendition === null
+            ? null
+            : isMobileRendition
+              ? HERO_MOBILE_CLIPS[clipIndex]
+              : HERO_VIDEO_DESKTOP;
+
+    const advanceClip = useCallback(
+        () => setClipIndex((index) => (index + 1) % HERO_MOBILE_CLIPS.length),
+        []
+    );
+
+    const hasCurrentFailed = Boolean(videoSrc) && failedSrcs.has(videoSrc!);
+    // Desktop is a single file, so one failure is already the end of the road there.
+    const haveAllFailed = isMobileRendition
+        ? HERO_MOBILE_CLIPS.every((src) => failedSrcs.has(src))
+        : hasCurrentFailed;
+
+    // Skip past a clip that could not load, but stop once every clip has failed so the
+    // sequence cannot spin forever — the poster image is the fallback at that point.
+    useEffect(() => {
+        if (!hasCurrentFailed || haveAllFailed) return;
+        advanceClip();
+    }, [advanceClip, hasCurrentFailed, haveAllFailed]);
+
+    // Treat "never started playing" the same as a load error. Without this a stalled
+    // request keeps downloading a multi-megabyte clip on a connection too slow to ever
+    // show it, which is the worst outcome for the visitor: no video AND wasted data.
+    useEffect(() => {
+        if (!videoSrc || readySrc === videoSrc || failedSrcs.has(videoSrc)) return;
+
+        const timer = setTimeout(() => {
+            setFailedSrcs((previous) => new Set(previous).add(videoSrc));
+        }, HERO_PLAYBACK_DEADLINE_MS);
+
+        return () => clearTimeout(timer);
+    }, [videoSrc, readySrc, failedSrcs]);
+
+    // Autoplay can be refused (data saver, low power mode) without firing `error`,
+    // so the poster stays visible underneath until the video actually plays.
+    const isVideoVisible = Boolean(videoSrc) && readySrc === videoSrc;
+    const shouldRenderVideo = Boolean(videoSrc) && !hasCurrentFailed;
+
     return (
         <section
             ref={heroRef}
@@ -76,6 +190,28 @@ export default function HeroSection({
                     className="object-cover"
                     sizes="100vw"
                 />
+                {shouldRenderVideo && videoSrc && (
+                    <video
+                        key={videoSrc}
+                        src={videoSrc}
+                        poster={heroImageSrc}
+                        autoPlay
+                        muted
+                        loop={!isMobileRendition}
+                        playsInline
+                        // Never "auto": that races the full file down before playback starts, which is
+                        // exactly what stalls a hero on a slow mobile connection.
+                        preload="metadata"
+                        aria-hidden="true"
+                        tabIndex={-1}
+                        onPlaying={() => setReadySrc(videoSrc)}
+                        onEnded={isMobileRendition ? advanceClip : undefined}
+                        onError={() => setFailedSrcs((previous) => new Set(previous).add(videoSrc))}
+                        className={`absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-700 ease-out ${
+                            isVideoVisible ? "opacity-100" : "opacity-0"
+                        }`}
+                    />
+                )}
                 <div className="absolute inset-0 hero-gradient-mesh" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_#fbe4db_0%,_#fefbea_45%,_#f5e48a_100%)] opacity-75 mix-blend-soft-light" />
                 <div className="absolute inset-0 grain-overlay" />

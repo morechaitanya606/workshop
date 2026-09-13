@@ -6,6 +6,7 @@ import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { isMissingCommunityPhotosTableError, mapCommunityPhotoRow } from "@/lib/community-photos";
 import { communityPhotoUpdateSchema } from "@/lib/validators";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 type RouteContext = {
     params: Promise<{
@@ -14,6 +15,9 @@ type RouteContext = {
 };
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
+    const limited = await enforceRateLimit(request, "write", "api-admin-photos-update");
+    if (!limited.ok) return limited.response;
+
     const { id } = await context.params;
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
@@ -70,6 +74,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
+    const limited = await enforceRateLimit(request, "write", "api-admin-photos-delete");
+    if (!limited.ok) return limited.response;
+
     const { id } = await context.params;
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
@@ -82,10 +89,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     try {
-        const { error } = await service.client
-            .from("community_photos")
-            .delete()
-            .eq("id", id);
+        const { error } = await service.client.from("community_photos").delete().eq("id", id);
 
         if (error) {
             if (isMissingCommunityPhotosTableError(error)) {

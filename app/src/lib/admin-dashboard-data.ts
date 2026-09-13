@@ -83,11 +83,27 @@ export async function loadAdminDashboardData(_supabase: AdminDashboardSupabaseCl
     const feedbackRollups = new Map<string, { total: number; count: number }>();
 
     if (workshopIds.length > 0) {
-        const { data: workshopRatingsData, error: workshopRatingsError } = await serviceClient
+        // Must match private.refresh_workshop_rating_rollup exactly, or the admin dashboard
+        // shows a different rating than the public pages. The rollup counts only published,
+        // rated feedback since 20260906120000_feedback_moderation_gate.
+        let ratingsQuery = serviceClient
             .from("workshop_feedback")
             .select("workshop_id, rating")
             .in("workshop_id", workshopIds)
             .not("rating", "is", null);
+
+        ratingsQuery = ratingsQuery.eq("is_published", true);
+
+        let { data: workshopRatingsData, error: workshopRatingsError } = await ratingsQuery;
+
+        // Tolerate a database that has not run the moderation migration yet.
+        if (workshopRatingsError?.message && /is_published/i.test(workshopRatingsError.message)) {
+            ({ data: workshopRatingsData, error: workshopRatingsError } = await serviceClient
+                .from("workshop_feedback")
+                .select("workshop_id, rating")
+                .in("workshop_id", workshopIds)
+                .not("rating", "is", null));
+        }
 
         if (!workshopRatingsError) {
             for (const item of (workshopRatingsData || []) as RatingRow[]) {

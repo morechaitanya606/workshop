@@ -233,6 +233,8 @@ export const adminFeedbackUpdateSchema = z
     .object({
         rating: z.coerce.number().int().min(1).max(5).optional(),
         comment: z.string().trim().min(3).max(2000).optional(),
+        // Moderation gate: admins publish or retract a review without deleting it.
+        isPublished: z.boolean().optional(),
     })
     .refine((value) => Object.keys(value).length > 0, {
         message: "Provide at least one field to update.",

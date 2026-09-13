@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
 import crypto from "crypto";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
@@ -16,7 +17,7 @@ const DEFAULT_BUCKET = "uploads";
 const ALLOWED_UPLOAD_BUCKETS = new Set([DEFAULT_BUCKET]);
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 60 * 10;
 const UPLOAD_TYPE_ERROR_MESSAGE =
-    "Invalid file type. Allowed: image files (JPEG, PNG, WebP, GIF, AVIF, HEIC/HEIF, BMP, TIFF, SVG, ICO, JP2, JXL, RAW) and videos (MP4, WebM, MOV, M4V).";
+    "Invalid file type. Allowed: image files (JPEG, PNG, WebP, GIF, AVIF, HEIC/HEIF, BMP, TIFF, ICO, JP2, JXL, RAW) and videos (MP4, WebM, MOV, M4V).";
 const IMAGE_CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
     jpg: "image/jpeg",
     jpeg: "image/jpeg",
@@ -36,8 +37,8 @@ const IMAGE_CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
     dib: "image/bmp",
     tif: "image/tiff",
     tiff: "image/tiff",
-    svg: "image/svg+xml",
-    svgz: "image/svg+xml",
+    // SVG is deliberately absent: it is a script-bearing document, not a raster image,
+    // and the conversion fallback below stores unconvertible input verbatim.
     ico: "image/vnd.microsoft.icon",
     cur: "image/x-icon",
     icns: "image/icns",
@@ -75,8 +76,11 @@ const VIDEO_TYPES = new Set(Object.values(VIDEO_CONTENT_TYPE_BY_EXTENSION));
 const IMAGE_EXTENSIONS = new Set(Object.keys(IMAGE_CONTENT_TYPE_BY_EXTENSION));
 const VIDEO_EXTENSIONS = new Set(Object.keys(VIDEO_CONTENT_TYPE_BY_EXTENSION));
 
+/** Content types that must never be accepted, whatever the extension claims. */
+const BLOCKED_IMAGE_CONTENT_TYPES = new Set(["image/svg+xml", "image/svg"]);
+
 function isImageContentType(contentType: string) {
-    return contentType.startsWith("image/");
+    return contentType.startsWith("image/") && !BLOCKED_IMAGE_CONTENT_TYPES.has(contentType);
 }
 
 // Parses a crop request like "5:4" into an aspect ratio. Returns null for
@@ -256,13 +260,20 @@ export async function POST(request: NextRequest) {
                 uploadExtension = normalized.extension;
                 uploadContentType = normalized.contentType;
             } catch (conversionError) {
-                console.error("Image conversion to JPEG/PNG failed; storing original.", {
+                // Storing the original on failure meant any file sharp could not decode
+                // was persisted verbatim under a caller-influenced content type. If we
+                // cannot prove what the bytes are, we do not keep them.
+                console.error("Image conversion to JPEG/PNG failed; rejecting upload.", {
                     name: file.name,
                     error:
                         conversionError instanceof Error
                             ? conversionError.message
                             : conversionError,
                 });
+                return jsonError(
+                    "This image could not be processed. Please upload a JPEG, PNG or WebP.",
+                    400
+                );
             }
         }
 
@@ -299,8 +310,7 @@ export async function POST(request: NextRequest) {
             }
             return jsonError(
                 "Upload failed. Ensure the Supabase Storage bucket exists and server env vars are set.",
-                500,
-                uploadError.message
+                500
             );
         }
 
@@ -336,6 +346,12 @@ export async function POST(request: NextRequest) {
             supabaseUrl: config?.url || null,
         });
     } catch (error) {
-        return jsonError("Upload failed.", 500, String(error));
+        // Reported, not returned: the caller gets a generic message while the detail
+        // goes to Sentry. Echoing String(error) leaked storage paths and driver text.
+        Sentry.captureException(error, {
+            tags: { layer: "api", route: "upload" },
+            extra: { userId: auth.user.id },
+        });
+        return jsonError("Upload failed.", 500);
     }
 }

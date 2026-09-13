@@ -1,8 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 
-import { getPlatformSettings, type PlatformSettings } from "@/lib/api-client";
+import { type PlatformSettings } from "@/lib/api-client";
 
 type PlatformSettingsContextValue = {
     settings: PlatformSettings;
@@ -12,42 +12,26 @@ type PlatformSettingsContextValue = {
 
 const PlatformSettingsContext = createContext<PlatformSettingsContextValue | null>(null);
 
-export function PlatformSettingsProvider({ children }: { children: ReactNode }) {
-    const [settings, setSettings] = useState<PlatformSettings>({});
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        let cancelled = false;
-
-        const loadSettings = async () => {
-            try {
-                const response = await getPlatformSettings();
-                if (!cancelled) {
-                    setSettings(response.settings || {});
-                }
-            } catch {
-                if (!cancelled) {
-                    setSettings((currentSettings) => currentSettings);
-                }
-            } finally {
-                if (!cancelled) {
-                    setLoading(false);
-                }
-            }
-        };
-
-        void loadSettings();
-
-        return () => {
-            cancelled = true;
-        };
-    }, []);
+/**
+ * Settings arrive from the server component that renders this provider, so there is no
+ * client fetch on mount. That removed one uncacheable API call and one `select *` from
+ * every single page view, and it takes the value off the critical render path (the page
+ * transition in `app/template.tsx` reads `settings.special_page`).
+ */
+export function PlatformSettingsProvider({
+    children,
+    initialSettings,
+}: {
+    children: ReactNode;
+    initialSettings?: PlatformSettings;
+}) {
+    const [settings, setSettings] = useState<PlatformSettings>(initialSettings ?? {});
 
     return (
         <PlatformSettingsContext.Provider
             value={{
                 settings,
-                loading,
+                loading: false,
                 mergeSettings: (nextSettings) => {
                     setSettings((currentSettings) => ({
                         ...currentSettings,

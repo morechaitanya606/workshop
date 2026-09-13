@@ -18,6 +18,8 @@ interface WorkshopCardProps {
     index?: number;
     variant?: "default" | "compact";
     animateOnScroll?: boolean;
+    /** Hide the suitability keyword chips (e.g. in the "Recently Viewed" rail). */
+    showBadgeLabels?: boolean;
 }
 
 const favoritesCache = new Map<string, string[]>();
@@ -55,6 +57,7 @@ export default function WorkshopCard({
     index = 0,
     variant = "default",
     animateOnScroll = true,
+    showBadgeLabels = true,
 }: WorkshopCardProps) {
     const { user, session } = useAuth();
     const prefersReducedMotion = useReducedMotion();
@@ -336,7 +339,7 @@ export default function WorkshopCard({
                         </p>
 
                         {/* Suitability badges */}
-                        {badgeLabels.length > 0 && (
+                        {showBadgeLabels && badgeLabels.length > 0 && (
                             <div className="hidden sm:flex flex-wrap gap-1.5 mb-3">
                                 {badgeLabels.map((label) => (
                                     <span

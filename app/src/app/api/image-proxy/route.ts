@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 // Same-origin proxy for remote images so the in-browser crop editor can read
 // pixels and export them to a canvas without cross-origin tainting. Locked to
@@ -17,6 +18,9 @@ const ALLOWED_HOST_SUFFIXES = [
 
 const MAX_BYTES = 25 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
+/** Every other outbound call in the app is bounded; this one was not, so a slow upstream
+ *  on an allowed host could pin the lambda until Vercel killed it at maxDuration. */
+const UPSTREAM_TIMEOUT_MS = 8000;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 function isAllowedHost(hostname: string) {
@@ -33,7 +37,19 @@ async function fetchAllowedImage(initialUrl: URL) {
     let currentUrl = initialUrl;
 
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
-        const response = await fetch(currentUrl.toString(), { redirect: "manual" });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+
+        let response: Response;
+        try {
+            response = await fetch(currentUrl.toString(), {
+                redirect: "manual",
+                signal: controller.signal,
+            });
+        } finally {
+            clearTimeout(timeout);
+        }
+
         if (!REDIRECT_STATUSES.has(response.status)) {
             return response;
         }
@@ -89,6 +105,9 @@ async function readLimitedResponseBuffer(response: Response) {
 }
 
 export async function GET(request: NextRequest) {
+    const limited = await enforceRateLimit(request, "expensive", "api-image-proxy");
+    if (!limited.ok) return limited.response;
+
     const target = request.nextUrl.searchParams.get("url");
     if (!target) {
         return NextResponse.json({ error: "Missing url parameter." }, { status: 400 });
@@ -121,8 +140,26 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Failed to fetch image." }, { status: 502 });
     }
 
-    const contentType = upstream.headers.get("content-type") || "";
-    if (!upstream.ok || !contentType.startsWith("image/")) {
+    const contentType = (upstream.headers.get("content-type") || "")
+        .split(";")[0]
+        .trim()
+        .toLowerCase();
+
+    // Allowlist raster types only. `startsWith("image/")` admitted image/svg+xml, and an SVG
+    // reflected back on our own origin with that Content-Type executes script in the context
+    // of this site — a same-origin XSS driven entirely by an attacker-supplied URL.
+    const ALLOWED_IMAGE_TYPES = new Set([
+        "image/jpeg",
+        "image/pjpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "image/avif",
+        "image/heic",
+        "image/heif",
+    ]);
+
+    if (!upstream.ok || !ALLOWED_IMAGE_TYPES.has(contentType)) {
         return NextResponse.json({ error: "Upstream is not a valid image." }, { status: 502 });
     }
 
@@ -144,7 +181,12 @@ export async function GET(request: NextRequest) {
         status: 200,
         headers: {
             "Content-Type": contentType,
-            "Cache-Control": "private, max-age=300",
+            // Deterministic transform of a public URL: let the CDN absorb it instead of
+            // paying for a function invocation and full re-fetch on every view.
+            "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": "inline",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
         },
     });
 }
