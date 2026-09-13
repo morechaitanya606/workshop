@@ -16,6 +16,21 @@ npm run lint
 npm run build
 ```
 
+## Serverless region
+
+`vercel.json` pins `regions: ["sin1"]`. That must track the Supabase project's region: the
+database is in `ap-northeast-1` (Tokyo), and `bom1` (Mumbai) added roughly 120 ms to every
+query -- which checkout pays several times over, because it makes sequential round trips.
+`sin1` is the closest Vercel region to Tokyo.
+
+The better long-term fix is to move the database to `ap-south-1` and set this back to
+`bom1`, putting both next to the users rather than next to each other.
+
+This note lives here rather than in `vercel.json` because that file's schema declares
+`additionalProperties: false`. A `_regionNote` key in it is not an inert comment -- Vercel
+rejects the configuration and the deployment fails before it builds. JSON has no comments;
+put the reasoning in Markdown.
+
 ## Required production environment variables
 
 These must be set in Vercel before promoting live:
