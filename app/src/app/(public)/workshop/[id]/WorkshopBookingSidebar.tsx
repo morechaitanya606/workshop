@@ -41,7 +41,7 @@ export interface WorkshopBookingSidebarProps {
     holdError: string | null;
     loginRedirectHref: string;
     onBooking: () => void;
-    onShowWaitlist: () => void;
+    onShowCommunity: () => void;
 }
 
 export default function WorkshopBookingSidebar({
@@ -76,7 +76,7 @@ export default function WorkshopBookingSidebar({
     holdError,
     loginRedirectHref,
     onBooking,
-    onShowWaitlist,
+    onShowCommunity,
 }: WorkshopBookingSidebarProps) {
     const prefersReducedMotion = useReducedMotion();
 
@@ -278,10 +278,11 @@ export default function WorkshopBookingSidebar({
                 </button>
             ) : isSoldOut ? (
                 <button
-                    onClick={onShowWaitlist}
-                    className="btn-secondary w-full text-center !py-4 text-base"
+                    type="button"
+                    onClick={onShowCommunity}
+                    className="w-full rounded-full bg-emerald-700 px-6 py-4 text-center text-base font-inter font-bold text-white transition-colors hover:bg-emerald-800"
                 >
-                    Join Waitlist
+                    Workshop is full &mdash; join our WhatsApp community for the next dates
                 </button>
             ) : user ? (
                 <button
@@ -310,7 +311,7 @@ export default function WorkshopBookingSidebar({
                 {isBookingClosed
                     ? `Bookings close ${BOOKING_CUTOFF_HOURS} hours before the workshop starts.`
                     : isSoldOut
-                      ? "All spots are taken. Join the waitlist to be notified if someone cancels."
+                      ? "All spots are taken. Join our WhatsApp community to hear about the next dates."
                       : user
                         ? "Secure payments via Razorpay. You won't be charged twice even if something goes wrong."
                         : "Log in to book. Payments are processed securely via Razorpay."}

@@ -134,21 +134,36 @@ function createRateLimitExceededResponse(message: string, retryAfterSeconds: num
     );
 }
 
-function consumeRateLimitInMemory(key: string, windowMs: number) {
+function createRateLimitUnavailableResponse() {
+    return NextResponse.json(
+        {
+            error: "This action is temporarily unavailable. Please try again shortly.",
+            retryAfterSeconds: 30,
+        },
+        {
+            status: 503,
+            headers: {
+                "Retry-After": "30",
+            },
+        }
+    );
+}
+
+function consumeRateLimitInMemory(key: string, windowMs: number, amount = 1) {
     const now = Date.now();
     cleanupStore(now);
 
     const current = rateLimitStore.get(key);
     if (!current || current.resetAt <= now) {
         const freshEntry = {
-            count: 1,
+            count: amount,
             resetAt: now + windowMs,
         };
         rateLimitStore.set(key, freshEntry);
         return freshEntry;
     }
 
-    current.count += 1;
+    current.count += amount;
     rateLimitStore.set(key, current);
     return current;
 }
@@ -214,17 +229,29 @@ end
 return {current, ttl}
 `.trim();
 
-async function consumeRateLimitInUpstash(key: string, windowMs: number) {
+/**
+ * Same contract as RATE_LIMIT_LUA but adds `ARGV[2]` instead of 1, for byte/size quotas.
+ * The TTL is set when the key has none, so a quota window starts at its first charge.
+ */
+const QUOTA_LUA = `
+local current = redis.call('INCRBY', KEYS[1], ARGV[2])
+local ttl = redis.call('PTTL', KEYS[1])
+if ttl < 0 then
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+  ttl = tonumber(ARGV[1])
+end
+return {current, ttl}
+`.trim();
+
+async function consumeRateLimitInUpstash(key: string, windowMs: number, amount = 1) {
     const namespacedKey = `${UPSTASH_RATE_LIMIT_PREFIX}:${key}`;
     const now = Date.now();
 
-    const result = await runUpstashCommand([
-        "EVAL",
-        RATE_LIMIT_LUA,
-        "1",
-        namespacedKey,
-        String(windowMs),
-    ]);
+    const result = await runUpstashCommand(
+        amount === 1
+            ? ["EVAL", RATE_LIMIT_LUA, "1", namespacedKey, String(windowMs)]
+            : ["EVAL", QUOTA_LUA, "1", namespacedKey, String(windowMs), String(amount)]
+    );
 
     const [rawCount, rawTtl] = Array.isArray(result) ? result : [];
     const count = Number(rawCount);
@@ -243,7 +270,7 @@ async function consumeRateLimitInUpstash(key: string, windowMs: number) {
 const UPSTASH_FAILURE_REPORT_INTERVAL_MS = 60_000;
 let lastUpstashFailureReportAt = 0;
 
-function reportUpstashFailureOncePerWindow(error: unknown, key: string) {
+function reportUpstashFailureOncePerWindow(error: unknown, key: string, strict = false) {
     const now = Date.now();
     if (now - lastUpstashFailureReportAt < UPSTASH_FAILURE_REPORT_INTERVAL_MS) {
         return;
@@ -258,8 +285,11 @@ function reportUpstashFailureOncePerWindow(error: unknown, key: string) {
             provider: "upstash",
         },
         extra: {
-            key,
-            note: "Rate limiting degraded to per-instance in-memory counters.",
+            // Keys embed user ids / addresses; report only the scope prefix.
+            key: key.split(":")[0],
+            note: strict
+                ? "Strict rate limit failed closed (503) because the shared store errored."
+                : "Rate limiting degraded to per-instance in-memory counters.",
         },
     });
 }
@@ -269,6 +299,14 @@ type AssertRateLimitInput = {
     limit: number;
     windowMs: number;
     message?: string;
+    /**
+     * Fail CLOSED (503) when the shared store errors, instead of degrading to per-instance
+     * counters. Use for auth-sensitive or expensive keys where `limit x instanceCount` is not
+     * an acceptable ceiling (email-sending, uploads, coupon-code guessing).
+     */
+    strict?: boolean;
+    /** How much this call consumes. Defaults to 1; byte quotas pass the payload size. */
+    amount?: number;
 };
 
 export async function assertRateLimit({
@@ -276,16 +314,24 @@ export async function assertRateLimit({
     limit,
     windowMs,
     message = "Too many requests. Please try again shortly.",
+    strict = false,
+    amount = 1,
 }: AssertRateLimitInput) {
     let state: RateLimitEntry;
     if (isUpstashRateLimitConfigured) {
         try {
-            state = await consumeRateLimitInUpstash(key, windowMs);
+            state = await consumeRateLimitInUpstash(key, windowMs, amount);
         } catch (error) {
             // Reporting every failure would turn an Upstash outage into a Sentry outage at
             // this request volume, so report at most once per window.
-            reportUpstashFailureOncePerWindow(error, key);
-            state = consumeRateLimitInMemory(key, windowMs);
+            reportUpstashFailureOncePerWindow(error, key, strict);
+            if (strict) {
+                return {
+                    ok: false as const,
+                    response: createRateLimitUnavailableResponse(),
+                };
+            }
+            state = consumeRateLimitInMemory(key, windowMs, amount);
         }
     } else {
         // Without shared state the effective limit becomes `limit x instanceCount`, which is
@@ -306,7 +352,7 @@ export async function assertRateLimit({
                 "Upstash rate limiting is not configured. Production requests will fall back to per-instance in-memory limits."
             );
         }
-        state = consumeRateLimitInMemory(key, windowMs);
+        state = consumeRateLimitInMemory(key, windowMs, amount);
     }
 
     if (state.count > limit) {
@@ -354,7 +400,8 @@ export async function enforceRateLimit(
     request: NextRequest,
     policy: RateLimitPolicyName,
     scope: string,
-    userId?: string
+    userId?: string,
+    options?: { strict?: boolean }
 ) {
     const { limit, message } = RATE_LIMIT_POLICIES[policy];
 
@@ -363,5 +410,36 @@ export async function enforceRateLimit(
         limit,
         windowMs: RATE_LIMIT_WINDOW_MS,
         message,
+        strict: options?.strict,
+    });
+}
+
+/**
+ * Charge `amount` units (bytes, say) against a rolling quota. Returns the same
+ * `{ok, response}` shape as assertRateLimit, so a route can do:
+ *
+ *   const quota = await assertQuota({ key, amount: file.size, limit: 200 * MB, windowMs: DAY });
+ *   if (!quota.ok) return quota.response;
+ *
+ * Quotas fail closed when the shared store errors: an in-memory fallback would multiply the
+ * daily budget by the number of warm instances.
+ */
+export async function assertQuota(input: {
+    key: string;
+    amount: number;
+    limit: number;
+    windowMs: number;
+    message?: string;
+    strict?: boolean;
+}) {
+    const amount = Math.max(1, Math.ceil(Number.isFinite(input.amount) ? input.amount : 1));
+
+    return assertRateLimit({
+        key: input.key,
+        limit: input.limit,
+        windowMs: input.windowMs,
+        message: input.message ?? "Quota exceeded. Please try again later.",
+        strict: input.strict ?? true,
+        amount,
     });
 }

@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { trackEvent } from "@/lib/analytics";
 import {
     confirmCheckoutPayment,
+    createBookingHold,
     createCheckoutOrder,
     getWorkshopById,
     toApiErrorMessage,
@@ -19,6 +20,18 @@ import type {
     RazorpayOrderResponse,
 } from "./types";
 import { computeEarlyBirdDiscount } from "@/lib/booking-time";
+import {
+    clampGuests,
+    extractAvailableSeats,
+    getMaxSelectableGuests,
+} from "@/components/booking/seat-logic";
+import { validateBookingDetails } from "./booking-form-logic";
+
+type HoldOverride = {
+    id: string;
+    guests: number;
+    expiresAtMs: number | null;
+};
 
 function parseTimestamp(value: string | null) {
     if (!value) return null;
@@ -39,14 +52,29 @@ export function useBookingWorkflow() {
     const toast = useToast();
 
     const workshopId = searchParams.get("workshop") || "";
-    const holdId = searchParams.get("hold") || "";
+    const urlHoldId = searchParams.get("hold") || "";
     const holdExpiresAtParam = searchParams.get("holdExpiresAt") || "";
     const prefilledCouponCode = searchParams.get("coupon")?.trim().toUpperCase() || "";
     const guestsParam = Number.parseInt(searchParams.get("guests") || "1", 10);
-    const guests = Number.isFinite(guestsParam) ? Math.max(1, guestsParam) : 1;
-    const holdExpiresAtMs = parseTimestamp(holdExpiresAtParam);
+    const urlGuests = Number.isFinite(guestsParam) ? Math.max(1, guestsParam) : 1;
+
+    // Changing the seat count here means asking the hold route for a new hold (it releases the
+    // caller's previous one in the same transaction). The result lives in this override so
+    // the page reacts immediately; the URL is kept in step for refreshes.
+    const [holdOverride, setHoldOverride] = useState<HoldOverride | null>(null);
+    const holdId = holdOverride?.id ?? urlHoldId;
+    const guests = holdOverride?.guests ?? urlGuests;
+    const holdExpiresAtMs = holdOverride
+        ? holdOverride.expiresAtMs
+        : parseTimestamp(holdExpiresAtParam);
 
     const [workshop, setWorkshop] = useState<Workshop | null>(null);
+    const [draftGuests, setDraftGuestsState] = useState<number | null>(null);
+    const [isUpdatingSeats, setIsUpdatingSeats] = useState(false);
+    const [seatError, setSeatError] = useState<string | null>(null);
+    // What the hold route last said is really bookable (it already excludes other people's
+    // holds, which the workshop row's seats_remaining does not).
+    const [liveSeatsRemaining, setLiveSeatsRemaining] = useState<number | null>(null);
     const [workshopLoading, setWorkshopLoading] = useState(Boolean(workshopId));
     const [isRazorpayReady, setIsRazorpayReady] = useState(false);
     const [nowMs, setNowMs] = useState(() => Date.now());
@@ -257,8 +285,31 @@ export function useBookingWorkflow() {
         phone: formData.phone.trim(),
     };
 
+    // Seat picking. `seatsRemaining` excludes the customer's own hold's effect on the workshop
+    // row (holds are tracked separately), so "yours" chairs are drawn out of it.
+    const seatsRemaining = liveSeatsRemaining ?? workshop?.seatsRemaining ?? 0;
+    const maxSelectableGuests = getMaxSelectableGuests(seatsRemaining, guests);
+    const selectedGuests = draftGuests ?? guests;
+    const seatChangePending = selectedGuests !== guests;
+
+    const setDraftGuests = useCallback(
+        (next: number) => {
+            const clamped = clampGuests(next, maxSelectableGuests);
+            setSeatError(null);
+            setDraftGuestsState(clamped === guests ? null : clamped);
+        },
+        [guests, maxSelectableGuests]
+    );
+
+    const resetDraftGuests = useCallback(() => {
+        setSeatError(null);
+        setDraftGuestsState(null);
+    }, []);
+
     const isCheckoutDisabled =
         submitting ||
+        isUpdatingSeats ||
+        seatChangePending ||
         !isRazorpayReady ||
         !trimFormData.firstName ||
         !trimFormData.lastName ||
@@ -268,27 +319,7 @@ export function useBookingWorkflow() {
         holdExpired;
 
     const validateForm = () => {
-        const nextErrors: FormErrors = {};
-
-        if (!trimFormData.firstName) {
-            nextErrors.firstName = "First name is required.";
-        }
-        if (!trimFormData.lastName) {
-            nextErrors.lastName = "Last name is required.";
-        }
-        if (!trimFormData.email) {
-            nextErrors.email = "Email is required.";
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimFormData.email)) {
-            nextErrors.email = "Enter a valid email address.";
-        }
-        if (!trimFormData.phone) {
-            nextErrors.phone = "Phone number is required.";
-        } else {
-            const phoneDigits = trimFormData.phone.replace(/\D/g, "");
-            if (!/^\d{10}$/.test(phoneDigits)) {
-                nextErrors.phone = "Enter a valid 10-digit phone number.";
-            }
-        }
+        const nextErrors: FormErrors = validateBookingDetails(trimFormData);
 
         setFormErrors(nextErrors);
         return Object.keys(nextErrors).length === 0;
@@ -310,6 +341,84 @@ export function useBookingWorkflow() {
                 ...prev,
                 [field]: undefined,
             }));
+        }
+    };
+
+    /**
+     * Re-reserves seats for `nextGuests` (default: the draft count). Used when the customer
+     * changes the number of chairs, and to recover a missing or expired hold. The hold route
+     * releases the caller's previous hold atomically, and rolls that release back if the new
+     * request is rejected, so a failure here leaves the existing hold untouched.
+     */
+    const reholdSeats = async (nextGuests: number = selectedGuests) => {
+        if (!workshop || isUpdatingSeats) return false;
+        if (!session?.access_token) {
+            const message = "Your session expired. Please log in again.";
+            setSeatError(message);
+            toast.error("Session expired", message);
+            return false;
+        }
+
+        const requested = clampGuests(nextGuests, maxSelectableGuests);
+        setIsUpdatingSeats(true);
+        setSeatError(null);
+
+        try {
+            const result = await createBookingHold(session.access_token, {
+                workshopId: workshop.id,
+                guests: requested,
+            });
+            const hold = result?.hold;
+            if (!hold?.id) {
+                const message = "Seat hold was created but could not be verified.";
+                setSeatError(message);
+                toast.error("Seat hold failed", message);
+                return false;
+            }
+
+            const nextHold: HoldOverride = {
+                id: hold.id,
+                guests: Number(hold.guests) > 0 ? Number(hold.guests) : requested,
+                expiresAtMs: parseTimestamp(hold.expires_at || null),
+            };
+            setHoldOverride(nextHold);
+            setDraftGuestsState(null);
+            setError(null);
+            setNowMs(Date.now());
+            trackEvent("booking_seats_changed", {
+                workshopId: workshop.id,
+                guests: nextHold.guests,
+                previousGuests: guests,
+            });
+
+            const params = new URLSearchParams({
+                workshop: workshop.id,
+                guests: String(nextHold.guests),
+                hold: nextHold.id,
+            });
+            if (prefilledCouponCode) params.set("coupon", prefilledCouponCode);
+            if (hold.expires_at) params.set("holdExpiresAt", hold.expires_at);
+            router.replace(`/booking?${params.toString()}`, { scroll: false });
+            return true;
+        } catch (holdError) {
+            const available = extractAvailableSeats(holdError);
+            if (available !== null) {
+                setLiveSeatsRemaining(available);
+                setDraftGuestsState((current) =>
+                    current === null
+                        ? null
+                        : clampGuests(current, getMaxSelectableGuests(available, guests))
+                );
+            }
+            const message = toApiErrorMessage(
+                holdError,
+                "Unable to update your seats. Please try again."
+            );
+            setSeatError(message);
+            toast.error("Could not update seats", message);
+            return false;
+        } finally {
+            setIsUpdatingSeats(false);
         }
     };
 
@@ -530,7 +639,18 @@ export function useBookingWorkflow() {
         canRetryCheckout: Boolean(pendingConfirmationPayload) || (!holdExpired && Boolean(holdId)),
         retryCheckoutLabel: pendingConfirmationPayload ? "Retry confirmation" : "Try again",
         isCheckoutDisabled,
+        validateDetails: validateForm,
+        awaitingConfirmation: Boolean(pendingConfirmationPayload),
         guests,
+        selectedGuests,
+        seatsRemaining,
+        maxSelectableGuests,
+        seatChangePending,
+        setDraftGuests,
+        resetDraftGuests,
+        isUpdatingSeats,
+        seatError,
+        reholdSeats,
         serviceFee,
         isEbEligible,
         earlyBirdDiscountTotal,

@@ -32,7 +32,8 @@ vi.mock("@/lib/workshop-utils", () => ({
     ensureWorkshopSeededFromMock: vi.fn(),
 }));
 
-vi.mock("@/lib/booking-time", () => ({
+vi.mock("@/lib/booking-time", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/booking-time")>()),
     BOOKING_CUTOFF_HOURS: 3,
     isBookingClosedNow: vi.fn(() => false),
 }));
@@ -174,13 +175,14 @@ describe("POST /api/bookings/hold", () => {
         expect(response.status).toBe(200);
         expect(body).toEqual({
             hold: holdRecord,
-            holdDurationMinutes: 15,
+            holdDurationMinutes: 8,
         });
         expect(serviceClient.rpc).toHaveBeenCalledWith("create_booking_hold", {
             p_user_id: "user-1",
             p_workshop_id: "workshop-1",
             p_guests: 2,
-            p_hold_minutes: 15,
+            // Payment window: 8 minutes.
+            p_hold_minutes: 8,
         });
     });
 
@@ -196,6 +198,18 @@ describe("POST /api/bookings/hold", () => {
             rpcMessage: "new row violates ... INSUFFICIENT_SEATS",
             expectedStatus: 409,
             expectedCode: "INSUFFICIENT_SEATS",
+        },
+        {
+            name: "maps the per-user held-seat cap to a 429",
+            rpcMessage: "HOLD_LIMIT_EXCEEDED:4",
+            expectedStatus: 429,
+            expectedCode: "HOLD_LIMIT_EXCEEDED",
+        },
+        {
+            name: "maps an exhausted re-hold chain to a 429",
+            rpcMessage: "HOLD_TIME_LIMIT_REACHED",
+            expectedStatus: 429,
+            expectedCode: "HOLD_TIME_LIMIT_REACHED",
         },
         {
             name: "returns a retryable error when the RPC fails transiently",

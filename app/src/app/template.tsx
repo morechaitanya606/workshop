@@ -1,30 +1,25 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
 import { usePathname } from "next/navigation";
 
 import { usePlatformSettings } from "@/lib/platform-settings-context";
 import { isSpecialPagePath } from "@/lib/special-page";
 
+/**
+ * Re-mounts on every navigation, so the CSS fade on `.page-transition-shell` replays per page.
+ *
+ * The fade is pure CSS on purpose: a JS-driven `initial={{ opacity: 0 }}` is serialised into the
+ * server HTML, which leaves the whole page invisible until React hydrates (and permanently if the
+ * bundle fails to load). `prefers-reduced-motion` is handled in globals.css, so there is no
+ * client-only preference read to cause a hydration mismatch either.
+ */
 export default function Template({ children }: { children: React.ReactNode }) {
-    const prefersReducedMotion = Boolean(useReducedMotion());
     const pathname = usePathname();
     const { settings } = usePlatformSettings();
-    const shouldBypassAnimation =
-        prefersReducedMotion || isSpecialPagePath(pathname, settings.special_page);
 
-    if (shouldBypassAnimation) {
+    if (isSpecialPagePath(pathname, settings.special_page)) {
         return <>{children}</>;
     }
 
-    return (
-        <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            className="page-transition-shell"
-        >
-            {children}
-        </motion.div>
-    );
+    return <div className="page-transition-shell">{children}</div>;
 }

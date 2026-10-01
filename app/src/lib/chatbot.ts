@@ -1,4 +1,4 @@
-﻿import type { Workshop } from "@/lib/data";
+import type { Workshop } from "@/lib/data";
 import type { Tables } from "@/lib/database.types";
 import { resolveSupportChatReply } from "@/lib/support-chat";
 import {
@@ -9,6 +9,19 @@ import {
     normalizePhoneNumber,
     type ChatbotStage,
 } from "@/lib/chatbot-text";
+import { getChatbotStrings, type ChatbotStrings } from "@/lib/chatbot-i18n";
+import { CHATBOT_MULTILINGUAL, resolveChatLocale, type ChatLocale } from "@/lib/chatbot-language";
+import {
+    requestChatbotCompletion,
+    type ChatbotGroqConfig,
+    type ChatbotLlmProvider,
+} from "@/lib/chatbot-llm";
+import {
+    buildChatbotMessages,
+    buildRetrievalQuery,
+    normalizeChatHistory,
+    type ChatbotHistoryTurn,
+} from "@/lib/chatbot-prompt";
 
 // Re-exported from the client-safe module so existing server imports of this file keep
 // working. Client components must import from "@/lib/chatbot-text" directly.
@@ -42,12 +55,6 @@ export type ChatbotApiResponse = {
     askPhone: boolean;
 };
 
-type GroqConfig = {
-    apiKey: string;
-    endpoint: string;
-    model: string;
-};
-
 type GenerateChatbotReplyInput = {
     message: string;
     stage: ChatbotStage;
@@ -56,18 +63,22 @@ type GenerateChatbotReplyInput = {
     retrieveRelevantFaqs?: (message: string) => Promise<ChatbotFaq[]>;
     workshops?: Workshop[];
     contextWorkshopId?: string | null;
-    groq?: GroqConfig | null;
+    /** Model providers in failover order (see getChatbotLlmProviders). */
+    llmProviders?: ChatbotLlmProvider[];
+    /** Single-provider shorthand; ignored when `llmProviders` is non-empty. */
+    groq?: ChatbotGroqConfig | null;
     fetchImpl?: typeof fetch;
+    /** Earlier turns of this conversation, oldest first (the current message excluded). */
+    history?: ChatbotHistoryTurn[];
+    /** Client language hint (a locale or a BCP-47 tag); used only when the message is ambiguous. */
+    languageHint?: string | null;
+    /** Answer in the visitor's language. Defaults to CHATBOT_MULTILINGUAL (off: English only). */
+    multilingual?: boolean;
+    clientName?: string | null;
+    now?: Date;
+    retryDelayMs?: number;
     onLeadCaptured?: (lead: ChatbotLeadRecord) => Promise<void>;
     onUnansweredQuestion?: (question: string) => Promise<void>;
-};
-
-type GroqChatResponse = {
-    choices?: Array<{
-        message?: {
-            content?: string | null;
-        };
-    }>;
 };
 
 const STOPWORDS = new Set([
@@ -162,28 +173,11 @@ const TOKEN_ALIASES: Record<string, string> = {
     workshops: "workshop",
 };
 
-const BOOKING_KEYWORDS = ["book", "register", "join", "fee", "fees", "price"];
-const GROQ_TIMEOUT_MS = 8000;
+const MAX_REPLY_CHARS = 1500;
 
-export const CHATBOT_SYSTEM_PROMPT = `You are a friendly workshop assistant chatbot for a SaaS support widget.
-
-Rules:
-
-* Answer ONLY using provided context.
-* Keep answers short, clear, and warm.
-* Always reply in English, even when the user writes in another language.
-* If user shows interest in joining, encourage booking in a natural way.
-* If the answer is not present in the context, clearly say you could not find the exact info and ask them to contact support.
-* Do not make up answers.`;
-
-export const CHATBOT_STYLE_INSTRUCTION =
-    "Reply in clear English, friendly and conversational, regardless of the language the user writes in.";
-
-export const CHATBOT_FALLBACK_REPLY = "I couldn't find the exact info. Please contact support.";
-export const CHATBOT_GREETING_REPLY =
-    "Hi! You can ask me about workshop fees, booking, materials, parking, or cancellation.";
-export const CHATBOT_GUIDANCE_REPLY =
-    "You can ask a specific workshop question, like fee, booking, materials, parking, or cancellation.";
+export const CHATBOT_FALLBACK_REPLY = getChatbotStrings("en").fallback;
+export const CHATBOT_GREETING_REPLY = getChatbotStrings("en").greeting;
+export const CHATBOT_GUIDANCE_REPLY = getChatbotStrings("en").guidance;
 
 export const DEFAULT_CHATBOT_FAQS: Array<{
     question: string;
@@ -211,26 +205,50 @@ export const DEFAULT_CHATBOT_FAQS: Array<{
     },
 ];
 
-/** The assistant is English-only, so there is a single set of canned replies. */
-const CHATBOT_COPY = {
-    fallback: CHATBOT_FALLBACK_REPLY,
-    greeting: CHATBOT_GREETING_REPLY,
-    guidance: CHATBOT_GUIDANCE_REPLY,
-    askName: "To start the booking, please share your name.",
-    invalidName: "Before we continue, please share a valid name.",
-    askPhone: "Perfect. Now please share your 10-digit phone number.",
-    missingName: "Before you share your phone number, please tell me your name.",
-    invalidPhone: "Please share a valid 10-digit phone number.",
-    bookingComplete: "Thanks! You can complete your booking using the button below.",
-} as const;
+/**
+ * Lowercases and strips punctuation but keeps Devanagari, so Hindi and Marathi intent can be
+ * recognised. (`normalizeChatText` is ASCII-only and would erase them.)
+ */
+function normalizeIntentText(value: string) {
+    return value
+        .toLowerCase()
+        .replace(/[’']/g, " ")
+        .replace(/[^a-z0-9ऀ-ॿ\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
 
+const BOOKING_DESIRE =
+    /\b(want|wanna|would like|i d like|like to|need|ready|interested|plan to|planning to|going to|let s|lets|sign me up|signup|sign up)\b/;
+const BOOKING_VERB = /\b(book|booking|reserve|register|enrol+|enroll|join|attend)\b/;
+const BOOKING_DIRECT =
+    /\b(book|reserve|register|enrol+|enroll) (me|us|a|my|the|this|it|that|now|seat|seats|spot|spots|ticket|tickets)\b|\bsign me up\b|\bjoin (this|the|it|now)\b/;
+const BOOKING_ROMAN_INDIC =
+    /\b(book|booking|register|registration|join|reserve|seat|seats|spot)\b.*\b(karna|karo|kar do|kardo|karni|karein|karen|karaycha|karaychi|karaychay|karayche|kara|chahiye|chahie|pahije|hava|havi|havay)\b/;
+const BOOKING_NATIVE_INDIC =
+    /(बुक|बुकिंग|रजिस्टर|जॉइन|जॉईन|नोंदणी|सीट|जागा).*(करना|करनी|करो|कर दो|करें|करायचे|करायची|करायचं|करा|चाहिए|चाहिये|हवी|हवे|हवा|पाहिजे)/;
+const INFO_QUESTION =
+    /\b(how|what|why|price|prices|fee|fees|cost|costs|refund|refunds|cancel|cancellation|policy|process|steps|procedure|payment|details|info|information|kitna|kitni|kitne|kiti|kaise|kase|kasa|kya|kay)\b|कितना|कितनी|कितने|किती|कैसे|कसे|कसा|क्या|काय|रिफंड|कैंसिल|कॅन्सल|कीमत|फीस|किंमत|पॉलिसी/;
+
+/**
+ * True only when the visitor clearly wants to start booking ("I want to book this", "book
+ * karna hai", "बुक करना है"). Questions about price, refunds or how booking works are NOT
+ * booking intent: they used to trigger the name/phone flow and never got an answer.
+ */
 export function detectBookingIntent(value: string) {
-    const normalized = normalizeChatText(value);
-    if (!normalized) {
+    const normalized = normalizeIntentText(value);
+    if (!normalized || INFO_QUESTION.test(normalized)) {
         return false;
     }
 
-    return BOOKING_KEYWORDS.some((keyword) => normalized.includes(keyword));
+    if (BOOKING_NATIVE_INDIC.test(normalized) || BOOKING_ROMAN_INDIC.test(normalized)) {
+        return true;
+    }
+
+    return (
+        BOOKING_DIRECT.test(normalized) ||
+        (BOOKING_DESIRE.test(normalized) && BOOKING_VERB.test(normalized))
+    );
 }
 
 function canonicalizeChatToken(token: string) {
@@ -254,13 +272,36 @@ export function tokenizeChatText(
         );
 }
 
-function isGreetingMessage(value: string) {
-    const normalized = normalizeChatText(value);
-    if (!normalized) {
-        return false;
-    }
+const GREETING_WORD =
+    /^(hi+|hii+|hello+|hey+|heya|hola|namaste|namaskar|namaskaar|pranam|ram|jai|jay|good|morning|afternoon|evening|there|everyone|team|bot|assistant|ji|sir|madam|bhai|dost|नमस्ते|नमस्कार|हाय|हेलो|हॅलो|हैलो|राम|जय|शुभ|प्रभात|सुप्रभात)$/;
+const THANKS_WORD =
+    /^(thanks|thank|thankyou|thx|ty|dhanyavad|dhanyavaad|shukriya|aabhar|abhar|धन्यवाद|शुक्रिया|आभार|आभारी|आभारी आहे)$/;
+const THANKS_FILLER =
+    /^(you|u|so|much|a|lot|very|ji|bhai|ok|okay|again|for|help|the|your|it|great|nice|good|बहुत|खूप|आहे|है|भाई|जी|मदद|के|लिए|साठी)$/;
 
-    return /^(hi+|hello+|hey+)$/.test(normalized.replace(/\s+/g, ""));
+function intentTokens(value: string) {
+    return normalizeIntentText(value).split(" ").filter(Boolean);
+}
+
+function isGreetingMessage(value: string) {
+    const tokens = intentTokens(value);
+    return (
+        tokens.length > 0 &&
+        tokens.length <= 4 &&
+        tokens.every((token) => GREETING_WORD.test(token)) &&
+        // "good" / "ram" alone are not greetings.
+        tokens.some((token) => !/^(good|ram|jai|jay|there|everyone|team|ji)$/.test(token))
+    );
+}
+
+function isThanksMessage(value: string) {
+    const tokens = intentTokens(value);
+    return (
+        tokens.length > 0 &&
+        tokens.length <= 6 &&
+        tokens.some((token) => THANKS_WORD.test(token)) &&
+        tokens.every((token) => THANKS_WORD.test(token) || THANKS_FILLER.test(token))
+    );
 }
 
 function isGenericWorkshopPrompt(value: string) {
@@ -304,7 +345,7 @@ function formatWorkshopTime(timeValue: string) {
 }
 
 function formatWorkshopPrice(amount: number) {
-    return `Rs. ${new Intl.NumberFormat("en-IN").format(amount)}`;
+    return `₹${new Intl.NumberFormat("en-IN").format(amount)}`;
 }
 
 function getWorkshopDateTime(workshop: Workshop) {
@@ -411,65 +452,47 @@ export function buildFaqContext(faqs: ChatbotFaq[]) {
     return faqs.map((faq) => `Q: ${faq.question}\nA: ${faq.answer}`).join("\n\n");
 }
 
-export function buildGroqUserPrompt(message: string, faqs: ChatbotFaq[]) {
-    return `Reply Style:\n${CHATBOT_STYLE_INSTRUCTION}\n\nContext:\n${buildFaqContext(
-        faqs
-    )}\n\nUser Question:\n${message}`;
+export function buildFaqFallbackReply(faqs: ChatbotFaq[], fallback = CHATBOT_FALLBACK_REPLY) {
+    return faqs[0]?.answer?.trim() || fallback;
 }
 
-export function buildFaqFallbackReply(faqs: ChatbotFaq[]) {
-    return faqs[0]?.answer?.trim() || CHATBOT_COPY.fallback;
+function reply(
+    text: string,
+    flags: Partial<Omit<ChatbotApiResponse, "reply">> = {}
+): ChatbotApiResponse {
+    return {
+        reply: text,
+        showBookingButton: false,
+        askName: false,
+        askPhone: false,
+        ...flags,
+    };
 }
 
-async function requestGroqReply(
-    message: string,
-    faqs: ChatbotFaq[],
-    groq: GroqConfig,
-    fetchImpl: typeof fetch
-) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), GROQ_TIMEOUT_MS);
+const UNSURE_PATTERN = /#{1,2}\s*UNSURE\s*#{1,2}/gi;
+const PROMPT_LEAK_PATTERN = /<\/?context>|HOW TO ANSWER|\bSECURITY\b\s*\n\s*-/;
 
-    try {
-        const response = await fetchImpl(groq.endpoint, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${groq.apiKey}`,
-            },
-            body: JSON.stringify({
-                model: groq.model,
-                temperature: 0.2,
-                max_tokens: 220,
-                messages: [
-                    {
-                        role: "system",
-                        content: CHATBOT_SYSTEM_PROMPT,
-                    },
-                    {
-                        role: "user",
-                        content: buildGroqUserPrompt(message, faqs),
-                    },
-                ],
-            }),
-            cache: "no-store",
-            signal: controller.signal,
-        });
+/**
+ * Cleans the model output: strips the internal UNSURE marker (and reports it so the question
+ * can be logged for hosts), caps the length, and refuses to echo the system prompt.
+ */
+export function finalizeModelReply(raw: string, strings: Pick<ChatbotStrings, "fallback">) {
+    const unsure = new RegExp(UNSURE_PATTERN.source, "i").test(raw);
+    const text = raw.replace(UNSURE_PATTERN, "").trim();
 
-        if (!response.ok) {
-            throw new Error(`Groq request failed with status ${response.status}.`);
-        }
-
-        const payload = (await response.json()) as GroqChatResponse;
-        const reply = payload.choices?.[0]?.message?.content?.trim();
-        if (!reply) {
-            return null;
-        }
-
-        return reply;
-    } finally {
-        clearTimeout(timeoutId);
+    if (!text || PROMPT_LEAK_PATTERN.test(text)) {
+        return { reply: strings.fallback, unsure: true };
     }
+
+    const bounded =
+        text.length > MAX_REPLY_CHARS ? `${text.slice(0, MAX_REPLY_CHARS - 1).trimEnd()}…` : text;
+    return { reply: bounded, unsure };
+}
+
+function withEnglishNote(locale: ChatLocale, strings: ChatbotStrings, text: string) {
+    return locale === "en" || !strings.englishOnlyNote
+        ? text
+        : `${strings.englishOnlyNote}\n${text}`;
 }
 
 export async function generateChatbotReply(
@@ -477,43 +500,29 @@ export async function generateChatbotReply(
 ): Promise<ChatbotApiResponse> {
     const message = input.message.trim();
     const lead = input.lead || {};
+    const history = normalizeChatHistory(input.history);
+    const multilingual = input.multilingual ?? CHATBOT_MULTILINGUAL;
+    const locale: ChatLocale = multilingual
+        ? resolveChatLocale({ message, history, hint: input.languageHint }).locale
+        : "en";
+    const strings = getChatbotStrings(locale);
 
     if (input.stage === "asking_name") {
         if (!isValidLeadName(message)) {
-            return {
-                reply: CHATBOT_COPY.invalidName,
-                showBookingButton: false,
-                askName: true,
-                askPhone: false,
-            };
+            return reply(strings.invalidName, { askName: true });
         }
 
-        return {
-            reply: CHATBOT_COPY.askPhone,
-            showBookingButton: false,
-            askName: false,
-            askPhone: true,
-        };
+        return reply(strings.askPhone, { askPhone: true });
     }
 
     if (input.stage === "asking_phone") {
         const name = normalizeName(lead.name || "");
         if (!isValidLeadName(name)) {
-            return {
-                reply: CHATBOT_COPY.missingName,
-                showBookingButton: false,
-                askName: true,
-                askPhone: false,
-            };
+            return reply(strings.missingName, { askName: true });
         }
 
         if (!isValidPhoneNumber(message)) {
-            return {
-                reply: CHATBOT_COPY.invalidPhone,
-                showBookingButton: false,
-                askName: false,
-                askPhone: true,
-            };
+            return reply(strings.invalidPhone, { askPhone: true });
         }
 
         await input.onLeadCaptured?.({
@@ -522,101 +531,98 @@ export async function generateChatbotReply(
             query: (lead.query || "").trim() || "Workshop booking",
         });
 
-        return {
-            reply: CHATBOT_COPY.bookingComplete,
-            showBookingButton: true,
-            askName: false,
-            askPhone: false,
-        };
+        return reply(strings.bookingComplete, { showBookingButton: true });
     }
 
     if (isGreetingMessage(message)) {
-        return {
-            reply: CHATBOT_COPY.greeting,
-            showBookingButton: false,
-            askName: false,
-            askPhone: false,
-        };
+        return reply(strings.greeting);
+    }
+
+    if (isThanksMessage(message)) {
+        return reply(strings.thanks);
     }
 
     if (detectBookingIntent(message)) {
-        return {
-            reply: CHATBOT_COPY.askName,
-            showBookingButton: false,
-            askName: true,
-            askPhone: false,
-        };
+        return reply(strings.askName, { askName: true });
     }
 
+    const fetchImpl = input.fetchImpl || fetch;
+    let relevantFaqs: ChatbotFaq[] | null = null;
+
+    const loadFaqs = async () => {
+        if (relevantFaqs) {
+            return relevantFaqs;
+        }
+
+        try {
+            relevantFaqs = input.retrieveRelevantFaqs
+                ? await input.retrieveRelevantFaqs(buildRetrievalQuery(message, history))
+                : (input.faqs ?? []);
+        } catch {
+            relevantFaqs = [];
+        }
+
+        return relevantFaqs;
+    };
+
+    // Primary path: one grounded model call with workshops, platform policy, FAQs and the
+    // recent conversation as context, failing over across providers. English unless the
+    // multilingual switch is on, in which case it answers in the visitor's language.
+    if (input.llmProviders?.length || input.groq?.apiKey) {
+        const faqs = await loadFaqs();
+        const completion = await requestChatbotCompletion({
+            providers: input.llmProviders,
+            groq: input.groq,
+            fetchImpl,
+            retryDelayMs: input.retryDelayMs,
+            messages: buildChatbotMessages({
+                locale,
+                englishOnly: !multilingual,
+                message,
+                history,
+                workshops: input.workshops,
+                faqs: faqs.length > 0 ? faqs : DEFAULT_CHATBOT_FAQS,
+                contextWorkshopId: input.contextWorkshopId,
+                clientName: input.clientName,
+                now: input.now,
+            }),
+        });
+
+        if (completion) {
+            const finalized = finalizeModelReply(completion, strings);
+            if (finalized.unsure) {
+                await input.onUnansweredQuestion?.(message).catch(() => undefined);
+            }
+
+            return reply(finalized.reply);
+        }
+    }
+
+    // Degraded path (no model key, or the model failed): answer from live workshop data and
+    // FAQs without inventing anything. Facts stay in English, so say so for other languages.
     const workshopReply = maybeResolveWorkshopReply(
         message,
         input.workshops,
         input.contextWorkshopId
     );
     if (workshopReply) {
-        return {
-            reply: workshopReply,
-            showBookingButton: false,
-            askName: false,
-            askPhone: false,
-        };
+        return reply(withEnglishNote(locale, strings, workshopReply));
     }
 
     if (isGenericWorkshopPrompt(message)) {
-        return {
-            reply: CHATBOT_COPY.guidance,
-            showBookingButton: false,
-            askName: false,
-            askPhone: false,
-        };
+        return reply(strings.guidance);
     }
 
-    let relevantFaqs: ChatbotFaq[] = [];
-
-    try {
-        if (input.retrieveRelevantFaqs) {
-            relevantFaqs = await input.retrieveRelevantFaqs(message);
-        } else {
-            relevantFaqs = input.faqs ?? [];
-        }
-    } catch {
-        return {
-            reply: CHATBOT_COPY.fallback,
-            showBookingButton: false,
-            askName: false,
-            askPhone: false,
-        };
-    }
-
-    if (relevantFaqs.length === 0) {
+    const faqs = await loadFaqs();
+    if (faqs.length === 0) {
         await input.onUnansweredQuestion?.(message);
-
-        return {
-            reply: CHATBOT_COPY.fallback,
-            showBookingButton: false,
-            askName: false,
-            askPhone: false,
-        };
+        return reply(strings.fallback);
     }
 
-    const fetchImpl = input.fetchImpl || fetch;
-    let reply = buildFaqFallbackReply(relevantFaqs);
-
-    if (input.groq?.apiKey) {
-        try {
-            const groqReply = await requestGroqReply(message, relevantFaqs, input.groq, fetchImpl);
-            if (groqReply) {
-                reply = groqReply;
-            }
-        } catch {
-            reply = buildFaqFallbackReply(relevantFaqs);
-        }
-    }
-
-    return {
-        reply,
-        showBookingButton: false,
-        askName: false,
-        askPhone: false,
-    };
+    const faqAnswer = buildFaqFallbackReply(faqs, strings.fallback);
+    return reply(
+        String(faqs[0]?.id ?? "").startsWith("default-")
+            ? withEnglishNote(locale, strings, faqAnswer)
+            : faqAnswer
+    );
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { DEFAULT_OG_IMAGES } from "@/lib/seo";
 
 export const metadata: Metadata = {
     title: "Explore Workshops | Only Workshops",
@@ -7,6 +8,7 @@ export const metadata: Metadata = {
     openGraph: {
         title: "Explore Workshops | Only Workshops",
         description: "Browse and filter creative workshops happening in your city.",
+        images: DEFAULT_OG_IMAGES,
     },
 };
 

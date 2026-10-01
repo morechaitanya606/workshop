@@ -13,7 +13,12 @@ Why here rather than object storage, on the current plan:
 Supabase's quota is the trap: exhausting it throttles the whole project, not just video. Point
 `NEXT_PUBLIC_MEDIA_BASE_URL` at object storage when traffic justifies it -- Cloudflare R2 has
 no egress charge and is already allow-listed in next.config.mjs -- and the code switches over
-with no change here.
+with no change here. Use the bucket's public URL (`https://pub-<id>.r2.dev/hero` or a custom
+domain), not `<account>.r2.cloudflarestorage.com`: that is R2's S3 API, which needs signed
+requests and serves no public files.
+
+Moving the files to Supabase Storage once left the homepage with no video until an upload
+step ran (commit 08b93c3 undid it). Keep them here unless you are moving to R2.
 
 ## Encoding
 

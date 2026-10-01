@@ -11,6 +11,19 @@ type Params = {
 
 export async function POST(request: NextRequest, { params }: Params) {
     const { id } = await params;
+
+    // Address-keyed limit before the remote auth lookup, so a flood of junk tokens does not
+    // buy one Supabase Auth call each.
+    const preAuthLimit = await assertRateLimit({
+        key: getRateLimitKey(request, "admin-host-application-approve-ip"),
+        limit: 120,
+        windowMs: 60_000,
+        message: "Too many approval actions. Please wait and retry.",
+    });
+    if (!preAuthLimit.ok) {
+        return preAuthLimit.response;
+    }
+
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -62,10 +75,14 @@ export async function POST(request: NextRequest, { params }: Params) {
             throw approveError;
         }
 
+        // Upgrade user -> host ONLY. An unconditional `role = 'host'` demoted any admin whose
+        // application was approved (the approver included, if they had ever applied), and the
+        // `.eq("role", "user")` makes the check atomic with the write instead of read-then-write.
         const { error: profileError } = await service.client
             .from("profiles")
             .update({ role: "host" })
-            .eq("id", application.user_id);
+            .eq("id", application.user_id)
+            .eq("role", "user");
 
         if (profileError) {
             throw profileError;

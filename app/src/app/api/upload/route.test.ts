@@ -4,13 +4,14 @@ import path from "path";
 import { NextResponse } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
-import { requireAuthenticatedUser } from "@/lib/api-auth";
+import { getUserRole, requireAuthenticatedUser } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { getPublicSupabaseConfig } from "@/lib/env";
-import { assertRateLimit } from "@/lib/rate-limit";
+import { assertQuota, assertRateLimit } from "@/lib/rate-limit";
 
 vi.mock("@/lib/api-auth", () => ({
     requireAuthenticatedUser: vi.fn(),
+    getUserRole: vi.fn(),
     jsonError: vi.fn((message: string, status = 400, details?: unknown) =>
         NextResponse.json(
             {
@@ -32,21 +33,20 @@ vi.mock("@/lib/env", () => ({
 
 vi.mock("@/lib/rate-limit", () => ({
     assertRateLimit: vi.fn(),
+    assertQuota: vi.fn(),
     getRateLimitKey: vi.fn(() => "upload-test-key"),
 }));
 
 const sharpMocks = vi.hoisted(() => ({
     toBuffer: vi.fn(),
-    hasAlpha: false,
 }));
 
 vi.mock("sharp", () => {
     const output = { toBuffer: sharpMocks.toBuffer };
-    const jpeg = vi.fn(() => output);
-    const png = vi.fn(() => output);
-    const metadata = vi.fn(async () => ({ hasAlpha: sharpMocks.hasAlpha }));
-    const rotate = vi.fn(() => ({ jpeg, png, metadata }));
-    const factory = vi.fn(() => ({ rotate }));
+    const webp = vi.fn(() => output);
+    const resize = vi.fn(() => ({ webp }));
+    const rotate = vi.fn(() => ({ resize }));
+    const factory = vi.fn(() => ({ rotate, resize }));
     return { default: factory };
 });
 
@@ -71,12 +71,13 @@ describe("POST /api/upload", () => {
             accessToken: "token",
         });
         vi.mocked(assertRateLimit).mockResolvedValue({ ok: true } as any);
+        vi.mocked(assertQuota).mockResolvedValue({ ok: true } as any);
+        vi.mocked(getUserRole).mockResolvedValue("user");
         vi.mocked(getPublicSupabaseConfig).mockReturnValue({
             url: "https://example.supabase.co",
             key: "anon",
         });
         sharpMocks.toBuffer.mockResolvedValue(Buffer.from("converted-image-bytes"));
-        sharpMocks.hasAlpha = false;
         heicConvertMock.convert.mockResolvedValue(new Uint8Array([10, 20, 30]));
     });
 
@@ -127,13 +128,13 @@ describe("POST /api/upload", () => {
         const body = await response.json();
 
         expect(response.status).toBe(200);
-        expect(body.url).toMatch(/^\/uploads\/uploads\/user-1\/.+\.png$/);
+        expect(body.url).toMatch(/^\/uploads\/uploads\/user-1\/.+\.webp$/);
         expect(fs.existsSync(path.join(tempDir, "public", ...String(body.path).split("/")))).toBe(
             true
         );
     });
 
-    it("converts HEIC images to JPEG when the browser omits a MIME type", async () => {
+    it("converts HEIC images to WebP when the browser omits a MIME type", async () => {
         const upload = vi.fn().mockResolvedValue({
             error: { message: "Bucket not found" },
         });
@@ -174,13 +175,13 @@ describe("POST /api/upload", () => {
 
         expect(response.status).toBe(200);
         expect(sharpMocks.toBuffer).toHaveBeenCalled();
-        expect(body.url).toMatch(/^\/uploads\/uploads\/user-1\/.+\.jpg$/);
+        expect(body.url).toMatch(/^\/uploads\/uploads\/user-1\/.+\.webp$/);
         expect(fs.existsSync(path.join(tempDir, "public", ...String(body.path).split("/")))).toBe(
             true
         );
     });
 
-    it("uploads converted HEIF images with the image/jpeg content type", async () => {
+    it("uploads converted HEIF images with the image/webp content type", async () => {
         const upload = vi.fn().mockResolvedValue({ error: null });
         const getPublicUrl = vi.fn(() => ({
             data: { publicUrl: "https://example.supabase.co/storage/v1/object/public/photo.jpg" },
@@ -222,9 +223,9 @@ describe("POST /api/upload", () => {
 
         expect(response.status).toBe(200);
         expect(upload).toHaveBeenCalledWith(
-            expect.stringMatching(/^user-1\/.+\.jpg$/),
+            expect.stringMatching(/^user-1\/.+\.webp$/),
             expect.any(Buffer),
-            expect.objectContaining({ contentType: "image/jpeg" })
+            expect.objectContaining({ contentType: "image/webp" })
         );
     });
 
@@ -273,7 +274,7 @@ describe("POST /api/upload", () => {
         expect(upload).not.toHaveBeenCalled();
     });
 
-    it("converts non-standard image formats (e.g. WebP) to JPEG", async () => {
+    it("re-encodes images that are already WebP", async () => {
         const upload = vi.fn().mockResolvedValue({ error: { message: "Bucket not found" } });
         const serviceClient = {
             storage: { from: vi.fn(() => ({ upload })) },
@@ -307,11 +308,10 @@ describe("POST /api/upload", () => {
 
         expect(response.status).toBe(200);
         expect(sharpMocks.toBuffer).toHaveBeenCalled();
-        expect(body.url).toMatch(/^\/uploads\/uploads\/user-1\/.+\.jpg$/);
+        expect(body.url).toMatch(/^\/uploads\/uploads\/user-1\/.+\.webp$/);
     });
 
-    it("converts images with transparency to PNG", async () => {
-        sharpMocks.hasAlpha = true;
+    it("converts images with transparency to WebP", async () => {
         const upload = vi.fn().mockResolvedValue({ error: { message: "Bucket not found" } });
         const serviceClient = {
             storage: { from: vi.fn(() => ({ upload })) },
@@ -344,7 +344,7 @@ describe("POST /api/upload", () => {
         const body = await response.json();
 
         expect(response.status).toBe(200);
-        expect(body.url).toMatch(/^\/uploads\/uploads\/user-1\/.+\.png$/);
+        expect(body.url).toMatch(/^\/uploads\/uploads\/user-1\/.+\.webp$/);
     });
 
     it("rejects unsupported upload file types before storage writes", async () => {
@@ -384,5 +384,147 @@ describe("POST /api/upload", () => {
             "Invalid file type. Allowed: image files (JPEG, PNG, WebP, GIF, AVIF, HEIC/HEIF, BMP, TIFF, ICO, JP2, JXL, RAW) and videos (MP4, WebM, MOV, M4V)."
         );
         expect(serviceClient.storage.from).not.toHaveBeenCalled();
+    });
+
+    describe("videos and quota", () => {
+        const MP4_BYTES = new Uint8Array([
+            0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 0, 0,
+        ]);
+        const WEBM_BYTES = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 1, 0]);
+
+        function createVideoRequest(name: string, type: string, bytes: Uint8Array) {
+            return {
+                formData: vi.fn().mockResolvedValue({
+                    get(field: string) {
+                        if (field === "file") {
+                            return {
+                                name,
+                                size: bytes.byteLength,
+                                type,
+                                arrayBuffer: vi.fn().mockResolvedValue(bytes.buffer),
+                            };
+                        }
+                        return null;
+                    },
+                }),
+            } as any;
+        }
+
+        function mockStorage() {
+            const upload = vi.fn().mockResolvedValue({ error: null });
+            const getPublicUrl = vi.fn(() => ({
+                data: { publicUrl: "https://example.supabase.co/storage/v1/object/public/v" },
+            }));
+            vi.mocked(requireSupabaseService).mockReturnValue({
+                ok: true,
+                client: { storage: { from: vi.fn(() => ({ upload, getPublicUrl })) } } as any,
+            });
+            return upload;
+        }
+
+        it("stores a genuine MP4 as-is", async () => {
+            const upload = mockStorage();
+
+            const response = await POST(createVideoRequest("clip.mp4", "video/mp4", MP4_BYTES));
+
+            expect(response.status).toBe(200);
+            expect(upload).toHaveBeenCalledWith(
+                expect.stringMatching(/^user-1\/.+\.mp4$/),
+                expect.any(Buffer),
+                expect.objectContaining({ contentType: "video/mp4" })
+            );
+        });
+
+        it("stores a genuine WebM", async () => {
+            const upload = mockStorage();
+
+            const response = await POST(createVideoRequest("clip.webm", "video/webm", WEBM_BYTES));
+
+            expect(response.status).toBe(200);
+            expect(upload).toHaveBeenCalled();
+        });
+
+        it("rejects a non-video payload renamed to .mp4", async () => {
+            const upload = mockStorage();
+            const html = new TextEncoder().encode("<html><script>alert(1)</script></html>");
+
+            const response = await POST(createVideoRequest("clip.mp4", "video/mp4", html));
+            const body = await response.json();
+
+            expect(response.status).toBe(400);
+            expect(body.error).toMatch(/could not be verified/i);
+            expect(upload).not.toHaveBeenCalled();
+            expect(assertQuota).not.toHaveBeenCalled();
+        });
+
+        it("rejects an MP4 that claims to be WebM", async () => {
+            const upload = mockStorage();
+
+            const response = await POST(createVideoRequest("clip.webm", "video/webm", MP4_BYTES));
+
+            expect(response.status).toBe(400);
+            expect(upload).not.toHaveBeenCalled();
+        });
+
+        it("never echoes a caller-chosen extension into the storage path", async () => {
+            const upload = mockStorage();
+
+            const response = await POST(createVideoRequest("clip.php", "video/mp4", MP4_BYTES));
+
+            expect(response.status).toBe(200);
+            expect(upload).toHaveBeenCalledWith(
+                expect.stringMatching(/^user-1\/.+\.mp4$/),
+                expect.any(Buffer),
+                expect.anything()
+            );
+        });
+
+        it("returns 429 once the daily byte quota is spent", async () => {
+            const upload = mockStorage();
+            vi.mocked(assertQuota).mockResolvedValue({
+                ok: false,
+                response: NextResponse.json({ error: "Daily upload limit" }, { status: 429 }),
+            } as any);
+
+            const response = await POST(createVideoRequest("clip.mp4", "video/mp4", MP4_BYTES));
+
+            expect(response.status).toBe(429);
+            expect(upload).not.toHaveBeenCalled();
+            expect(assertQuota).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    amount: MP4_BYTES.byteLength,
+                    limit: 200 * 1024 * 1024,
+                    windowMs: 24 * 60 * 60_000,
+                })
+            );
+        });
+
+        it("waives an exceeded quota for admins only", async () => {
+            const upload = mockStorage();
+            vi.mocked(assertQuota).mockResolvedValue({
+                ok: false,
+                response: NextResponse.json({ error: "Daily upload limit" }, { status: 429 }),
+            } as any);
+            vi.mocked(getUserRole).mockResolvedValue("admin");
+
+            const response = await POST(createVideoRequest("clip.mp4", "video/mp4", MP4_BYTES));
+
+            expect(response.status).toBe(200);
+            expect(upload).toHaveBeenCalled();
+        });
+
+        it("does not waive a quota store outage (503) even for admins", async () => {
+            const upload = mockStorage();
+            vi.mocked(assertQuota).mockResolvedValue({
+                ok: false,
+                response: NextResponse.json({ error: "unavailable" }, { status: 503 }),
+            } as any);
+            vi.mocked(getUserRole).mockResolvedValue("admin");
+
+            const response = await POST(createVideoRequest("clip.mp4", "video/mp4", MP4_BYTES));
+
+            expect(response.status).toBe(503);
+            expect(upload).not.toHaveBeenCalled();
+        });
     });
 });

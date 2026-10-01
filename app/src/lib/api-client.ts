@@ -484,6 +484,10 @@ export type PlatformSettings = {
     hero_image_url?: string;
     special_page?: SpecialPageSettings;
     cafe_partners?: CafePartner[];
+    /** https link on chat.whatsapp.com / wa.me / whatsapp.com; "" or absent means not set. */
+    whatsapp_community_url?: string;
+    /** Optional short sentence shown in the sold-out community popup. */
+    whatsapp_community_message?: string;
 };
 
 export type PlatformSettingsResponse = {

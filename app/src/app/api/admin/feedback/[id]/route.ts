@@ -20,8 +20,23 @@ async function assertAdminFeedbackWriteLimit(request: NextRequest, userId: strin
     });
 }
 
+// Address-keyed limit that runs BEFORE requireAdminUser, which is a remote Supabase call.
+async function assertAdminFeedbackIpLimit(request: NextRequest) {
+    return await assertRateLimit({
+        key: getRateLimitKey(request, "admin-feedback-write-ip"),
+        limit: 240,
+        windowMs: 60_000,
+        message: "Too many moderation actions. Please wait and try again.",
+    });
+}
+
 export async function PATCH(request: NextRequest, { params }: Params) {
     const { id } = await params;
+    const ipLimit = await assertAdminFeedbackIpLimit(request);
+    if (!ipLimit.ok) {
+        return ipLimit.response;
+    }
+
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -109,6 +124,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
 export async function DELETE(request: NextRequest, { params }: Params) {
     const { id } = await params;
+    const ipLimit = await assertAdminFeedbackIpLimit(request);
+    if (!ipLimit.ok) {
+        return ipLimit.response;
+    }
+
     const auth = await requireAdminUser(request);
     if (!auth.ok) {
         return auth.response;

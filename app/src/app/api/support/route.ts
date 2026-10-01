@@ -2,11 +2,15 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireHostOrAdmin } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
-import { parseBody } from "@/lib/api-route";
+import { parseBody, parseQuery } from "@/lib/api-route";
 import type { Database } from "@/lib/database.types";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { createSupabaseAnonServerClient } from "@/lib/supabase-server";
-import { supportTicketCreateSchema } from "@/lib/validators";
+import {
+    supportTicketCreateSchema,
+    supportTicketListQuerySchema,
+    toPageCursor,
+} from "@/lib/validators";
 import * as Sentry from "@sentry/nextjs";
 
 type SupportTicketRow = Database["public"]["Tables"]["support_tickets"]["Row"];
@@ -27,14 +31,31 @@ function isMissingSupportTableError(error: unknown) {
 }
 
 export async function GET(request: NextRequest) {
+    // Address-keyed limit before the remote auth lookup (requireHostOrAdmin calls Supabase).
+    const preAuthLimit = await assertRateLimit({
+        key: getRateLimitKey(request, "support-tickets-read-ip"),
+        limit: 240,
+        windowMs: 60_000,
+        message: "Too many requests. Please slow down.",
+    });
+    if (!preAuthLimit.ok) {
+        return preAuthLimit.response;
+    }
+
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {
         return auth.response;
     }
 
+    const parsedQuery = parseQuery(request, supportTicketListQuerySchema, "Invalid tickets query.");
+    if (!parsedQuery.ok) {
+        return parsedQuery.response;
+    }
+    const { limit, cursor } = parsedQuery.data;
+
     const service = requireSupabaseService();
     if (!service.ok) {
-        return NextResponse.json({ tickets: [] }, { status: 200 });
+        return NextResponse.json({ tickets: [], nextCursor: null }, { status: 200 });
     }
 
     try {
@@ -89,14 +110,20 @@ export async function GET(request: NextRequest) {
             );
 
             if (workshopIds.length === 0) {
-                return NextResponse.json({ tickets: [] }, { status: 200 });
+                return NextResponse.json({ tickets: [], nextCursor: null }, { status: 200 });
             }
         }
 
-        const ticketsBaseQuery = service.client
+        let ticketsBaseQuery = service.client
             .from("support_tickets")
             .select("id, subject, description, email, status, created_at, workshop_id")
-            .order("created_at", { ascending: false });
+            .order("created_at", { ascending: false })
+            // One extra row tells us whether another page exists without a count query.
+            .limit(limit + 1);
+
+        if (cursor) {
+            ticketsBaseQuery = ticketsBaseQuery.lt("created_at", cursor);
+        }
 
         const { data, error } = workshopIds
             ? await ticketsBaseQuery.in("workshop_id", workshopIds)
@@ -104,12 +131,17 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             if (isMissingSupportTableError(error)) {
-                return NextResponse.json({ tickets: [] }, { status: 200 });
+                return NextResponse.json({ tickets: [], nextCursor: null }, { status: 200 });
             }
             throw error;
         }
 
-        const tickets = (Array.isArray(data) ? data : []) as SupportTicketRow[];
+        const fetchedTickets = (Array.isArray(data) ? data : []) as SupportTicketRow[];
+        const tickets = fetchedTickets.slice(0, limit);
+        const nextCursor =
+            fetchedTickets.length > limit
+                ? toPageCursor(tickets[tickets.length - 1]?.created_at)
+                : null;
         const ticketWorkshopIds = Array.from(
             new Set(
                 tickets
@@ -163,6 +195,7 @@ export async function GET(request: NextRequest) {
         }
 
         return NextResponse.json({
+            nextCursor,
             tickets: tickets.map((ticket) => ({
                 ...ticket,
                 replies: (repliesByTicketId.get(ticket.id) || []).map((reply) => ({
@@ -179,7 +212,7 @@ export async function GET(request: NextRequest) {
         });
     } catch (error) {
         if (isMissingSupportTableError(error)) {
-            return NextResponse.json({ tickets: [] }, { status: 200 });
+            return NextResponse.json({ tickets: [], nextCursor: null }, { status: 200 });
         }
         Sentry.captureException(error, {
             tags: { layer: "api", route: "support_tickets_get" },
@@ -215,14 +248,35 @@ export async function POST(request: NextRequest) {
         const service = requireSupabaseService();
         const supabase = service.ok ? service.client : createSupabaseAnonServerClient();
 
+        // A ticket may only point at a workshop that exists (or at none). Without this a
+        // caller could attach tickets to arbitrary ids and they would surface in a host's
+        // inbox, or fail later on the foreign key with an opaque 500.
+        const linkedWorkshopId = workshopId.trim() ? workshopId.trim() : null;
+        if (linkedWorkshopId) {
+            const { data: workshop, error: workshopError } = await supabase
+                .from("workshops")
+                .select("id")
+                .eq("id", linkedWorkshopId)
+                .maybeSingle();
+
+            if (workshopError) {
+                throw workshopError;
+            }
+            if (!workshop) {
+                return NextResponse.json(
+                    { error: "The selected workshop does not exist.", success: false },
+                    { status: 400 }
+                );
+            }
+        }
+
         const { error } = await supabase.from("support_tickets").insert([
             {
                 user_id: null,
                 email,
                 subject,
                 description,
-                workshop_id:
-                    typeof workshopId === "string" && workshopId.trim() ? workshopId : null,
+                workshop_id: linkedWorkshopId,
                 status: "open",
                 created_at: new Date().toISOString(),
             },

@@ -68,6 +68,27 @@ It will refuse to run if `bookings` already contains two rows sharing a `payment
 and name them. That means one payment produced two bookings, which needs a person to reconcile
 before any unique index can exist.
 
+## 202610011001xx\_\* schema/RLS hardening series
+
+Apply in filename order (`db push` does). Each file is idempotent and independent of the
+others except where noted. Dry run first.
+
+| File                                                | What it does                                                                                                                                                              | Data-dependent risk                                                                                                                                                                |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `...100100_coupon_integrity`                        | `coupons.applicable_workshop_ids` uuid[] to text[]; discount CHECKs; unique redemption per booking                                                                        | Deletes duplicate `coupon_redemptions` per booking (keeps earliest). CHECKs are skipped with a WARNING if bad rows exist.                                                          |
+| `...100200_feedback_moderation_rls`                 | Reviews: select published/own/admin only, no user write policy, moderation-reset trigger, stats count published only                                                      | None. Needs the app change in the feedback upsert (see migration header).                                                                                                          |
+| `...100300_workshop_host_guard_and_host_id`         | Host write guard trigger on `workshops`; `host_id` derivation trigger + backfill                                                                                          | Touches `updated_at` of backfilled workshops. Does not backfill `host_earnings`.                                                                                                   |
+| `...100400_uploads_bucket_lockdown`                 | `uploads` bucket size/MIME limits; drops user write + anon list policies                                                                                                  | Existing objects are not re-checked.                                                                                                                                               |
+| `...100500_intake_tables_lockdown`                  | Waitlist/support direct inserts dropped; profile insert pinned to role user; community host contact columns hidden from API roles; unique waitlist/join-request per email | Deletes duplicate `waitlists` and `community_join_requests` rows (keeps most-progressed, then oldest). `waitlists.workshop_id` NOT NULL skipped with a WARNING if NULL rows exist. |
+| `...100600_financial_fk_delete_rules`               | Coupon FKs SET NULL; `bookings.user_id` SET NULL + nullable; earnings/payout FKs RESTRICT                                                                                 | Re-adds FKs (brief SHARE ROW EXCLUSIVE locks).                                                                                                                                     |
+| `...100700_email_log_indexes_and_redundant_indexes` | Email log indexes, one `sent` row per (template, reference), drops redundant indexes                                                                                      | Relabels duplicate `sent` rows as `failed` (no deletes).                                                                                                                           |
+| `...100800_webhook_events_purge`                    | `purge_old_webhook_events()` (service role only)                                                                                                                          | None until the function is called.                                                                                                                                                 |
+| `...100900_drop_unused_seat_and_coupon_functions`   | Drops `decrement_seats`, `increment_coupon_usage`                                                                                                                         | None (no callers).                                                                                                                                                                 |
+
+Apply this series BEFORE `202610011101xx` and later: `...100100` changes the column type that
+`confirm_booking_from_hold` reads, and the later `create or replace` of that function clears any
+backend's cached plan for the old type.
+
 ## Migrations are NOT wrapped in a transaction
 
 Supabase applies each statement of a migration on its own. There is no implicit transaction

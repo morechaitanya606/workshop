@@ -8,19 +8,40 @@ import {
 } from "@/lib/chatbot";
 import { resolveChatbotClient } from "@/lib/chatbot-clients";
 import { isChatbotMatchBelowThreshold, searchChatbotFaqs } from "@/lib/chatbot-vector-search";
-import { getGroqConfig, getHuggingFaceEmbeddingConfig } from "@/lib/env";
+import { getChatbotLlmProviders, getHuggingFaceEmbeddingConfig } from "@/lib/env";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { loadSupportChatWorkshops } from "@/lib/support-chat";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { handleApiError, parseBody } from "@/lib/api-route";
 import { jsonError } from "@/lib/api-auth";
-import { chatbotRequestSchema } from "@/lib/validators";
+import { chatbotChatRequestSchema } from "@/lib/chatbot-request";
 
 const defaultChatbotFaqs: ChatbotFaq[] = DEFAULT_CHATBOT_FAQS.map((faq, index) => ({
     id: `default-${index + 1}`,
     question: faq.question,
     answer: faq.answer,
 }));
+
+const FAQ_RETRIEVAL_TIMEOUT_MS = 4000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timeoutId = setTimeout(
+            () => reject(new Error("FAQ retrieval timed out.")),
+            timeoutMs
+        );
+        promise.then(
+            (value) => {
+                clearTimeout(timeoutId);
+                resolve(value);
+            },
+            (error) => {
+                clearTimeout(timeoutId);
+                reject(error);
+            }
+        );
+    });
+}
 
 function searchDefaultChatbotFaqs(message: string) {
     const messageTokens = new Set(tokenizeChatText(message));
@@ -110,7 +131,7 @@ export async function POST(request: NextRequest) {
 
     const parsed = await parseBody(
         request,
-        chatbotRequestSchema,
+        chatbotChatRequestSchema,
         "Invalid chat payload.",
         "Chat request is invalid."
     );
@@ -119,12 +140,15 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const workshops =
-            parsed.data.stage === "idle"
-                ? await loadSupportChatWorkshops().catch(() => undefined)
-                : undefined;
+        // "completed" is the stage after a finished booking hand-off; the visitor may keep
+        // asking questions, so it needs workshop context just like "idle".
+        const isLeadStep =
+            parsed.data.stage === "asking_name" || parsed.data.stage === "asking_phone";
+        const workshops = !isLeadStep
+            ? await loadSupportChatWorkshops().catch(() => undefined)
+            : undefined;
 
-        const groq = getGroqConfig();
+        const llmProviders = getChatbotLlmProviders();
         const embeddingConfig = getHuggingFaceEmbeddingConfig();
         const serviceClient = isSupabaseServiceConfigured
             ? createSupabaseServiceClient({ requestTimeoutMs: 5000 })
@@ -141,7 +165,10 @@ export async function POST(request: NextRequest) {
             try {
                 resolvedClient = await resolveChatbotClient(serviceClient, {
                     clientApiKey: parsed.data.clientApiKey,
-                    clientId: parsed.data.clientId,
+                    // A bare client id is public (/api/chatbot/config hands it to every
+                    // visitor), so it never selects a tenant: resolveChatbotClient refuses
+                    // id-only lookups and answering 404 to it broke every message after the
+                    // first. The workshop context or the platform default picks the client.
                     contextWorkshopId: parsed.data.contextWorkshopId,
                 });
             } catch {
@@ -164,7 +191,15 @@ export async function POST(request: NextRequest) {
             faqs: [],
             workshops,
             contextWorkshopId: parsed.data.contextWorkshopId,
-            groq,
+            // Conversation context is only useful (and only sent to the model) for questions;
+            // during the name/phone steps the history would carry the visitor's phone number.
+            history: isLeadStep ? [] : parsed.data.history,
+            languageHint: parsed.data.language,
+            clientName:
+                resolvedClient.client && !resolvedClient.client.is_platform_default
+                    ? resolvedClient.client.name
+                    : null,
+            llmProviders,
             retrieveRelevantFaqs: async (message) => {
                 if (
                     !(canUseTenantRag && serviceClient && embeddingConfig && resolvedClient.client)
@@ -173,11 +208,16 @@ export async function POST(request: NextRequest) {
                 }
 
                 try {
-                    const matches = await searchChatbotFaqs(serviceClient, {
-                        clientId: resolvedClient.client?.id || "",
-                        message,
-                        embeddingConfig,
-                    });
+                    // The embedding call can take up to 12s on a cold model; cap it so the
+                    // language model still has time to answer inside the function limit.
+                    const matches = await withTimeout(
+                        searchChatbotFaqs(serviceClient, {
+                            clientId: resolvedClient.client?.id || "",
+                            message,
+                            embeddingConfig,
+                        }),
+                        FAQ_RETRIEVAL_TIMEOUT_MS
+                    );
 
                     if (isChatbotMatchBelowThreshold(matches)) {
                         return [];

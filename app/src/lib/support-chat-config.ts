@@ -1,3 +1,4 @@
+import { BOOKING_HOLD_MINUTES } from "@/lib/booking-time";
 import { CANCELLATION_POLICY } from "@/lib/cancellation-policy";
 
 export const SUPPORT_CHAT_CACHE_TTL_MS = 60_000;
@@ -21,7 +22,7 @@ export const SUPPORT_CHAT_ANALYTICS_EVENTS = {
 export const SUPPORT_CHAT_POLICY = {
     booking: {
         callToAction: "Reserve Spot",
-        holdWindowMinutes: 15,
+        holdWindowMinutes: BOOKING_HOLD_MINUTES,
         confirmationText: "Once payment succeeds, your booking is confirmed instantly.",
     },
     cancellation: {

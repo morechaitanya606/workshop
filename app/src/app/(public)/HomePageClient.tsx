@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useReducedMotion } from "framer-motion";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import { Info } from "lucide-react";
 
 import Footer from "@/components/Footer";
@@ -40,7 +40,7 @@ export default function HomePageClient({
     todayIso: string;
 }) {
     const router = useRouter();
-    const shouldReduceMotion = Boolean(useReducedMotion());
+    const shouldReduceMotion = usePrefersReducedMotion();
     const { user, session } = useAuth();
     const { settings } = usePlatformSettings();
     const [selectedCategory, setSelectedCategory] = useState("trending");

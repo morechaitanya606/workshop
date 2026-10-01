@@ -3,6 +3,8 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Workshop } from "@/lib/data";
 import { getAbsoluteUrl } from "@/lib/env";
+import { getIstTodayIso } from "@/lib/ist-date";
+import { serializeJsonLd } from "@/lib/json-ld";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
 import { getPlatformSettings } from "@/lib/workshop-page-data";
@@ -175,7 +177,7 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
     const { id } = await params;
     const workshop = await getWorkshop(id);
 
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = getIstTodayIso();
     if (!workshop) {
         notFound();
     }
@@ -258,11 +260,11 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
         <>
             <script
                 type="application/ld+json"
-                dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+                dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
             />
             <script
                 type="application/ld+json"
-                dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+                dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbJsonLd) }}
             />
             <WorkshopClient
                 workshop={workshop}

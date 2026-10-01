@@ -1,3 +1,5 @@
+import { getIstTodayIso } from "@/lib/ist-date";
+
 export type SpecialPageSettings = {
     enabled?: boolean;
     path?: string;
@@ -70,6 +72,15 @@ export function resolveSpecialPageSettings(
     };
 }
 
+/**
+ * Date key used to decide whether a special page is still live. It is the IST calendar date, not
+ * the runtime's local one: server (UTC) and browser (anywhere) used to disagree for hours each
+ * day, which both flipped the banner at the wrong moment and caused hydration mismatches.
+ */
+export function getSpecialPageDateKey(date = new Date()) {
+    return getIstTodayIso(date);
+}
+
 export function getLocalDateKey(date = new Date()) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -83,7 +94,7 @@ export function isSpecialPageActive(
     date = new Date()
 ) {
     const resolvedSettings = resolveSpecialPageSettings(settings);
-    return resolvedSettings.enabled && getLocalDateKey(date) <= resolvedSettings.visibleUntil;
+    return resolvedSettings.enabled && getSpecialPageDateKey(date) <= resolvedSettings.visibleUntil;
 }
 
 export function isSpecialPagePath(

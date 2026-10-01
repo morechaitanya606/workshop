@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import AnalyticsProvider from "@/components/AnalyticsProvider";
 import GlobalFloatingWidgets from "@/components/GlobalFloatingWidgets";
@@ -8,6 +9,21 @@ import { AuthProvider } from "@/lib/auth-context";
 import { getAppUrl } from "@/lib/env";
 import { PlatformSettingsProvider } from "@/lib/platform-settings-context";
 import { getCachedPlatformSettings } from "@/lib/cached-reads";
+
+// Self-hosted by next/font at build time (no runtime request to Google). The CSS variables are
+// the ones tailwind.config.ts maps `font-inter` / `font-playfair` / `font-display` onto.
+const inter = Inter({
+    subsets: ["latin"],
+    display: "swap",
+    variable: "--font-inter",
+});
+
+const playfair = Playfair_Display({
+    subsets: ["latin"],
+    display: "swap",
+    style: ["normal", "italic"],
+    variable: "--font-playfair",
+});
 
 const chunkLoadRecoveryScript = `
 (() => {
@@ -108,7 +124,7 @@ export default async function RootLayout({
     const settings = await getCachedPlatformSettings();
 
     return (
-        <html lang="en">
+        <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
             <body className="min-h-screen bg-cream antialiased" suppressHydrationWarning>
                 <script dangerouslySetInnerHTML={{ __html: chunkLoadRecoveryScript }} />
                 <a

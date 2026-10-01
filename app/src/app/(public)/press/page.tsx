@@ -1,9 +1,14 @@
+import type { Metadata } from "next";
 import StaticPage from "@/components/StaticPage";
+import { getAbsoluteUrl } from "@/lib/env";
 
-export const metadata = {
+export const metadata: Metadata = {
     title: "Press | Only Workshops",
     description:
         "Press updates, brand background, and media contact information for Only Workshops.",
+    alternates: {
+        canonical: getAbsoluteUrl("/press"),
+    },
 };
 
 export default function PressPage() {

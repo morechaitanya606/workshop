@@ -26,6 +26,7 @@
         "vercel:validate": "node scripts/validate-vercel-config.mjs"
     },
     "dependencies": {
+        "@anthropic-ai/sdk": "0.131.0",
         "@react-email/components": "1.0.12",
         "@sentry/nextjs": "10.56.0",
         "@supabase/ssr": "0.10.3",

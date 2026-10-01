@@ -20,7 +20,7 @@ export interface WorkshopMobileBookingBarProps {
     loginRedirectHref: string;
     isMounted: boolean;
     onBooking: () => void;
-    onShowWaitlist: () => void;
+    onShowCommunity: () => void;
 }
 
 export default function WorkshopMobileBookingBar({
@@ -39,7 +39,7 @@ export default function WorkshopMobileBookingBar({
     loginRedirectHref,
     isMounted,
     onBooking,
-    onShowWaitlist,
+    onShowCommunity,
 }: WorkshopMobileBookingBarProps) {
     if (isPastWorkshop) return null;
 
@@ -78,10 +78,11 @@ export default function WorkshopMobileBookingBar({
                         </button>
                     ) : isSoldOut ? (
                         <button
-                            onClick={onShowWaitlist}
-                            className="btn-secondary !py-2.5 !px-6 text-sm"
+                            type="button"
+                            onClick={onShowCommunity}
+                            className="shrink-0 rounded-full bg-emerald-700 px-5 py-2.5 text-sm font-inter font-bold text-white transition-colors hover:bg-emerald-800"
                         >
-                            Join Waitlist
+                            Join WhatsApp
                         </button>
                     ) : user ? (
                         <button

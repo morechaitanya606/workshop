@@ -1,8 +1,8 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useReducedMotion } from "framer-motion";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import { Sheet } from "@/components/ui/sheet";
 import { categoryGroups, findCategoryGroup, normalizeGroupFilterLabel } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
@@ -45,7 +45,8 @@ const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
 
 const OTHER_CATEGORY_VALUE = "__other__";
 const CATEGORY_OPTIONS = categoryGroups.filter((item) => item.id !== "trending");
-const CITY_OPTIONS = ["", "City", "Mumbai", "Bangalore", "Delhi", "Hyderabad"];
+// "" is the "All Cities" option. Pune is where workshops are actually hosted today.
+const BASE_CITY_OPTIONS = ["", "Pune", "Mumbai", "Bangalore", "Delhi", "Hyderabad"];
 // Headline marketing figures, deliberately fixed rather than derived from the live counts.
 const EXPLORE_STATS = [
     { label: "Categories", value: "25+" },
@@ -84,7 +85,7 @@ export default function ExploreClient({
     const router = useRouter();
     const searchParams = useSearchParams();
     const [isPending, startTransition] = useTransition();
-    const prefersReducedMotion = Boolean(useReducedMotion());
+    const prefersReducedMotion = usePrefersReducedMotion();
     const lastPushedParamsRef = useRef<string | null>(null);
 
     const parsedQuery = useMemo(() => {
@@ -134,6 +135,22 @@ export default function ExploreClient({
     const [isMobileViewport, setIsMobileViewport] = useState(false);
 
     const totalPages = Math.max(1, Math.ceil(total / parsedQuery.pageSize));
+
+    // Keep a city that arrived via the URL (or a shared link) selectable even if it is not listed.
+    const cityOptions = useMemo(
+        () =>
+            selectedCity && !BASE_CITY_OPTIONS.includes(selectedCity)
+                ? [...BASE_CITY_OPTIONS, selectedCity]
+                : BASE_CITY_OPTIONS,
+        [selectedCity]
+    );
+
+    // The de-dupe guard in `pushFilters` must not outlive a navigation: after back/forward the URL
+    // changes without going through `pushFilters`, so a stale ref would swallow the next push that
+    // re-applies the earlier filters.
+    useEffect(() => {
+        lastPushedParamsRef.current = null;
+    }, [searchParams]);
 
     useEffect(() => {
         setSearchQuery(parsedQuery.q);
@@ -383,7 +400,7 @@ export default function ExploreClient({
                 onChange={(event) => handleCityChange(event.target.value)}
                 className="bg-cream-100 border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
             >
-                {CITY_OPTIONS.map((city) => (
+                {cityOptions.map((city) => (
                     <option key={city || "all"} value={city}>
                         {city || "All Cities"}
                     </option>

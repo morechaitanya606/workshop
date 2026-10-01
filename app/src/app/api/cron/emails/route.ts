@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-auth";
 import { handleApiError } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
-import { sendFeedbackRequest, sendWorkshopReminder } from "@/lib/email";
+import * as Sentry from "@sentry/nextjs";
+import { sendBookingConfirmation, sendFeedbackRequest, sendWorkshopReminder } from "@/lib/email";
 
 type TargetBookingRow = {
     id: string;
@@ -24,6 +25,11 @@ const DEFAULT_CRON_INTERVAL_HOURS = 24;
 const REMINDER_LEAD_HOURS = 24;
 const WORKSHOP_DURATION_HOURS = 2;
 const FEEDBACK_DELAY_HOURS = 2;
+const CONFIRMATION_RETRY_WINDOW_HOURS = 72;
+const MAX_CONFIRMATION_ATTEMPTS = 4;
+const MAX_CONFIRMATION_RETRIES_PER_RUN = 100;
+/** Workshop dates/times are entered in India time; Vercel's clock is UTC. */
+const WORKSHOP_UTC_OFFSET = "+05:30";
 
 function getWorkshopFromJoin(row: TargetBookingRow) {
     if (!row.workshops) return null;
@@ -37,7 +43,9 @@ function getCronIntervalHours() {
 
 function parseWorkshopStart(date: string, time: string | null) {
     const hhmm = String(time || "00:00").slice(0, 5);
-    const parsed = new Date(`${date}T${hhmm}:00`);
+    // Without an explicit offset this parsed as UTC on the server, so every reminder and
+    // feedback window was shifted by 5h30m.
+    const parsed = new Date(`${date}T${hhmm}:00${WORKSHOP_UTC_OFFSET}`);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
@@ -142,44 +150,160 @@ export async function GET(request: Request) {
 
         let remindersSent = 0;
         let feedbackSent = 0;
+        let confirmationsRetried = 0;
+        let failures = 0;
 
-        const jobs = ((targetBookings || []) as unknown as TargetBookingRow[]).map(
-            async (booking) => {
-                const workshop = getWorkshopFromJoin(booking);
-                if (!workshop) return;
+        // Work items are thunks, not promises. This used to build the list with
+        // `.map(async ...)`, which STARTS every send the moment it is mapped, so the
+        // "concurrency of 5" batching below it bounded nothing: every due booking hit the
+        // provider at once, tripped its rate limit and was dropped. A failed send also still
+        // counted as sent, because the senders report failure by return value, not by throwing.
+        const queue: Array<() => Promise<void>> = [];
 
-                const workshopStart = parseWorkshopStart(workshop.date, workshop.time);
-                if (!workshopStart) return;
-
-                const hoursUntilWorkshop =
-                    (workshopStart.getTime() - now.getTime()) / (1000 * 60 * 60);
-                const hoursSinceWorkshopEnd = -hoursUntilWorkshop - WORKSHOP_DURATION_HOURS;
-
-                if (
-                    hoursUntilWorkshop > 0 &&
-                    hoursUntilWorkshop <= reminderWindowHours &&
-                    !sentReminders.has(booking.id)
-                ) {
-                    await sendWorkshopReminder(booking.id);
-                    remindersSent += 1;
-                }
-
-                if (
-                    hoursSinceWorkshopEnd > FEEDBACK_DELAY_HOURS &&
-                    hoursSinceWorkshopEnd <= feedbackWindowHours &&
-                    !sentFeedbacks.has(booking.id)
-                ) {
-                    await sendFeedbackRequest(booking.id);
-                    feedbackSent += 1;
-                }
+        const runSend = async (send: () => Promise<{ success: boolean }>, onSent: () => void) => {
+            const result = await send();
+            if (result.success) {
+                onSent();
+            } else {
+                failures += 1;
             }
-        );
+        };
 
-        // Bound the fan-out. Previously every due booking fired a Resend call at once, which
-        // at scale exhausts sockets and the function's time budget and silently drops mail.
-        const EMAIL_CONCURRENCY = 5;
-        for (let index = 0; index < jobs.length; index += EMAIL_CONCURRENCY) {
-            await Promise.allSettled(jobs.slice(index, index + EMAIL_CONCURRENCY));
+        for (const booking of (targetBookings || []) as unknown as TargetBookingRow[]) {
+            const workshop = getWorkshopFromJoin(booking);
+            if (!workshop) continue;
+
+            const workshopStart = parseWorkshopStart(workshop.date, workshop.time);
+            if (!workshopStart) continue;
+
+            const hoursUntilWorkshop = (workshopStart.getTime() - now.getTime()) / (1000 * 60 * 60);
+            const hoursSinceWorkshopEnd = -hoursUntilWorkshop - WORKSHOP_DURATION_HOURS;
+
+            if (
+                hoursUntilWorkshop > 0 &&
+                hoursUntilWorkshop <= reminderWindowHours &&
+                !sentReminders.has(booking.id)
+            ) {
+                queue.push(() =>
+                    runSend(
+                        () => sendWorkshopReminder(booking.id),
+                        () => {
+                            remindersSent += 1;
+                        }
+                    )
+                );
+            }
+
+            if (
+                hoursSinceWorkshopEnd > FEEDBACK_DELAY_HOURS &&
+                hoursSinceWorkshopEnd <= feedbackWindowHours &&
+                !sentFeedbacks.has(booking.id)
+            ) {
+                queue.push(() =>
+                    runSend(
+                        () => sendFeedbackRequest(booking.id),
+                        () => {
+                            feedbackSent += 1;
+                        }
+                    )
+                );
+            }
+        }
+
+        // Booking confirmations are sent inline from the Razorpay webhook. If the provider
+        // was rate-limited or out of quota at that moment the log row stays 'failed' and
+        // nothing retried it, so the customer never got a confirmation. Pick those up here,
+        // oldest first, giving up on a booking after MAX_CONFIRMATION_ATTEMPTS failures.
+        const confirmationLookbackStart = new Date(
+            Date.now() - CONFIRMATION_RETRY_WINDOW_HOURS * 60 * 60 * 1000
+        ).toISOString();
+        const { data: confirmationLogs, error: confirmationLogError } = await supabase
+            .from("email_delivery_logs")
+            .select("reference_id, status")
+            .eq("template_name", "BookingConfirmation")
+            .in("status", ["failed", "sent"])
+            .not("reference_id", "is", null)
+            .gte("created_at", confirmationLookbackStart);
+
+        if (confirmationLogError) {
+            throw confirmationLogError;
+        }
+
+        const confirmationState = new Map<string, { sent: boolean; failed: number }>();
+        for (const log of confirmationLogs || []) {
+            const id = String(log.reference_id);
+            const state = confirmationState.get(id) ?? { sent: false, failed: 0 };
+            if (log.status === "sent") state.sent = true;
+            else state.failed += 1;
+            confirmationState.set(id, state);
+        }
+
+        const candidateIds = Array.from(confirmationState.entries())
+            .filter(([, state]) => !state.sent && state.failed < MAX_CONFIRMATION_ATTEMPTS)
+            .map(([id]) => id)
+            .slice(0, MAX_CONFIRMATION_RETRIES_PER_RUN);
+
+        // A booking that was cancelled or refunded since must not get a "confirmed" mail now.
+        let retryIds: string[] = [];
+        if (candidateIds.length > 0) {
+            const { data: stillConfirmed, error: confirmedError } = await supabase
+                .from("bookings")
+                .select("id")
+                .in("id", candidateIds)
+                .eq("status", "confirmed");
+
+            if (confirmedError) {
+                throw confirmedError;
+            }
+            retryIds = (stillConfirmed || []).map((row) => String(row.id));
+        }
+
+        for (const bookingId of retryIds) {
+            queue.push(() =>
+                runSend(
+                    () => sendBookingConfirmation(bookingId),
+                    () => {
+                        confirmationsRetried += 1;
+                    }
+                )
+            );
+        }
+
+        // One at a time. The provider layer already spaces sends to stay under each
+        // provider's rate limit, so extra concurrency here would only queue behind it.
+        for (const job of queue) {
+            try {
+                await job();
+            } catch (error) {
+                failures += 1;
+                Sentry.captureException(error, { tags: { layer: "cron", route: "emails" } });
+            }
+        }
+
+        // Housekeeping: the idempotency/webhook-event table otherwise grows forever and keeps
+        // customer email/phone in old payloads. Best effort -- the function only exists once
+        // the 20261001100800 migration is applied, and a failure here must not fail the run.
+        try {
+            // Not in the generated types until `gen:supabase-types` is re-run.
+            const { error: purgeError } = await (
+                supabase as unknown as {
+                    rpc: (
+                        fn: string,
+                        args: object
+                    ) => Promise<{ error: { message: string } | null }>;
+                }
+            ).rpc("purge_old_webhook_events", { p_retain_days: 30 });
+            if (purgeError) {
+                Sentry.captureMessage(`purge_old_webhook_events failed: ${purgeError.message}`, {
+                    level: "warning",
+                    tags: { layer: "cron", route: "emails" },
+                });
+            }
+        } catch (error) {
+            Sentry.captureException(error, {
+                level: "warning",
+                tags: { layer: "cron", route: "emails", step: "purge" },
+            });
         }
 
         return NextResponse.json({
@@ -187,6 +311,8 @@ export async function GET(request: Request) {
             processed: targetBookings?.length || 0,
             remindersSent,
             feedbackSent,
+            confirmationsRetried,
+            failures,
         });
     } catch (error) {
         return handleApiError("Failed to process email cron.", error);

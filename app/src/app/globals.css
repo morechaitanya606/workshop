@@ -4,10 +4,7 @@
 
 @layer base {
     :root {
-        --font-inter: "Inter", "Segoe UI", Arial, sans-serif;
-        --font-playfair: "Playfair Display", Georgia, "Times New Roman", serif;
-        --font-dm-sans: "DM Sans", "Segoe UI", Arial, sans-serif;
-        --font-cormorant: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+        /* --font-inter / --font-playfair (and the summer-retreat fonts) are provided by next/font. */
 
         /* ── Motion tokens ── */
         --motion-ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
@@ -144,7 +141,13 @@
 @layer components {
     .page-transition-shell {
         min-height: 100%;
-        will-change: opacity;
+        animation: page-transition-fade 0.3s var(--motion-ease-premium) backwards;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .page-transition-shell {
+            animation: none;
+        }
     }
 
     .interactive-surface {
@@ -334,6 +337,75 @@
         100% {
             background-position: -200% 0;
         }
+    }
+
+    @keyframes page-transition-fade {
+        0% {
+            opacity: 0;
+        }
+        100% {
+            opacity: 1;
+        }
+    }
+
+    /*
+     * Above-the-fold entrance animations driven purely by CSS. A JS `initial` state is baked into
+     * the server HTML as opacity: 0, which hides the content until hydration (and for good if the
+     * bundle never loads); a CSS animation starts on first paint instead. The global
+     * prefers-reduced-motion rule below disables these (`animation: none`), leaving them visible.
+     */
+    @keyframes reveal-up {
+        0% {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes reveal-scale {
+        0% {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+        100% {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    @keyframes reveal-fade {
+        0% {
+            opacity: 0;
+        }
+        100% {
+            opacity: 1;
+        }
+    }
+
+    .reveal-up,
+    .reveal-scale,
+    .reveal-fade {
+        animation-duration: 0.6s;
+        animation-timing-function: var(--motion-ease-premium);
+        animation-fill-mode: backwards;
+        animation-delay: var(--reveal-delay, 0s);
+    }
+
+    .reveal-up {
+        animation-name: reveal-up;
+    }
+
+    .reveal-scale {
+        animation-name: reveal-scale;
+        animation-duration: 0.35s;
+    }
+
+    .reveal-fade {
+        animation-name: reveal-fade;
+        animation-duration: 0.35s;
     }
 
     /* Toast slide-in */

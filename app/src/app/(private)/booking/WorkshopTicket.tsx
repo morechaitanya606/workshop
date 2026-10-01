@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { motion } from "framer-motion";
 import {
+    Armchair,
     Calendar,
     Check,
     Clock,
@@ -11,7 +12,6 @@ import {
     MessageCircle,
     Send,
     Share2,
-    Users,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { scaleIn, standardTransition } from "@/lib/motion-presets";
@@ -178,6 +178,7 @@ export default function WorkshopTicket({
                                         src={workshopCoverImage}
                                         alt={workshopTitle}
                                         fill
+                                        sizes="(min-width: 640px) 120px, 100vw"
                                         className="object-cover"
                                     />
                                 ) : (
@@ -248,7 +249,7 @@ export default function WorkshopTicket({
                                         {ticketNumber}
                                     </div>
                                     <div className="inline-flex items-center gap-2 rounded-full bg-terracotta-50 px-3 py-1 text-[11px] font-inter font-semibold uppercase tracking-[0.16em] text-terracotta-700">
-                                        <Users className="h-3.5 w-3.5" />
+                                        <Armchair className="h-3.5 w-3.5" aria-hidden="true" />
                                         Admit {guests}
                                     </div>
                                 </div>
@@ -293,7 +294,7 @@ export default function WorkshopTicket({
                 </div>
             </div>
 
-            <div className="mt-4 grid gap-2 sm:grid-cols-4">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <button
                     type="button"
                     onClick={() => void shareNatively()}

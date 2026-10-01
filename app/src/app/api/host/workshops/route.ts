@@ -5,7 +5,11 @@ import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError, requireHostOrAdmin } from "@/lib/api-auth";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { workshopCreateSchema } from "@/lib/validators";
-import { buildWorkshopInsertPayload, mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
+import {
+    buildWorkshopInsertPayloads,
+    mapWorkshopRowToWorkshop,
+    sortWorkshopsBySession,
+} from "@/lib/workshop-utils";
 import {
     isMissingColumnError,
     isMissingApprovalStatusColumnError,
@@ -73,51 +77,55 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const payload = buildWorkshopInsertPayload(parsed.data, auth.user.id, {
+        // One row per session, inserted in a single statement so the batch is all-or-nothing.
+        const payloads = buildWorkshopInsertPayloads(parsed.data, auth.user.id, {
             approvalStatus: auth.role === "admin" ? "approved" : "pending",
         });
+        const multiple = payloads.length > 1;
 
         let usedCompatibilityMode = false;
-        let { data, error } = await serviceClient
-            .from("workshops")
-            .insert(payload)
-            .select("*")
-            .single();
+        let { data, error } = await serviceClient.from("workshops").insert(payloads).select("*");
 
         if (error && isMissingApprovalStatusColumnError(error)) {
             usedCompatibilityMode = true;
             ({ data, error } = await serviceClient
                 .from("workshops")
-                .insert(withoutApprovalStatus(payload))
-                .select("*")
-                .single());
+                .insert(payloads.map((payload) => withoutApprovalStatus(payload)))
+                .select("*"));
         }
 
         if (error && isMissingColumnError(error)) {
             usedCompatibilityMode = true;
             ({ data, error } = await serviceClient
                 .from("workshops")
-                .insert(withoutNewColumns(payload))
-                .select("*")
-                .single());
+                .insert(payloads.map((payload) => withoutNewColumns(payload)))
+                .select("*"));
         }
 
         if (error) {
             throw error;
         }
-        if (!data) {
+        if (!data || data.length === 0) {
             return jsonError("Workshop creation did not return a row.", 500);
         }
 
+        const workshops = sortWorkshopsBySession(data.map((row) => mapWorkshopRowToWorkshop(row)));
+
         return NextResponse.json(
             {
-                workshop: mapWorkshopRowToWorkshop(data),
+                workshop: workshops[0],
+                workshops,
+                ids: workshops.map((workshop) => workshop.id),
                 message:
                     usedCompatibilityMode && auth.role !== "admin"
                         ? "Workshop created for testing. Admin approval will start once the latest database migration is applied."
                         : auth.role === "admin"
-                          ? "Workshop created successfully."
-                          : "Workshop submitted for admin approval.",
+                          ? multiple
+                              ? `${workshops.length} workshop sessions created successfully.`
+                              : "Workshop created successfully."
+                          : multiple
+                            ? `${workshops.length} workshop sessions submitted for admin approval.`
+                            : "Workshop submitted for admin approval.",
             },
             { status: 201 }
         );

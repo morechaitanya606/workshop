@@ -2,9 +2,11 @@ import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 
 const disablePersistentWebpackCache = process.platform === "win32";
 const isProduction = process.env.NODE_ENV === "production";
-const configuredBuildCpus = Number.parseInt(process.env.NEXT_BUILD_CPUS || "1", 10);
+// Only constrain build parallelism when NEXT_BUILD_CPUS is set explicitly. Defaulting to 1 also
+// capped Vercel builds (which have several cores) to a single worker.
+const configuredBuildCpus = Number.parseInt(process.env.NEXT_BUILD_CPUS || "", 10);
 const buildCpus =
-    Number.isFinite(configuredBuildCpus) && configuredBuildCpus > 0 ? configuredBuildCpus : 1;
+    Number.isFinite(configuredBuildCpus) && configuredBuildCpus > 0 ? configuredBuildCpus : null;
 
 const baseSecurityHeaders = [
     {
@@ -71,6 +73,11 @@ const baseConfig = {
                 hostname: "*.r2.cloudflarestorage.com",
             },
             {
+                // Cloudflare R2 public bucket URLs (pub-<id>.r2.dev), used for hero/media files.
+                protocol: "https",
+                hostname: "*.r2.dev",
+            },
+            {
                 protocol: "https",
                 hostname: "images.unsplash.com",
             },
@@ -89,7 +96,7 @@ const baseConfig = {
         ],
     },
     // Limit build parallelism for more stable local builds on constrained machines.
-    experimental: { cpus: buildCpus },
+    ...(buildCpus ? { experimental: { cpus: buildCpus } } : {}),
     async headers() {
         return [
             {

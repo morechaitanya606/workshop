@@ -2,16 +2,12 @@ import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
+import { getUserRole, requireAuthenticatedUser, jsonError } from "@/lib/api-auth";
 import crypto from "crypto";
-import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
+import { assertQuota, assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { getPublicSupabaseConfig } from "@/lib/env";
-import {
-    convertImageToJpegOrPng,
-    isStandardWebImage,
-    type CropAspect,
-} from "@/lib/image-conversion";
+import { convertImageToWebp, type CropAspect } from "@/lib/image-conversion";
 
 const DEFAULT_BUCKET = "uploads";
 const ALLOWED_UPLOAD_BUCKETS = new Set([DEFAULT_BUCKET]);
@@ -144,17 +140,78 @@ function getUploadFileInfo(file: File) {
     }
 
     if (VIDEO_TYPES.has(contentType) || VIDEO_EXTENSIONS.has(extension)) {
+        const resolvedContentType = VIDEO_TYPES.has(contentType)
+            ? contentType
+            : VIDEO_CONTENT_TYPE_BY_EXTENSION[extension] || "video/mp4";
+
         return {
             kind: "video" as const,
-            extension: extension || "mp4",
-            contentType: VIDEO_TYPES.has(contentType)
-                ? contentType
-                : VIDEO_CONTENT_TYPE_BY_EXTENSION[extension] || "video/mp4",
+            // The stored extension must be one of ours. Echoing the caller's (`x.php` sent as
+            // video/mp4) put an attacker-chosen extension into the storage path.
+            extension: VIDEO_EXTENSIONS.has(extension)
+                ? extension
+                : getVideoExtensionFromContentType(resolvedContentType),
+            contentType: resolvedContentType,
         };
     }
 
     return null;
 }
+
+function getVideoExtensionFromContentType(contentType: string) {
+    return (
+        Object.entries(VIDEO_CONTENT_TYPE_BY_EXTENSION).find(
+            ([, value]) => value === contentType
+        )?.[0] || "mp4"
+    );
+}
+
+type VideoContainer = "isobmff" | "ebml";
+
+function getVideoContainerFamily(extensionOrType: { extension: string; contentType: string }) {
+    // Both signals must point at the same family; if either is webm and the other is not, the
+    // upload is internally inconsistent and is refused by the caller.
+    const families = new Set<VideoContainer>();
+    if (VIDEO_EXTENSIONS.has(extensionOrType.extension)) {
+        families.add(extensionOrType.extension === "webm" ? "ebml" : "isobmff");
+    }
+    if (VIDEO_TYPES.has(extensionOrType.contentType)) {
+        families.add(extensionOrType.contentType === "video/webm" ? "ebml" : "isobmff");
+    }
+    return families;
+}
+
+/** Container sniffed from the first bytes: `ftyp` box (MP4/MOV/M4V) or EBML header (WebM). */
+function sniffVideoContainer(buffer: Buffer): VideoContainer | null {
+    if (buffer.length >= 12 && buffer.toString("latin1", 4, 8) === "ftyp") {
+        return "isobmff";
+    }
+    if (
+        buffer.length >= 4 &&
+        buffer[0] === 0x1a &&
+        buffer[1] === 0x45 &&
+        buffer[2] === 0xdf &&
+        buffer[3] === 0xa3
+    ) {
+        return "ebml";
+    }
+    return null;
+}
+
+function videoMatchesDeclaredType(
+    buffer: Buffer,
+    declared: { extension: string; contentType: string }
+) {
+    const sniffed = sniffVideoContainer(buffer);
+    if (!sniffed) return false;
+
+    const families = getVideoContainerFamily(declared);
+    return families.size === 1 && families.has(sniffed);
+}
+
+/** 200MB of uploads per user per day. Admins are exempt (see POST). */
+const DAILY_UPLOAD_QUOTA_BYTES = 200 * 1024 * 1024;
+const DAILY_UPLOAD_QUOTA_WINDOW_MS = 24 * 60 * 60_000;
 
 function buildLocalUploadPath(bucket: string, objectPath: string) {
     const safeBucket = bucket.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) || DEFAULT_BUCKET;
@@ -184,6 +241,18 @@ async function persistLocalUpload(bucket: string, objectPath: string, buffer: Bu
 }
 
 export async function POST(request: NextRequest) {
+    // Address-keyed limit BEFORE authentication: requireAuthenticatedUser is a network call to
+    // Supabase Auth, so without this an unauthenticated flood buys one remote call per request.
+    const ipLimit = await assertRateLimit({
+        key: getRateLimitKey(request, "upload-ip"),
+        limit: 60,
+        windowMs: 5 * 60_000,
+        message: "Upload rate limit exceeded. Please try again in a few minutes.",
+    });
+    if (!ipLimit.ok) {
+        return ipLimit.response;
+    }
+
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;
@@ -194,6 +263,8 @@ export async function POST(request: NextRequest) {
         limit: 30,
         windowMs: 5 * 60_000,
         message: "Upload rate limit exceeded. Please try again in a few minutes.",
+        // Uploads decode/re-encode media: do not lift the ceiling if the shared store is down.
+        strict: true,
     });
     if (!rateLimitResult.ok) {
         return rateLimitResult.response;
@@ -236,19 +307,41 @@ export async function POST(request: NextRequest) {
         let uploadExtension = fileInfo.extension;
         let uploadContentType = fileInfo.contentType;
 
-        // Normalise every image to a standard web format (JPEG, or PNG when the
-        // source has transparency). JPEG/PNG inputs are already acceptable and
-        // are left untouched UNLESS a crop is requested (e.g. cover/gallery
-        // images cropped to 5:4). This guarantees the stored file renders in all
-        // browsers and is accepted by Supabase Storage buckets that restrict
-        // MIME types. If decoding fails (e.g. an unsupported/corrupt file), fall
-        // back to storing the original bytes rather than failing the upload.
-        const needsConversion =
-            fileInfo.kind === "image" &&
-            (Boolean(cropAspect) || !isStandardWebImage(fileInfo.contentType, fileInfo.extension));
-        if (needsConversion) {
+        // Images are proven by re-encoding below. Videos are stored verbatim, so their
+        // container must be proven from the bytes: anything else (an HTML page, an executable)
+        // renamed `.mp4` would otherwise be served from our storage under a video type.
+        if (isVideo && !videoMatchesDeclaredType(buffer, fileInfo)) {
+            return jsonError(
+                "This video could not be verified. Upload a real MP4, WebM, MOV or M4V file.",
+                400
+            );
+        }
+
+        // Per-user daily byte budget. Without it one account could push 30 x 50MB every five
+        // minutes into our storage bill. Charged only for payloads that passed validation.
+        const quota = await assertQuota({
+            key: getRateLimitKey(request, "upload-bytes", auth.user.id),
+            amount: Math.max(file.size, buffer.byteLength),
+            limit: DAILY_UPLOAD_QUOTA_BYTES,
+            windowMs: DAILY_UPLOAD_QUOTA_WINDOW_MS,
+            message: "Daily upload limit reached (200MB). Please try again tomorrow.",
+        });
+        if (!quota.ok) {
+            // Only an exceeded quota (429) can be waived; an unavailable store (503) cannot.
+            const waived =
+                quota.response.status === 429 && (await getUserRole(auth.user.id)) === "admin";
+            if (!waived) {
+                return quota.response;
+            }
+        }
+
+        // Every image is re-encoded as WebP (optionally cropped to e.g. 5:4 first): smaller
+        // files, transparency kept, renders in all browsers, and it is accepted by buckets
+        // that restrict MIME types. Re-encoding even WebP/JPEG/PNG input proves the bytes are
+        // a real image and drops EXIF (GPS) metadata.
+        if (fileInfo.kind === "image") {
             try {
-                const normalized = await convertImageToJpegOrPng(
+                const normalized = await convertImageToWebp(
                     buffer,
                     {
                         contentType: fileInfo.contentType,
@@ -263,7 +356,7 @@ export async function POST(request: NextRequest) {
                 // Storing the original on failure meant any file sharp could not decode
                 // was persisted verbatim under a caller-influenced content type. If we
                 // cannot prove what the bytes are, we do not keep them.
-                console.error("Image conversion to JPEG/PNG failed; rejecting upload.", {
+                console.error("Image conversion to WebP failed; rejecting upload.", {
                     name: file.name,
                     error:
                         conversionError instanceof Error

@@ -227,7 +227,7 @@ export default function SummerRetreatClient() {
                         <div className="sr-logos-row">
                             <div className="sr-logo-ow">
                                 <Image
-                                    src="/special-pages/summer-family-retreat/onlyworkshop-logo.png"
+                                    src="/special-pages/summer-family-retreat/onlyworkshop-logo.webp"
                                     alt="Only Workshops"
                                     width={320}
                                     height={320}
@@ -238,7 +238,7 @@ export default function SummerRetreatClient() {
                             <span className="sr-logo-x">&times;</span>
                             <div className="sr-logo-tys">
                                 <Image
-                                    src="/special-pages/summer-family-retreat/yellow-slice-logo.png"
+                                    src="/special-pages/summer-family-retreat/yellow-slice-logo.webp"
                                     alt="The Yellow Slice"
                                     width={360}
                                     height={108}
@@ -591,7 +591,7 @@ export default function SummerRetreatClient() {
                     <div className="sr-ft-logos">
                         <div className="sr-fl-ow">
                             <Image
-                                src="/special-pages/summer-family-retreat/onlyworkshop-logo.png"
+                                src="/special-pages/summer-family-retreat/onlyworkshop-logo.webp"
                                 alt="Only Workshops"
                                 width={96}
                                 height={96}
@@ -601,7 +601,7 @@ export default function SummerRetreatClient() {
                         <span className="sr-fx">&times;</span>
                         <div className="sr-fl-tys">
                             <Image
-                                src="/special-pages/summer-family-retreat/yellow-slice-logo.png"
+                                src="/special-pages/summer-family-retreat/yellow-slice-logo.webp"
                                 alt="The Yellow Slice"
                                 width={180}
                                 height={56}

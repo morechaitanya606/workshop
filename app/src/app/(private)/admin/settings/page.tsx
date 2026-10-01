@@ -7,6 +7,7 @@ import {
     ImageIcon,
     IndianRupee,
     Loader2,
+    MessageCircle,
     Plus,
     Store,
     Tag,
@@ -32,6 +33,11 @@ import {
 } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { usePlatformSettings } from "@/lib/platform-settings-context";
+import {
+    WHATSAPP_COMMUNITY_MESSAGE_MAX_LENGTH,
+    validateWhatsAppCommunityMessage,
+    validateWhatsAppCommunityUrl,
+} from "@/lib/platform-settings-schema";
 import {
     DEFAULT_SPECIAL_PAGE_SETTINGS,
     normalizeSpecialPageDate,
@@ -100,6 +106,8 @@ export default function AdminSettingsPage() {
     const [specialPageForm, setSpecialPageForm] =
         useState<SpecialPageFormState>(INITIAL_SPECIAL_PAGE_FORM);
     const [heroImageInput, setHeroImageInput] = useState("");
+    const [communityUrlInput, setCommunityUrlInput] = useState("");
+    const [communityMessageInput, setCommunityMessageInput] = useState("");
     const [savingSettings, setSavingSettings] = useState(false);
     const [uploadingHeroImage, setUploadingHeroImage] = useState(false);
     const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
@@ -154,6 +162,8 @@ export default function AdminSettingsPage() {
                     visibleUntil: nextSpecialPage.visibleUntil,
                 });
                 setHeroImageInput(nextSettings.hero_image_url || "");
+                setCommunityUrlInput(nextSettings.whatsapp_community_url || "");
+                setCommunityMessageInput(nextSettings.whatsapp_community_message || "");
                 setCafePartners(
                     Array.isArray(nextSettings.cafe_partners) ? nextSettings.cafe_partners : []
                 );
@@ -298,6 +308,17 @@ export default function AdminSettingsPage() {
         };
         const heroImageUrl = heroImageInput.trim();
 
+        const communityUrlResult = validateWhatsAppCommunityUrl(communityUrlInput);
+        if (!communityUrlResult.ok) {
+            setSettingsMsg(communityUrlResult.error);
+            return;
+        }
+        const communityMessageResult = validateWhatsAppCommunityMessage(communityMessageInput);
+        if (!communityMessageResult.ok) {
+            setSettingsMsg(communityMessageResult.error);
+            return;
+        }
+
         setSavingSettings(true);
         setSettingsMsg(null);
 
@@ -307,6 +328,8 @@ export default function AdminSettingsPage() {
                     service_fee: fee,
                     hero_image_url: heroImageUrl,
                     special_page: nextSpecialPage,
+                    whatsapp_community_url: communityUrlResult.value,
+                    whatsapp_community_message: communityMessageResult.value,
                 },
             });
 
@@ -315,10 +338,14 @@ export default function AdminSettingsPage() {
                 service_fee: fee,
                 hero_image_url: heroImageUrl,
                 special_page: nextSpecialPage,
+                whatsapp_community_url: communityUrlResult.value,
+                whatsapp_community_message: communityMessageResult.value,
             };
 
             setSettings(nextSettings);
             mergeSettings(nextSettings);
+            setCommunityUrlInput(communityUrlResult.value);
+            setCommunityMessageInput(communityMessageResult.value);
             setSpecialPageForm({
                 enabled: nextSpecialPage.enabled,
                 path: nextSpecialPage.path,
@@ -404,6 +431,13 @@ export default function AdminSettingsPage() {
     const serviceFee = Number(settings.service_fee ?? DEFAULT_SERVICE_FEE);
     const activeCoupons = coupons.filter((coupon) => coupon.is_active).length;
     const specialPageStatus = specialPageForm.enabled ? "Active" : "Disabled";
+    const communityUrlCheck = validateWhatsAppCommunityUrl(communityUrlInput);
+    const communityMessageCheck = validateWhatsAppCommunityMessage(communityMessageInput);
+    const communityUrlError = communityUrlCheck.ok ? null : communityUrlCheck.error;
+    const communityMessageError = communityMessageCheck.ok ? null : communityMessageCheck.error;
+    const communityTestUrl =
+        communityUrlCheck.ok && communityUrlCheck.value ? communityUrlCheck.value : null;
+    const hasCommunityError = Boolean(communityUrlError || communityMessageError);
 
     return (
         <AdminShell>
@@ -818,10 +852,110 @@ export default function AdminSettingsPage() {
                             </section>
 
                             <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-soft">
+                                <div className="flex items-start gap-3">
+                                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                                        <MessageCircle className="h-5 w-5" />
+                                    </span>
+                                    <div>
+                                        <h2 className="text-lg font-playfair font-bold text-dark">
+                                            WhatsApp Community
+                                        </h2>
+                                        <p className="mt-1 text-sm font-inter text-dark-muted">
+                                            Shown in a popup when a workshop is full, so visitors
+                                            can join for the next dates. Leave empty to show a
+                                            contact-support message instead.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 space-y-4">
+                                    <div>
+                                        <label
+                                            htmlFor="whatsapp-community-url"
+                                            className="mb-1 block text-xs font-inter font-semibold text-dark-muted"
+                                        >
+                                            Community invite link
+                                        </label>
+                                        <input
+                                            id="whatsapp-community-url"
+                                            type="url"
+                                            inputMode="url"
+                                            autoComplete="off"
+                                            placeholder="https://chat.whatsapp.com/..."
+                                            value={communityUrlInput}
+                                            onChange={(event) =>
+                                                setCommunityUrlInput(event.target.value)
+                                            }
+                                            aria-invalid={Boolean(communityUrlError)}
+                                            aria-describedby="whatsapp-community-url-help"
+                                            className={`w-full rounded-lg border bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50 ${
+                                                communityUrlError
+                                                    ? "border-red-300"
+                                                    : "border-gray-200"
+                                            }`}
+                                        />
+                                        <p
+                                            id="whatsapp-community-url-help"
+                                            className={`mt-1 text-xs font-inter ${
+                                                communityUrlError
+                                                    ? "text-red-600"
+                                                    : "text-dark-muted"
+                                            }`}
+                                            role={communityUrlError ? "alert" : undefined}
+                                        >
+                                            {communityUrlError ??
+                                                "In WhatsApp, open your community, tap Invite via link and paste it here. Only https links on chat.whatsapp.com, wa.me or whatsapp.com are accepted."}
+                                        </p>
+                                        {communityTestUrl && (
+                                            <a
+                                                href={communityTestUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                                            >
+                                                Test link (opens in a new tab)
+                                            </a>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label
+                                            htmlFor="whatsapp-community-message"
+                                            className="mb-1 block text-xs font-inter font-semibold text-dark-muted"
+                                        >
+                                            Popup message (optional)
+                                        </label>
+                                        <textarea
+                                            id="whatsapp-community-message"
+                                            rows={3}
+                                            maxLength={WHATSAPP_COMMUNITY_MESSAGE_MAX_LENGTH + 40}
+                                            placeholder="All seats are taken, but more dates are on the way. Join our WhatsApp community to hear about the next dates first."
+                                            value={communityMessageInput}
+                                            onChange={(event) =>
+                                                setCommunityMessageInput(event.target.value)
+                                            }
+                                            aria-invalid={Boolean(communityMessageError)}
+                                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
+                                        />
+                                        <p
+                                            className={`mt-1 text-xs font-inter ${
+                                                communityMessageError
+                                                    ? "text-red-600"
+                                                    : "text-dark-muted"
+                                            }`}
+                                        >
+                                            {communityMessageError ??
+                                                `${communityMessageInput.trim().length}/${WHATSAPP_COMMUNITY_MESSAGE_MAX_LENGTH} characters. Leave empty for the default message.`}
+                                        </p>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-soft">
                                 <button
                                     type="button"
                                     onClick={handleSaveSettings}
-                                    disabled={savingSettings}
+                                    disabled={savingSettings || hasCommunityError}
                                     className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     {savingSettings ? (

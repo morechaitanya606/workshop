@@ -6,6 +6,8 @@ import { requireSupabaseService } from "@/lib/api-helpers";
 import { assertRateLimit } from "@/lib/rate-limit";
 import { ensureWorkshopSeededFromMock } from "@/lib/workshop-utils";
 import { getRazorpayServerClient } from "@/lib/razorpay-server";
+import { isBookingClosedNow } from "@/lib/booking-time";
+import { sendPaymentNotification } from "@/lib/payment-notifications";
 
 vi.mock("@/lib/api-auth", () => ({
     requireAuthenticatedUser: vi.fn(),
@@ -215,6 +217,8 @@ describe("POST /api/bookings/checkout", () => {
                 holdId: "11111111-1111-4111-8111-111111111111",
                 workshopId: "workshop-1",
                 userId: "user-1",
+                // Snapshot of the fee the amount was built from; honoured at confirmation.
+                serviceFee: "99",
             },
         });
     });
@@ -791,5 +795,341 @@ describe("POST /api/bookings/checkout", () => {
             speed: "normal",
             notes: { reason: "booking_confirmation_failed" },
         });
+    });
+
+    /**
+     * Fixture for the confirmation leg: a verified payment against a hold, with every
+     * collaborator overridable so each early-return path can be driven on its own.
+     */
+    const HOLD_ID = "11111111-1111-4111-8111-111111111111";
+
+    function confirmationFixture(
+        options: {
+            hold?: Record<string, unknown>;
+            workshop?: Record<string, unknown>;
+            order?: Record<string, unknown>;
+            payment?: Record<string, unknown>;
+            refund?: ReturnType<typeof vi.fn>;
+            serviceFeeSetting?: number;
+            anyBookingForPayment?: { id: string; status: string } | null;
+            confirmRpc?: { data: unknown; error: unknown };
+        } = {}
+    ) {
+        const holdBuilder = createQueryBuilder({
+            data: {
+                id: HOLD_ID,
+                workshop_id: "workshop-1",
+                user_id: "user-1",
+                guests: 2,
+                status: "active",
+                expires_at: "2099-05-10T12:15:00.000Z",
+                ...options.hold,
+                workshop: {
+                    id: "workshop-1",
+                    title: "Intro to Wheel Throwing",
+                    category: "Pottery",
+                    price: 1000,
+                    seats_remaining: 8,
+                    approval_status: "approved",
+                    date: "2099-05-10",
+                    time: "11:00",
+                    ...options.workshop,
+                },
+            },
+            error: null,
+        });
+        const settingsBuilder = createQueryBuilder({
+            data: { setting_value: options.serviceFeeSetting ?? 99 },
+            error: null,
+        });
+        const confirmedBooking = {
+            id: "booking-1",
+            user_id: "user-1",
+            guests: 2,
+            total: 2099,
+            status: "confirmed",
+            payment_intent_id: "pay_123",
+            first_name: "Chait",
+            last_name: "Tester",
+            email: "chait@example.com",
+            phone: "9876543210",
+            created_at: "2099-05-10T12:15:00.000Z",
+            workshop: null,
+        };
+        const holdUpdate = vi.fn(() => ({ eq: vi.fn() }));
+
+        const serviceClient = {
+            from: vi.fn((table: string) => {
+                if (table === "booking_holds") {
+                    return { select: vi.fn(() => holdBuilder), update: holdUpdate };
+                }
+                if (table === "platform_settings") return { select: vi.fn(() => settingsBuilder) };
+                if (table === "bookings") {
+                    return {
+                        select: vi.fn((fields?: string) => {
+                            const normalized = String(fields || "").trim();
+                            if (normalized === "id") {
+                                return createQueryBuilder({ data: null, error: null });
+                            }
+                            if (normalized === "id, status") {
+                                return createQueryBuilder({
+                                    data: options.anyBookingForPayment ?? null,
+                                    error: null,
+                                });
+                            }
+                            return createQueryBuilder({ data: confirmedBooking, error: null });
+                        }),
+                        insert: vi.fn(),
+                        update: vi.fn(),
+                    };
+                }
+                throw new Error(`Unexpected table ${table}`);
+            }),
+            rpc: vi.fn(() =>
+                Promise.resolve(options.confirmRpc ?? { data: "booking-1", error: null })
+            ),
+        };
+
+        const refund = options.refund ?? vi.fn().mockResolvedValue({ id: "rfnd_1" });
+        const razorpay = {
+            orders: {
+                fetch: vi.fn().mockResolvedValue({
+                    id: "order_123",
+                    amount: 209900,
+                    currency: "INR",
+                    receipt: HOLD_ID,
+                    ...options.order,
+                }),
+            },
+            payments: {
+                fetch: vi.fn().mockResolvedValue({
+                    id: "pay_123",
+                    order_id: "order_123",
+                    amount: 209900,
+                    currency: "INR",
+                    status: "captured",
+                    amount_refunded: 0,
+                    ...options.payment,
+                }),
+                refund,
+            },
+        };
+
+        vi.mocked(requireAuthenticatedUser).mockResolvedValue({
+            ok: true,
+            user: { id: "user-1" } as any,
+            accessToken: "token",
+        });
+        vi.mocked(assertRateLimit).mockResolvedValue({ ok: true } as any);
+        vi.mocked(requireSupabaseService).mockReturnValue({
+            ok: true,
+            client: serviceClient as any,
+        });
+        vi.mocked(ensureWorkshopSeededFromMock).mockResolvedValue(true);
+        vi.mocked(getRazorpayServerClient).mockReturnValue(razorpay as any);
+        vi.mocked(isBookingClosedNow).mockReturnValue(false);
+
+        return { serviceClient, razorpay, refund, holdUpdate };
+    }
+
+    function confirmationRequest() {
+        return new NextRequest("http://localhost/api/bookings/checkout", {
+            method: "POST",
+            body: JSON.stringify({
+                holdId: HOLD_ID,
+                workshopId: "workshop-1",
+                firstName: "Chait",
+                lastName: "Tester",
+                email: "chait@example.com",
+                phone: "9876543210",
+                razorpayOrderId: "order_123",
+                razorpayPaymentId: "pay_123",
+                razorpaySignature: "sig",
+            }),
+        });
+    }
+
+    const REFUND_ARGS = [
+        "pay_123",
+        { amount: 209900, speed: "normal", notes: { reason: "booking_confirmation_failed" } },
+    ] as const;
+
+    /**
+     * Every early return below sits AFTER the signature check, i.e. after the customer has
+     * paid. Each used to answer with a bare 4xx and leave the card charged with no booking.
+     */
+    it.each([
+        {
+            name: "the hold is active but already past its expiry",
+            options: { hold: { expires_at: "2000-01-01T00:00:00.000Z" } },
+            code: "HOLD_EXPIRED_REFUNDED",
+        },
+        {
+            name: "the workshop is no longer approved",
+            options: { workshop: { approval_status: "pending" } },
+            code: "WORKSHOP_PENDING_APPROVAL_REFUNDED",
+        },
+        {
+            name: "the order amount no longer matches the price",
+            options: { order: { amount: 123400 } },
+            code: "ORDER_AMOUNT_MISMATCH_REFUNDED",
+        },
+        {
+            name: "the captured payment amount does not match the price",
+            options: { payment: { amount: 123400 } },
+            code: "PAYMENT_AMOUNT_MISMATCH_REFUNDED",
+        },
+        {
+            name: "the order belongs to a different hold",
+            options: { order: { receipt: "another-hold" } },
+            code: "ORDER_HOLD_MISMATCH_REFUNDED",
+        },
+    ])("refunds a verified payment when $name", async ({ options, code }) => {
+        const { refund } = confirmationFixture(options as never);
+
+        const response = await POST(confirmationRequest());
+        const body = await response.json();
+
+        expect(response.status).toBe(409);
+        expect(body.code).toBe(code);
+        expect(body.error).toContain("refunded");
+        expect(refund).toHaveBeenCalledTimes(1);
+        expect(refund.mock.calls[0][0]).toBe("pay_123");
+    });
+
+    it("refunds the captured remainder when bookings closed after payment", async () => {
+        const { refund, serviceClient } = confirmationFixture();
+        vi.mocked(isBookingClosedNow).mockReturnValue(true);
+
+        const response = await POST(confirmationRequest());
+        const body = await response.json();
+
+        expect(response.status).toBe(409);
+        expect(body.code).toBe("BOOKING_CLOSED_REFUNDED");
+        expect(refund).toHaveBeenCalledWith(...REFUND_ARGS);
+        expect(serviceClient.rpc).not.toHaveBeenCalled();
+    });
+
+    it("does not refund when Razorpay reports nothing was captured", async () => {
+        const { refund } = confirmationFixture({
+            hold: { expires_at: "2000-01-01T00:00:00.000Z" },
+            payment: { status: "created" },
+        });
+
+        const response = await POST(confirmationRequest());
+        const body = await response.json();
+
+        // No money moved, so the plain error stands and there is nothing to give back.
+        expect(response.status).toBe(409);
+        expect(body.error).toBe("Seat hold expired. Please reserve seats again.");
+        expect(refund).not.toHaveBeenCalled();
+    });
+
+    it("tells the customer to contact support when the compensating refund itself fails", async () => {
+        const { refund } = confirmationFixture({
+            hold: { expires_at: "2000-01-01T00:00:00.000Z" },
+            refund: vi.fn().mockRejectedValue(new Error("razorpay refused")),
+        });
+
+        const response = await POST(confirmationRequest());
+        const body = await response.json();
+
+        expect(refund).toHaveBeenCalledTimes(1);
+        expect(response.status).toBe(500);
+        expect(body.code).toBe("REFUND_FAILED");
+        expect(body.error).toMatch(/contact support/i);
+    });
+
+    /**
+     * A caller replaying a valid order/payment/signature triple against another hold of
+     * their own must not get the money back for a booking that exists.
+     */
+    it("never refunds a payment that already bought a booking under a different hold", async () => {
+        const { refund } = confirmationFixture({
+            hold: { status: "released" },
+            anyBookingForPayment: { id: "booking-9", status: "confirmed" },
+        });
+
+        const response = await POST(confirmationRequest());
+        const body = await response.json();
+
+        expect(response.status).toBe(409);
+        expect(body.code).toBe("HOLD_NOT_ACTIVE");
+        expect(refund).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The fee is snapshotted into the order notes, so an admin changing the service fee
+     * between order creation and payment no longer strands a correctly priced payment.
+     */
+    it("honours the service fee quoted on the order when the live fee has changed", async () => {
+        const { refund, serviceClient } = confirmationFixture({
+            serviceFeeSetting: 149,
+            order: { notes: { serviceFee: "99" } },
+        });
+
+        const response = await POST(confirmationRequest());
+        const body = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(body.mode).toBe("confirmed");
+        expect(refund).not.toHaveBeenCalled();
+        expect(serviceClient.rpc).toHaveBeenCalledWith(
+            "confirm_booking_from_hold",
+            expect.objectContaining({ p_service_fee: 99, p_subtotal: 2000, p_total: 2099 })
+        );
+    });
+
+    it("refunds an in-flight order with no fee snapshot when the live fee has changed", async () => {
+        const { refund } = confirmationFixture({ serviceFeeSetting: 149 });
+
+        const response = await POST(confirmationRequest());
+        const body = await response.json();
+
+        expect(response.status).toBe(409);
+        expect(body.code).toBe("ORDER_AMOUNT_MISMATCH_REFUNDED");
+        expect(refund).toHaveBeenCalledTimes(1);
+    });
+
+    it("ignores a malformed fee snapshot instead of trusting it", async () => {
+        const { refund } = confirmationFixture({
+            serviceFeeSetting: 149,
+            order: { notes: { serviceFee: "-5" } },
+        });
+
+        const response = await POST(confirmationRequest());
+
+        expect(response.status).toBe(409);
+        expect(refund).toHaveBeenCalledTimes(1);
+    });
+
+    it("explains an un-approved workshop when confirmation raises WORKSHOP_NOT_APPROVED", async () => {
+        const { refund } = confirmationFixture({
+            confirmRpc: { data: null, error: { message: "WORKSHOP_NOT_APPROVED" } },
+        });
+
+        const response = await POST(confirmationRequest());
+        const body = await response.json();
+
+        expect(response.status).toBe(409);
+        expect(body.code).toBe("WORKSHOP_PENDING_APPROVAL");
+        expect(body.error).toContain("refunded");
+        expect(refund).toHaveBeenCalledWith(...REFUND_ARGS);
+    });
+
+    /**
+     * The notification runs after the booking exists. A claim failure there used to escape
+     * to the route's catch and answer "Checkout failed." to a customer who was booked.
+     */
+    it("still confirms the booking when the notification step throws", async () => {
+        const { refund } = confirmationFixture();
+        vi.mocked(sendPaymentNotification).mockRejectedValue(new Error("idempotency store down"));
+
+        const response = await POST(confirmationRequest());
+        const body = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(body.mode).toBe("confirmed");
+        expect(refund).not.toHaveBeenCalled();
     });
 });

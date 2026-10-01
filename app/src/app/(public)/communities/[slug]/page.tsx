@@ -1,17 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-    ArrowLeft,
-    ArrowRight,
-    Globe,
-    Mail,
-    MapPin,
-    MessageCircle,
-    Phone,
-    Sparkles,
-    Users,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, Globe, MapPin, MessageCircle, Sparkles, Users } from "lucide-react";
 import Footer from "@/components/Footer";
 import CommunityListCard from "@/components/communities/CommunityListCard";
 import CommunitySpotlightCard from "@/components/communities/CommunitySpotlightCard";
@@ -19,7 +9,7 @@ import { getCommunitySocialPreviewImage } from "@/lib/communities";
 import {
     loadPublicCommunities,
     loadPublicCommunityBySlug,
-    loadRelatedPublicCommunities,
+    rankRelatedCommunities,
 } from "@/lib/community-page-data";
 import { getAbsoluteUrl } from "@/lib/env";
 
@@ -84,13 +74,18 @@ export default async function CommunityDetailPage({
     params: Promise<{ slug: string }>;
 }) {
     const { slug } = await params;
-    const { community } = await loadPublicCommunityBySlug(slug);
+    // The related list does not depend on the community, only its ranking does, so both loads run
+    // together instead of one after the other.
+    const [{ community }, { data: allCommunities }] = await Promise.all([
+        loadPublicCommunityBySlug(slug),
+        loadPublicCommunities(24),
+    ]);
 
     if (!community) {
         notFound();
     }
 
-    const similarCommunities = await loadRelatedPublicCommunities(community);
+    const similarCommunities = rankRelatedCommunities(community, allCommunities, 4);
 
     const socialLinks = [
         community.instagramUrl
@@ -145,8 +140,6 @@ export default async function CommunityDetailPage({
                             <div className="mt-8 flex flex-wrap gap-3">
                                 <Link
                                     href={`/communities/${community.slug}/join`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
                                     className="btn-primary !bg-white !text-dark hover:!bg-cream-100"
                                 >
                                     <Users className="h-4 w-4" />
@@ -219,17 +212,6 @@ export default async function CommunityDetailPage({
                                         {community.hostName}
                                     </h2>
                                     <div className="mt-5 space-y-3 text-sm font-inter text-dark-secondary">
-                                        <a
-                                            href={`mailto:${community.hostEmail}`}
-                                            className="flex items-center gap-2 hover:text-terracotta"
-                                        >
-                                            <Mail className="h-4 w-4 text-terracotta" />
-                                            {community.hostEmail}
-                                        </a>
-                                        <p className="flex items-center gap-2">
-                                            <Phone className="h-4 w-4 text-terracotta" />
-                                            {community.hostPhone}
-                                        </p>
                                         <p className="flex items-center gap-2">
                                             <MapPin className="h-4 w-4 text-terracotta" />
                                             {community.city}

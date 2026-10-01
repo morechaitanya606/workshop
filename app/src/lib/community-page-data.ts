@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import * as Sentry from "@sentry/nextjs";
 import {
     getCommunityBySlug,
@@ -22,7 +23,20 @@ export type PublicCommunityResult = {
     source: CommunityPageSource;
 };
 
-function rankRelatedCommunities(current: Community, communities: Community[], limit: number) {
+/**
+ * Everything this module loads feeds public pages (and client components under them), so the
+ * host's private contact details are blanked here rather than relying on each page not to render
+ * them. There is no per-community opt-in for publishing them yet.
+ */
+function toPublicCommunity(community: Community): Community {
+    return { ...community, hostEmail: "", hostPhone: "" };
+}
+
+export function rankRelatedCommunities(
+    current: Community,
+    communities: Community[],
+    limit: number
+) {
     const others = communities.filter((community) => community.slug !== current.slug);
 
     const sameCategory = others.filter(
@@ -42,14 +56,14 @@ function rankRelatedCommunities(current: Community, communities: Community[], li
     return [...sameCategory, ...sameCity, ...rest].slice(0, limit);
 }
 
-export async function loadPublicCommunities(limit = 24): Promise<PublicCommunitiesResult> {
+async function loadPublicCommunitiesUncached(limit = 24): Promise<PublicCommunitiesResult> {
     let fallbackReason = "Supabase service is unavailable.";
 
     if (isSupabaseServiceConfigured) {
         try {
             const data = await listCommunities(createSupabaseServiceClient(), limit);
             return {
-                data,
+                data: data.map(toPublicCommunity),
                 source: "supabase",
             };
         } catch (error) {
@@ -83,7 +97,10 @@ export async function loadPublicCommunities(limit = 24): Promise<PublicCommuniti
     };
 }
 
-export async function loadPublicCommunityBySlug(slug: string): Promise<PublicCommunityResult> {
+/** Request-scoped memoisation: generateMetadata and the page both ask for the same community. */
+export const loadPublicCommunities = cache(loadPublicCommunitiesUncached);
+
+async function loadPublicCommunityBySlugUncached(slug: string): Promise<PublicCommunityResult> {
     const normalizedSlug = normalizeCommunitySlug(slug);
     let fallbackReason = "Supabase service is unavailable.";
 
@@ -94,7 +111,7 @@ export async function loadPublicCommunityBySlug(slug: string): Promise<PublicCom
                 normalizedSlug
             );
             return {
-                community,
+                community: community ? toPublicCommunity(community) : null,
                 source: "supabase",
             };
         } catch (error) {
@@ -127,6 +144,8 @@ export async function loadPublicCommunityBySlug(slug: string): Promise<PublicCom
         source: "error",
     };
 }
+
+export const loadPublicCommunityBySlug = cache(loadPublicCommunityBySlugUncached);
 
 export async function loadRelatedPublicCommunities(current: Community, limit = 4) {
     const { data } = await loadPublicCommunities(24);

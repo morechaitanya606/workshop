@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import {
     CheckCircle2,
+    Copy,
     Loader2,
     Plus,
     PencilLine,
@@ -273,6 +274,14 @@ export default function AdminWorkshopsPage() {
                                         >
                                             <PencilLine className="w-4 h-4" />
                                             Edit
+                                        </Link>
+                                        <Link
+                                            href={`/admin/workshops/new?from=${encodeURIComponent(workshop.id)}`}
+                                            className="btn-secondary !py-2 !px-4 text-sm"
+                                            title="Create a new workshop pre-filled with these details"
+                                        >
+                                            <Copy className="w-4 h-4" />
+                                            Duplicate
                                         </Link>
                                         <button
                                             onClick={() => handleDeleteWorkshop(workshop)}

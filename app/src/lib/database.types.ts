@@ -64,7 +64,7 @@ export type Database = {
                     status: string;
                     subtotal: number;
                     total: number;
-                    user_id: string;
+                    user_id: string | null;
                     workshop_id: string;
                 };
                 Insert: {
@@ -84,7 +84,7 @@ export type Database = {
                     status?: string;
                     subtotal: number;
                     total: number;
-                    user_id: string;
+                    user_id?: string | null;
                     workshop_id: string;
                 };
                 Update: {
@@ -104,7 +104,7 @@ export type Database = {
                     status?: string;
                     subtotal?: number;
                     total?: number;
-                    user_id?: string;
+                    user_id?: string | null;
                     workshop_id?: string;
                 };
                 Relationships: [
@@ -1224,16 +1224,6 @@ export type Database = {
                 };
                 Returns: string;
             };
-            decrement_seats: {
-                Args: { p_count: number; p_workshop_id: string };
-                Returns: {
-                    id: string;
-                }[];
-            };
-            increment_coupon_usage: {
-                Args: { p_coupon_id: string };
-                Returns: undefined;
-            };
             match_faqs: {
                 Args: {
                     p_client_id: string;
@@ -1246,6 +1236,13 @@ export type Database = {
                     id: string;
                     question: string;
                     similarity: number;
+                }[];
+            };
+            purge_old_webhook_events: {
+                Args: { p_retain_days?: number };
+                Returns: {
+                    idempotency_deleted: number;
+                    payloads_redacted: number;
                 }[];
             };
             user_has_any_role: {

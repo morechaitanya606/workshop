@@ -1,6 +1,18 @@
 import type { Metadata } from "next";
+import { Cormorant_Garamond, DM_Sans } from "next/font/google";
 import { getAbsoluteUrl } from "@/lib/env";
+import { serializeJsonLd } from "@/lib/json-ld";
 import SummerRetreatClient from "./SummerRetreatClient";
+
+// Only this page uses these two faces, so they are loaded here instead of in the root layout.
+const dmSans = DM_Sans({ subsets: ["latin"], display: "swap", variable: "--font-dm-sans" });
+const cormorant = Cormorant_Garamond({
+    subsets: ["latin"],
+    display: "swap",
+    weight: ["500", "600", "700"],
+    style: ["normal", "italic"],
+    variable: "--font-cormorant",
+});
 
 const canonicalUrl = getAbsoluteUrl("/workshop/summer-family-retreat");
 const ogImageUrl = getAbsoluteUrl("/images/summer-family-retreat-og.jpg");
@@ -94,10 +106,10 @@ export default function SummerFamilyRetreatPage() {
             <script
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
-                    __html: JSON.stringify(eventStructuredData),
+                    __html: serializeJsonLd(eventStructuredData),
                 }}
             />
-            <div>
+            <div className={`${dmSans.variable} ${cormorant.variable}`}>
                 <SummerRetreatClient />
             </div>
         </>

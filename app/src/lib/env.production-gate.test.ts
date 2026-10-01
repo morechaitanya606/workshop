@@ -117,7 +117,22 @@ describe("production env gate", () => {
 
         const missing = getMissingProductionEnvVars();
         expect(missing).toContain("RAZORPAY_WEBHOOK_SECRET");
-        expect(missing).toContain("RESEND_API_KEY");
+        expect(missing).toContain("MAILJET_API_KEY + MAILJET_SECRET_KEY (or RESEND_API_KEY)");
+    });
+
+    it("accepts Mailjet alone as the mail provider", async () => {
+        const { getMissingProductionEnvVars } = await loadEnvWith({
+            NODE_ENV: "production",
+            VERCEL_ENV: "production",
+            CRON_SECRET: "x",
+            UPSTASH_REDIS_REST_URL: "https://upstash.example.com",
+            UPSTASH_REDIS_REST_TOKEN: "x",
+            RESEND_API_KEY: undefined,
+            MAILJET_API_KEY: "key",
+            MAILJET_SECRET_KEY: "secret",
+        });
+
+        expect(getMissingProductionEnvVars()).toEqual([]);
     });
 
     it("still demands the genuinely build-time values everywhere, preview included", async () => {

@@ -6,7 +6,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./supabase";
 import { getAuthMe } from "@/lib/api-client";
 
-import { clearFavoritesCache } from "@/components/WorkshopCard";
+import { clearFavoritesCache } from "@/lib/favorites-cache";
 
 type UserRole = "admin" | "host" | "user";
 

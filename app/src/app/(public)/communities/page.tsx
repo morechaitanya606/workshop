@@ -65,12 +65,7 @@ export default async function CommunitiesPage() {
                                 </div>
 
                                 <div className="flex flex-wrap gap-3">
-                                    <Link
-                                        href="/communities/new"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="btn-primary"
-                                    >
+                                    <Link href="/communities/new" className="btn-primary">
                                         <Sparkles className="h-4 w-4" />
                                         List Your Community
                                     </Link>
@@ -164,12 +159,7 @@ export default async function CommunitiesPage() {
                                         </p>
                                     </div>
 
-                                    <Link
-                                        href="/communities/new"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="btn-primary"
-                                    >
+                                    <Link href="/communities/new" className="btn-primary">
                                         <Users className="h-4 w-4" />
                                         Create Community Page
                                         <ArrowRight className="h-4 w-4" />

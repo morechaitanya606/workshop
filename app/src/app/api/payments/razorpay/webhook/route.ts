@@ -4,11 +4,31 @@ import { createHash } from "crypto";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError } from "@/lib/api-auth";
 import { getRequestId } from "@/lib/api-route";
-import { claimIdempotencyKey, releaseIdempotencyKey } from "@/lib/idempotency";
+import {
+    claimIdempotencyLease,
+    markIdempotencyKeyProcessed,
+    releaseIdempotencyKey,
+} from "@/lib/idempotency";
 import { revalidatePath } from "next/cache";
-import { verifyRazorpayWebhookSignature } from "@/lib/razorpay-server";
+import {
+    getRazorpayServerClient,
+    verifyRazorpayWebhookSignature,
+    withRazorpayTimeout,
+} from "@/lib/razorpay-server";
 import { sendPaymentNotification } from "@/lib/payment-notifications";
+import { callUntypedRpc } from "@/lib/payments-rpc";
 import type { SupabaseServerClient } from "@/lib/supabase-server";
+
+const WEBHOOK_IDEMPOTENCY_SCOPE = "razorpay-webhook";
+
+/**
+ * How long one delivery may hold an event before a retry is allowed to take it over.
+ *
+ * The claim used to be permanent and written BEFORE the work, so a lambda killed mid-event
+ * burned the event: Razorpay's retry hit the key and was ACKed as a duplicate. Vercel caps
+ * the function well inside this window, so a lease that old belongs to a dead invocation.
+ */
+const WEBHOOK_LEASE_MS = 5 * 60 * 1000;
 
 type RazorpayWebhookPayload = {
     event?: string;
@@ -80,7 +100,8 @@ const TERMINAL_BOOKING_STATUS_FILTER = `(${TERMINAL_BOOKING_STATUSES.join(",")})
  * its own booking by a few hundred milliseconds; that window deserves a retry. But a capture
  * that checkout compensated (refunded) has no booking and never will, and answering those
  * with 503 would burn Razorpay's full 24h retry schedule on an event nothing can act on.
- * Seat holds live 15 minutes, so nothing legitimate is still mid-checkout after 30.
+ * Seat holds live 8 minutes and re-holds are capped at 30 in total, so nothing legitimate is
+ * still mid-checkout after 30.
  */
 const CAPTURE_WITHOUT_BOOKING_RETRY_WINDOW_MS = 30 * 60 * 1000;
 
@@ -120,6 +141,10 @@ async function upsertHostEarningsForBookings(
         const feeDeducted = roundCurrency(hostGross * HOST_PLATFORM_FEE_PERCENT);
         const netAmount = roundCurrency(Math.max(0, hostGross - feeDeducted));
 
+        // Insert-if-absent, NEVER overwrite. An upsert re-wrote amount/fee/status on every
+        // redelivery, so a late or replayed `payment.captured` flipped a row that had already
+        // been paid out (or reversed by a refund) back to 'available' with a fresh amount --
+        // paying the host a second time.
         const { error } = await serviceClient.from("host_earnings").upsert(
             {
                 host_id: booking.workshop.host_id,
@@ -128,7 +153,7 @@ async function upsertHostEarningsForBookings(
                 fee_deducted: feeDeducted,
                 status: "available",
             },
-            { onConflict: "booking_id" }
+            { onConflict: "booking_id", ignoreDuplicates: true }
         );
 
         if (error) {
@@ -147,58 +172,100 @@ async function upsertHostEarningsForBookings(
                     netAmount,
                 },
             });
+
+            // Swallowing this meant the host was silently never credited and the claim was
+            // then marked processed. Throw so the claim is released and Razorpay retries.
+            throw error;
         }
     }
 }
 
+type RefundBookingRpcRow = {
+    booking_id: string;
+    workshop_id: string;
+    guests: number;
+    earning_was_paid: boolean;
+};
+
 /**
- * Reverse host credit when a booking is refunded.
+ * Full refund of every confirmed booking on a payment, in one database transaction.
  *
- * Earnings were credited at capture and never reversed, so /api/admin/payouts summed
- * refunded bookings into the next payout and real cash left the business for orders that
- * had been returned. Rows already paid out are left intact and reported instead: that is
- * a clawback for a human to handle, and silently zeroing a paid row would hide it.
+ * refund_booking (20261001110200) flips confirmed -> refunded, reverses the host's unpaid
+ * earning and restores the seats together, and only the call that performs the transition
+ * gets rows back -- so a second refund event restores nothing, and a failure anywhere rolls
+ * the status flip back instead of stranding seats. Errors are thrown so the claim is
+ * released and Razorpay redelivers.
  */
-async function reverseHostEarningsForBookings(
-    serviceClient: SupabaseServerClient,
-    bookings: BookingNotificationRow[]
-) {
-    for (const booking of bookings) {
-        const { data: earning, error: readError } = await serviceClient
-            .from("host_earnings")
-            .select("id, status")
-            .eq("booking_id", booking.id)
-            .maybeSingle();
+async function refundBookingsForPayment(serviceClient: SupabaseServerClient, paymentId: string) {
+    const { data, error } = await callUntypedRpc<RefundBookingRpcRow[]>(
+        serviceClient,
+        "refund_booking",
+        { p_payment_id: paymentId }
+    );
 
-        if (readError || !earning) {
-            continue;
-        }
+    if (error) {
+        throw error;
+    }
 
-        if (earning.status === "paid") {
+    const rows = Array.isArray(data) ? data : [];
+
+    for (const row of rows) {
+        if (row.earning_was_paid) {
+            // Rows already paid out are left intact and reported: that is a clawback for a
+            // human, and zeroing a paid row would hide it.
             Sentry.captureMessage(
                 "Refund on an already paid-out host earning; manual clawback required.",
                 {
                     level: "error",
                     tags: { layer: "payments", subsystem: "host_earnings_reversal" },
-                    extra: { bookingId: booking.id, earningId: earning.id },
+                    extra: { bookingId: row.booking_id, paymentId },
                 }
             );
-            continue;
         }
 
-        const { error: reverseError } = await serviceClient
-            .from("host_earnings")
-            .update({ amount: 0, fee_deducted: 0, status: "pending" })
-            .eq("id", earning.id)
-            .neq("status", "paid");
-
-        if (reverseError) {
-            Sentry.captureException(reverseError, {
-                tags: { layer: "payments", subsystem: "host_earnings_reversal" },
-                extra: { bookingId: booking.id, earningId: earning.id },
-            });
-        }
+        revalidatePath(`/workshop/${row.workshop_id}`);
     }
+
+    if (rows.length > 0) {
+        revalidatePath("/explore");
+    }
+
+    return rows;
+}
+
+/**
+ * Whether a `refund.processed` event refunded the payment IN FULL.
+ *
+ * The event usually carries the payment entity, but not always. A missing amount used to fall
+ * back to "any positive refund is a full refund" -- so a small partial refund marked the whole
+ * booking refunded, returned its seats and clawed back the host. When the event cannot prove
+ * the answer, ask Razorpay; when Razorpay cannot either, assume partial: leaving a booking
+ * intact is recoverable, destroying it is not.
+ */
+async function isFullRefundEvent(event: RazorpayWebhookPayload, paymentId: string) {
+    const eventPayment = event.payload?.payment?.entity;
+    const refundedPaise = Number(event.payload?.refund?.entity?.amount ?? 0);
+
+    let paymentPaise = Number(eventPayment?.amount ?? 0);
+    let totalRefundedPaise =
+        eventPayment?.amount_refunded === undefined || eventPayment?.amount_refunded === null
+            ? Number.NaN
+            : Number(eventPayment.amount_refunded);
+    let paymentStatus = "";
+
+    if (!(paymentPaise > 0) || !Number.isFinite(totalRefundedPaise)) {
+        const payment = await withRazorpayTimeout(() =>
+            getRazorpayServerClient().payments.fetch(paymentId)
+        );
+        paymentPaise = Number(payment?.amount ?? 0);
+        totalRefundedPaise = Number(payment?.amount_refunded ?? 0);
+        paymentStatus = String(payment?.status || "").toLowerCase();
+    }
+
+    const isFull =
+        paymentStatus === "refunded" || (paymentPaise > 0 && totalRefundedPaise >= paymentPaise);
+
+    return { isFull, refundedPaise, paymentPaise, totalRefundedPaise };
 }
 
 /**
@@ -259,10 +326,16 @@ async function loadBookingsByPaymentId(
     }
 
     const workshopIds = Array.from(new Set(rows.map((row) => row.workshop_id).filter(Boolean)));
-    const { data: workshopRows } = await serviceClient
+    const { data: workshopRows, error: workshopRowsError } = await serviceClient
         .from("workshops")
         .select("id, title, date, time, location, city, host_id")
         .in("id", workshopIds);
+
+    // Without the workshop row there is no host_id, and the host's credit would be skipped
+    // silently while the event was marked processed.
+    if (workshopRowsError) {
+        throw workshopRowsError;
+    }
 
     const workshopById = new Map(
         (workshopRows || []).map((workshop) => [
@@ -377,13 +450,12 @@ export async function POST(request: Request) {
     const webhookEventId = request.headers.get("x-razorpay-event-id");
     const idempotencyKey = buildWebhookIdempotencyKey(event, rawBody, webhookEventId);
 
-    let claimed: boolean;
+    let claim: Awaited<ReturnType<typeof claimIdempotencyLease>>;
     try {
-        claimed = await claimIdempotencyKey(
-            "razorpay-webhook",
-            idempotencyKey,
-            24 * 60 * 60 * 1000
-        );
+        claim = await claimIdempotencyLease(WEBHOOK_IDEMPOTENCY_SCOPE, idempotencyKey, {
+            leaseMs: WEBHOOK_LEASE_MS,
+            ttlMs: 24 * 60 * 60 * 1000,
+        });
     } catch (error) {
         // The durable dedup store is unreachable. Processing now risks double-crediting a
         // payment, so decline and let Razorpay retry.
@@ -394,8 +466,15 @@ export async function POST(request: Request) {
         return jsonError("Idempotency store unavailable; retry later.", 503);
     }
 
-    if (!claimed) {
+    if (claim === "duplicate") {
         return NextResponse.json({ received: true, duplicate: true });
+    }
+
+    if (claim === "in_progress") {
+        // Another delivery of this event holds an unexpired lease. ACKing would drop the
+        // event if that invocation then dies; a 503 makes Razorpay come back, and by then
+        // the holder has either finished (duplicate) or its lease has expired (takeover).
+        return jsonError("Event is already being processed; retry later.", 503);
     }
 
     const service = requireSupabaseService();
@@ -403,7 +482,7 @@ export async function POST(request: Request) {
         // The key is already claimed, so ACKing here would burn the event permanently: the
         // retry short-circuits as a duplicate and the capture is never recorded. Give it back
         // and let Razorpay redeliver once the service role is configured again.
-        await releaseIdempotencyKey("razorpay-webhook", idempotencyKey);
+        await releaseIdempotencyKey(WEBHOOK_IDEMPOTENCY_SCOPE, idempotencyKey);
         return service.response;
     }
 
@@ -414,11 +493,15 @@ export async function POST(request: Request) {
         const refundPaymentId = event.payload?.refund?.entity?.payment_id;
 
         if (event.event === "payment.captured" && paymentId) {
-            await serviceClient
+            const { error: confirmError } = await serviceClient
                 .from("bookings")
                 .update({ status: "confirmed" })
                 .eq("payment_intent_id", paymentId)
                 .not("status", "in", TERMINAL_BOOKING_STATUS_FILTER);
+
+            if (confirmError) {
+                throw confirmError;
+            }
 
             const confirmedBookings = await loadBookingsByPaymentId(serviceClient, paymentId);
 
@@ -462,14 +545,16 @@ export async function POST(request: Request) {
                 (booking) => booking.status === "confirmed"
             );
 
+            // Credit first: it is the one step here whose loss costs the host money, and it
+            // now throws (and so retries) instead of being swallowed.
+            await upsertHostEarningsForBookings(serviceClient, freshlyConfirmedBookings);
+
             await notifyBookingStatusTransitions(
                 "booking.confirmed",
                 freshlyConfirmedBookings,
                 paymentId,
                 event.event
             );
-
-            await upsertHostEarningsForBookings(serviceClient, freshlyConfirmedBookings);
 
             const { sendBookingConfirmation } = await import("@/lib/email");
             await Promise.all(
@@ -502,31 +587,26 @@ export async function POST(request: Request) {
             //
             // Scoped to `pending` so it stays a no-op today and does the right thing on its
             // own if a pre-capture booking status is ever introduced.
-            await serviceClient
+            const { error: failedError } = await serviceClient
                 .from("bookings")
                 .update({ status: "cancelled" })
                 .eq("payment_intent_id", paymentId)
                 .eq("status", "pending");
+
+            if (failedError) {
+                throw failedError;
+            }
         }
 
         if (event.event === "refund.processed" && refundPaymentId) {
             // A PARTIAL refund must not mark the whole booking refunded. Razorpay reports
             // the amount refunded by this event and the running total on the payment;
-            // only a full refund changes booking status and returns seats.
-            const refundedPaise = Number(event.payload?.refund?.entity?.amount ?? 0);
-            const paymentPaise = Number(event.payload?.payment?.entity?.amount ?? 0);
-            const totalRefundedPaise = Number(
-                event.payload?.payment?.entity?.amount_refunded ?? refundedPaise
-            );
-            const isFullRefund =
-                paymentPaise > 0 ? totalRefundedPaise >= paymentPaise : refundedPaise > 0;
+            // only a full refund changes booking status and returns seats. When the event
+            // does not carry those figures, Razorpay is asked rather than guessed at.
+            const { isFull, refundedPaise, paymentPaise, totalRefundedPaise } =
+                await isFullRefundEvent(event, refundPaymentId);
 
-            const bookingsForPayment = await loadBookingsByPaymentId(
-                serviceClient,
-                refundPaymentId
-            );
-
-            if (!isFullRefund) {
+            if (!isFull) {
                 Sentry.captureMessage("Partial Razorpay refund recorded; booking left intact.", {
                     level: "info",
                     tags: { layer: "payments", provider: "razorpay" },
@@ -538,49 +618,9 @@ export async function POST(request: Request) {
                     },
                 });
             } else {
-                // Only seats for bookings that were actually holding inventory come back.
-                const seatsToRestore = bookingsForPayment.filter(
-                    (booking) => booking.status === "confirmed"
-                );
-
-                await serviceClient
-                    .from("bookings")
-                    .update({ status: "refunded" })
-                    .eq("payment_intent_id", refundPaymentId);
-
-                // Host credit comes back out before seats go back in, so a payout run
-                // racing this handler cannot catch the window where the booking reads
-                // refunded but the earning is still 'available'.
-                await reverseHostEarningsForBookings(serviceClient, seatsToRestore);
-
-                // Seats were decremented at confirmation and were never given back, so every
-                // refund permanently destroyed inventory. Restore them relatively (never as an
-                // absolute write) so concurrent bookings are not clobbered.
-                await Promise.all(
-                    seatsToRestore.map(async (booking) => {
-                        const seats = Number(booking.guests || 0);
-                        if (!booking.workshop_id || seats < 1) return;
-
-                        const { error: restoreError } = await serviceClient.rpc(
-                            "restore_workshop_seats",
-                            {
-                                p_workshop_id: booking.workshop_id,
-                                p_seats: seats,
-                            }
-                        );
-
-                        if (restoreError) {
-                            Sentry.captureException(restoreError, {
-                                tags: { layer: "payments", subsystem: "seat_restore" },
-                                extra: { bookingId: booking.id, seats },
-                            });
-                            return;
-                        }
-
-                        revalidatePath(`/workshop/${booking.workshop_id}`);
-                        revalidatePath("/explore");
-                    })
-                );
+                // Status flip, host-credit reversal and seat restore are ONE transaction in
+                // the database; it throws on any failure so the event is retried whole.
+                await refundBookingsForPayment(serviceClient, refundPaymentId);
 
                 const refundedBookings = await loadBookingsByPaymentId(
                     serviceClient,
@@ -611,9 +651,13 @@ export async function POST(request: Request) {
         // The key was claimed before any work was done. Leaving it claimed after a failure
         // meant one transient error discarded the event forever: Razorpay's retry would
         // short-circuit as a duplicate. Release it and ask for the retry explicitly.
-        await releaseIdempotencyKey("razorpay-webhook", idempotencyKey);
+        await releaseIdempotencyKey(WEBHOOK_IDEMPOTENCY_SCOPE, idempotencyKey);
         return jsonError("Webhook processing failed; retry later.", 500);
     }
+
+    // Only now does the claim become permanent. Until here it was a lease, so an invocation
+    // that died mid-event leaves a claim a retry can take over rather than a burned event.
+    await markIdempotencyKeyProcessed(WEBHOOK_IDEMPOTENCY_SCOPE, idempotencyKey);
 
     return NextResponse.json({ received: true });
 }

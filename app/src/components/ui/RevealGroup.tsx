@@ -1,6 +1,7 @@
 "use client";
 
-import { motion, useReducedMotion, type Transition } from "framer-motion";
+import { motion, type Transition } from "framer-motion";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import {
     getRevealVariants,
     reducedMotionFade,
@@ -34,7 +35,7 @@ export function RevealGroup({
     stagger = 0.08,
     delayChildren = 0.04,
 }: RevealGroupProps) {
-    const shouldReduceMotion = Boolean(useReducedMotion());
+    const shouldReduceMotion = usePrefersReducedMotion();
 
     if (shouldReduceMotion) {
         return <div className={className}>{children}</div>;
@@ -68,7 +69,7 @@ export function RevealItem({
     transition = standardTransition,
     delay = 0,
 }: RevealItemProps) {
-    const shouldReduceMotion = Boolean(useReducedMotion());
+    const shouldReduceMotion = usePrefersReducedMotion();
 
     return (
         <motion.div

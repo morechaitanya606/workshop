@@ -6,7 +6,11 @@ import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { workshopCreateSchema } from "@/lib/validators";
-import { buildWorkshopInsertPayload, mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
+import {
+    buildWorkshopInsertPayloads,
+    mapWorkshopRowToWorkshop,
+    sortWorkshopsBySession,
+} from "@/lib/workshop-utils";
 import { isMissingColumnError, withoutNewColumns } from "@/lib/workshop-approval-compat";
 
 export async function GET(request: NextRequest) {
@@ -69,19 +73,15 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const payload = buildWorkshopInsertPayload(parsed.data, auth.user.id);
-        let { data, error } = await serviceClient
-            .from("workshops")
-            .insert(payload)
-            .select("*")
-            .single();
+        // One row per session, inserted in a single statement so the batch is all-or-nothing.
+        const payloads = buildWorkshopInsertPayloads(parsed.data, auth.user.id);
+        let { data, error } = await serviceClient.from("workshops").insert(payloads).select("*");
 
         if (error && isMissingColumnError(error)) {
             ({ data, error } = await serviceClient
                 .from("workshops")
-                .insert(withoutNewColumns(payload))
-                .select("*")
-                .single());
+                .insert(payloads.map((payload) => withoutNewColumns(payload)))
+                .select("*"));
         }
 
         if (error) {
@@ -91,19 +91,25 @@ export async function POST(request: NextRequest) {
                 error.message
             );
         }
-        if (!data) {
+        if (!data || data.length === 0) {
             return jsonError("Unable to create workshop. No workshop was returned.", 500);
         }
 
+        const workshops = sortWorkshopsBySession(data.map((row) => mapWorkshopRowToWorkshop(row)));
+
         revalidatePath("/admin/workshops");
-        revalidatePath(`/workshop/${data.id}`);
+        for (const workshop of workshops) {
+            revalidatePath(`/workshop/${workshop.id}`);
+        }
         // Public listing surfaces that actually exist in this app.
         revalidatePath("/explore");
         revalidatePath("/");
 
         return NextResponse.json(
             {
-                workshop: mapWorkshopRowToWorkshop(data),
+                workshop: workshops[0],
+                workshops,
+                ids: workshops.map((workshop) => workshop.id),
             },
             { status: 201 }
         );

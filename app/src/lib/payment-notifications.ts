@@ -1,7 +1,7 @@
 import { createHmac } from "crypto";
 import * as Sentry from "@sentry/nextjs";
 import { env } from "@/lib/env";
-import { claimIdempotencyKey } from "@/lib/idempotency";
+import { claimIdempotencyKey, releaseIdempotencyKey } from "@/lib/idempotency";
 
 export type PaymentNotificationEvent = "booking.confirmed" | "booking.refunded";
 
@@ -40,11 +40,30 @@ export async function sendPaymentNotification(payload: NotificationPayload) {
         return { sent: false as const, reason: "not_configured" as const };
     }
 
-    const claimed = await claimIdempotencyKey(
-        NOTIFICATION_SCOPE,
-        payload.idempotencyKey,
-        DEFAULT_TTL_MS
-    );
+    // A notification is a side effect of a payment that has ALREADY succeeded, so a dedup
+    // store that is unreachable must never surface as an exception to the caller. It used to:
+    // checkout confirmed the booking, the claim threw, and the customer who had paid and been
+    // booked got a 500 "Checkout failed" (and the reconcile path then ran against a good
+    // booking). Treat an unreachable store as "could not notify" and move on.
+    let claimed: boolean;
+    try {
+        claimed = await claimIdempotencyKey(
+            NOTIFICATION_SCOPE,
+            payload.idempotencyKey,
+            DEFAULT_TTL_MS
+        );
+    } catch (error) {
+        Sentry.captureException(error, {
+            level: "warning",
+            tags: {
+                layer: "payments",
+                route: "payment_notifications",
+                subsystem: "idempotency",
+            },
+            extra: { event: payload.event, idempotencyKey: payload.idempotencyKey },
+        });
+        return { sent: false as const, reason: "claim_failed" as const };
+    }
     if (!claimed) {
         return { sent: false as const, reason: "duplicate" as const };
     }
@@ -98,6 +117,12 @@ export async function sendPaymentNotification(payload: NotificationPayload) {
                 webhookUrl: config.url,
             },
         });
+
+        // The claim was taken before the send. Keeping it after a failure meant the
+        // notification could never be re-sent for this booking: every later attempt
+        // short-circuited as a duplicate for the full 7-day TTL.
+        await releaseIdempotencyKey(NOTIFICATION_SCOPE, payload.idempotencyKey);
+
         return { sent: false as const, reason: "failed" as const };
     } finally {
         clearTimeout(timeout);

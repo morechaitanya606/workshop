@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import { ArrowRight, CalendarDays, Gift, Sparkles } from "lucide-react";
 
 import { usePlatformSettings } from "@/lib/platform-settings-context";
@@ -12,7 +13,7 @@ import {
 } from "@/lib/special-page";
 
 export default function SpecialEventBanner() {
-    const shouldReduceMotion = Boolean(useReducedMotion());
+    const shouldReduceMotion = usePrefersReducedMotion();
     const { settings, loading } = usePlatformSettings();
 
     if (loading || !isSpecialPageActive(settings.special_page)) {

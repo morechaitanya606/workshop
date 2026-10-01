@@ -1,6 +1,7 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import { Search, Ticket, PartyPopper } from "lucide-react";
 import {
     fadeInUp,
@@ -35,7 +36,7 @@ const STEPS = [
 ];
 
 export default function HowItWorksSection() {
-    const prefersReducedMotion = Boolean(useReducedMotion());
+    const prefersReducedMotion = usePrefersReducedMotion();
 
     return (
         <section className="section-padding mt-10 sm:mt-14">

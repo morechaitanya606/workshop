@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { getAbsoluteUrl } from "@/lib/env";
+import { getIstTodayIso } from "@/lib/ist-date";
+import { serializeJsonLd } from "@/lib/json-ld";
 import { loadHomepageCommunityPhotos } from "@/lib/community-photos";
 import { loadHomeWorkshops } from "@/lib/workshop-page-data";
 import HomePageClient from "./HomePageClient";
@@ -54,14 +56,14 @@ export default async function HomePage() {
         loadHomeWorkshops(),
         loadHomepageCommunityPhotos(12),
     ]);
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = getIstTodayIso();
 
     return (
         <>
             <script
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
-                    __html: JSON.stringify(organizationStructuredData),
+                    __html: serializeJsonLd(organizationStructuredData),
                 }}
             />
             <HomePageClient

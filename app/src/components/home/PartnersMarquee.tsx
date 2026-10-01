@@ -39,6 +39,9 @@ export default function PartnersMarquee({
                     {marqueePartners.map((partner, index) => (
                         <div
                             key={`${partner.id}-${index}`}
+                            // The second copy only exists to make the loop seamless; keep it out of
+                            // the accessibility tree so screen readers do not read every partner twice.
+                            aria-hidden={index >= cafePartners.length ? true : undefined}
                             className="flex flex-col items-center justify-center gap-3 bg-white px-6 py-5 rounded-2xl shadow-sm border border-clay/30 min-w-[220px] text-center motion-safe:hover:scale-[1.03] hover:shadow-hover transition-all duration-300"
                         >
                             <div className="w-20 h-20 overflow-hidden bg-white flex items-center justify-center p-1">

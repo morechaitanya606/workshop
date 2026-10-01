@@ -1,6 +1,6 @@
 "use client";
 
-import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import Footer from "@/components/Footer";
 import { useToast } from "@/components/ToastProvider";
+import WhatsAppCommunityModal from "@/components/WhatsAppCommunityModal";
 import type { AppliedCoupon } from "@/app/(private)/booking/types";
 import type { Workshop } from "@/lib/data";
 import {
@@ -42,6 +43,8 @@ import { formatCurrency, formatDate, formatTime, getInitials } from "@/lib/utils
 import { BOOKING_CUTOFF_HOURS, getWorkshopDateTime, isBookingClosedNow } from "@/lib/booking-time";
 import { useAuth } from "@/lib/auth-context";
 import { trackEvent } from "@/lib/analytics";
+import { usePlatformSettings } from "@/lib/platform-settings-context";
+import { useModalA11y } from "@/lib/use-modal-a11y";
 import { isSupportedWorkshopImageUrl } from "@/lib/workshop-media";
 import {
     fadeInUp,
@@ -54,7 +57,6 @@ import type { PlatformSettingsType } from "@/lib/workshop-page-data";
 import WorkshopGallery from "./WorkshopGallery";
 import WorkshopBookingSidebar from "./WorkshopBookingSidebar";
 import WorkshopPastEventSidebar from "./WorkshopPastEventSidebar";
-import WorkshopWaitlistModal from "./WorkshopWaitlistModal";
 import WorkshopMobileBookingBar from "./WorkshopMobileBookingBar";
 
 const SocialShareButtons = dynamic(() => import("@/components/SocialShareButtons"), {
@@ -198,23 +200,33 @@ export default function WorkshopClient({
     const [publicFeedbackLoading, setPublicFeedbackLoading] = useState(false);
     const [publicFeedbackError, setPublicFeedbackError] = useState<string | null>(null);
 
-    // Waitlist state
-    const [showWaitlistModal, setShowWaitlistModal] = useState(false);
-    const [waitlistEmail, setWaitlistEmail] = useState("");
-    const [waitlistLoading, setWaitlistLoading] = useState(false);
-    const [waitlistError, setWaitlistError] = useState<string | null>(null);
-    const [waitlistSuccess, setWaitlistSuccess] = useState(false);
+    // Sold-out community popup. The link comes from platform settings (admin dashboard) via
+    // the provider that the root layout fills from the cached server read.
+    const { settings: platformWideSettings } = usePlatformSettings();
+    const communityUrl = platformWideSettings.whatsapp_community_url;
+    const communityMessage = platformWideSettings.whatsapp_community_message;
+    const [showCommunityModal, setShowCommunityModal] = useState(false);
+    const galleryWrapperRef = useRef<HTMLDivElement | null>(null);
+    const videoDialogRef = useRef<HTMLElement | null>(null);
+
+    // "Now" is only known after mount. Reading Date.now() during render made the server HTML
+    // (built at one instant) disagree with the first client render (built at another), which
+    // is a hydration mismatch for any workshop starting near the cutoff. Until mount we fall
+    // back to the date-only comparison against the server-provided todayIso.
+    const [nowMs, setNowMs] = useState<number | null>(null);
 
     const todayDate = new Date(`${todayIso}T00:00:00.000Z`);
     const workshopDateTime = getWorkshopDateTime(workshop.date, workshop.time);
 
     const isPastWorkshop = (() => {
-        if (!workshopDateTime) {
+        if (!workshopDateTime || nowMs === null) {
             return workshop.date < todayIso;
         }
-        return workshopDateTime.getTime() < Date.now();
+        return workshopDateTime.getTime() < nowMs;
     })();
-    const isBookingClosed = isPastWorkshop || isBookingClosedNow(workshop.date, workshop.time);
+    const isBookingClosed =
+        isPastWorkshop ||
+        (nowMs !== null && isBookingClosedNow(workshop.date, workshop.time, new Date(nowMs)));
     const availableSeatCount = liveAvailableSeatCount ?? workshop.seatsRemaining;
     const isSoldOut = availableSeatCount <= 0;
 
@@ -292,6 +304,10 @@ export default function WorkshopClient({
 
     useEffect(() => {
         setIsMounted(true);
+        setNowMs(Date.now());
+        // Keep a tab that stays open across the booking cutoff honest.
+        const interval = setInterval(() => setNowMs(Date.now()), 60_000);
+        return () => clearInterval(interval);
     }, []);
 
     useEffect(() => {
@@ -375,8 +391,7 @@ export default function WorkshopClient({
 
     useEffect(() => {
         setLiveAvailableSeatCount(null);
-        setWaitlistSuccess(false);
-        setShowWaitlistModal(false);
+        setShowCommunityModal(false);
     }, [workshop.id]);
 
     useEffect(() => {
@@ -411,66 +426,22 @@ export default function WorkshopClient({
         );
     }, [availableSeatCount, isSoldOut]);
 
+    // The video dialog is rendered by WorkshopGallery. Resolve it through the wrapper ref
+    // (scoped to the gallery) instead of a document-wide attribute selector, which matched
+    // whichever dialog happened to come first in the DOM. This effect is declared before
+    // useModalA11y so the ref is populated by the time the modal effect reads it.
     useEffect(() => {
-        if (!showVideo && !showWaitlistModal) {
-            return;
-        }
+        videoDialogRef.current = showVideo
+            ? (galleryWrapperRef.current?.querySelector<HTMLElement>('[role="dialog"]') ?? null)
+            : null;
+    }, [showVideo]);
 
-        const previousActive = document.activeElement as HTMLElement | null;
-        const modalNode = showVideo
-            ? (document.querySelector('[role="dialog"][aria-label]') as HTMLElement | null)
-            : document.getElementById("waitlist-modal");
-        if (!modalNode) {
-            return;
-        }
-
-        const getFocusableElements = () =>
-            Array.from(
-                modalNode.querySelectorAll<HTMLElement>(
-                    'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-                )
-            );
-
-        const focusable = getFocusableElements();
-        (focusable[0] || modalNode).focus();
-
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                event.preventDefault();
-                setShowVideo(false);
-                return;
-            }
-
-            if (event.key !== "Tab") return;
-            const focusableElements = getFocusableElements();
-            if (focusableElements.length === 0) {
-                event.preventDefault();
-                modalNode.focus();
-                return;
-            }
-
-            const first = focusableElements[0];
-            const last = focusableElements[focusableElements.length - 1];
-
-            if (event.shiftKey && document.activeElement === first) {
-                event.preventDefault();
-                last.focus();
-            } else if (!event.shiftKey && document.activeElement === last) {
-                event.preventDefault();
-                first.focus();
-            }
-        };
-
-        const previousOverflow = document.body.style.overflow;
-        document.body.style.overflow = "hidden";
-        document.addEventListener("keydown", handleKeyDown);
-
-        return () => {
-            document.body.style.overflow = previousOverflow;
-            document.removeEventListener("keydown", handleKeyDown);
-            previousActive?.focus();
-        };
-    }, [showVideo, showWaitlistModal]);
+    const closeVideoModal = useCallback(() => setShowVideo(false), []);
+    useModalA11y({
+        open: showVideo,
+        containerRef: videoDialogRef,
+        onClose: closeVideoModal,
+    });
 
     const locationQuery = [workshop.location, workshop.eventAddress, workshop.city]
         .map((part) => part?.trim())
@@ -541,59 +512,13 @@ export default function WorkshopClient({
         void loadPublicFeedback();
     }, [loadPublicFeedback, workshop.reviewCount]);
 
-    useEffect(() => {
-        if (user && user.email) {
-            setWaitlistEmail(user.email);
-        }
-    }, [user]);
-
-    const handleJoinWaitlist = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setWaitlistError(null);
-
-        // The route derives both the user and the notification address from the session:
-        // leaving it open let anyone enrol arbitrary third-party addresses. Same shape as
-        // handlePastNotify below.
-        if (!user) {
-            const redirectPath = encodeURIComponent(`/workshop/${workshop.id}`);
-            router.push(`/auth/login?redirect=${redirectPath}`);
-            toast.info("Log in required", "Please sign in to join the waitlist.");
-            return;
-        }
-        if (!accessToken) {
-            const message = "Your session expired. Please log in again.";
-            setWaitlistError(message);
-            toast.error("Session expired", message);
-            return;
-        }
-        setWaitlistLoading(true);
-        try {
-            const res = await fetch(`/api/workshops/${workshop.id}/waitlist`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${accessToken}`,
-                },
-                body: JSON.stringify({}),
-            });
-            const data = await res.json();
-
-            if (!res.ok) {
-                throw new Error(data.error || "Failed to join waitlist.");
-            }
-
-            setWaitlistSuccess(true);
-            toast.success(
-                "Joined waitlist",
-                data.message || "We will email you if a spot opens up."
-            );
-        } catch (err: any) {
-            setWaitlistError(err.message || "An unexpected error occurred.");
-            toast.error("Error", err.message || "Could not join waitlist.");
-        } finally {
-            setWaitlistLoading(false);
-        }
-    };
+    const openCommunityModal = useCallback(
+        (source: string) => {
+            setShowCommunityModal(true);
+            trackEvent("sold_out_community_cta_clicked", { workshopId: workshop.id, source });
+        },
+        [workshop.id]
+    );
 
     const handleApplyCoupon = async () => {
         const nextCode = couponCode.trim();
@@ -661,9 +586,10 @@ export default function WorkshopClient({
             return;
         }
         if (isSoldOut) {
-            const message = "This workshop is sold out. Please choose a similar workshop.";
+            const message = "This workshop is sold out. Join our WhatsApp community for new dates.";
             setHoldError(message);
             toast.info("Workshop sold out", message);
+            setShowCommunityModal(true);
             return;
         }
         if (!user) {
@@ -722,6 +648,9 @@ export default function WorkshopClient({
                     const message = "This workshop just sold out!";
                     setHoldError(message);
                     toast.error("Sold out", message);
+                    // The visitor tried to book and lost the last seat: show the community
+                    // popup so there is still a next step.
+                    setShowCommunityModal(true);
                     return;
                 } else {
                     setGuests((currentGuests) =>
@@ -938,20 +867,28 @@ export default function WorkshopClient({
                         initial={prefersReducedMotion ? undefined : "hidden"}
                         animate={prefersReducedMotion ? undefined : "visible"}
                         transition={prefersReducedMotion ? { duration: 0 } : quickTransition}
+                        aria-label="Breadcrumb"
                         className="flex items-center gap-2 text-sm font-inter text-dark-muted"
                     >
-                        <Link href="/" className="hover:text-terracotta transition-colors">
+                        {/* inline-flex + items-center: the links keep the global 44px tap
+                            height, and their text sits on the same line as the chevrons. */}
+                        <Link
+                            href="/"
+                            className="inline-flex items-center hover:text-terracotta transition-colors"
+                        >
                             Home
                         </Link>
-                        <ChevronRight className="w-3.5 h-3.5" />
+                        <ChevronRight className="w-3.5 h-3.5 shrink-0" />
                         <Link
                             href={`/explore?category=${encodeURIComponent(workshop.category)}`}
-                            className="hover:text-terracotta transition-colors"
+                            className="inline-flex items-center hover:text-terracotta transition-colors"
                         >
                             {workshop.category}
                         </Link>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                        <span className="text-dark">{workshop.title}</span>
+                        <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                        <span className="min-w-0 truncate text-dark" aria-current="page">
+                            {workshop.title}
+                        </span>
                     </motion.nav>
                 </div>
 
@@ -959,16 +896,18 @@ export default function WorkshopClient({
                     <div className="grid grid-cols-1 items-start gap-8 min-[900px]:grid-cols-[minmax(0,1fr),320px] xl:grid-cols-[minmax(0,1fr),380px] xl:gap-12">
                         {/* ═══ LEFT COLUMN ═══ */}
                         <div>
-                            <WorkshopGallery
-                                workshop={workshop}
-                                activeImage={activeImage}
-                                setActiveImage={setActiveImage}
-                                showVideo={showVideo}
-                                setShowVideo={setShowVideo}
-                                isSaved={isSaved}
-                                favoriteLoading={favoriteLoading}
-                                onToggleFavorite={handleToggleFavorite}
-                            />
+                            <div ref={galleryWrapperRef}>
+                                <WorkshopGallery
+                                    workshop={workshop}
+                                    activeImage={activeImage}
+                                    setActiveImage={setActiveImage}
+                                    showVideo={showVideo}
+                                    setShowVideo={setShowVideo}
+                                    isSaved={isSaved}
+                                    favoriteLoading={favoriteLoading}
+                                    onToggleFavorite={handleToggleFavorite}
+                                />
+                            </div>
 
                             <motion.div
                                 variants={prefersReducedMotion ? undefined : fadeInUp}
@@ -1111,10 +1050,11 @@ export default function WorkshopClient({
                                         ) : isSoldOut ? (
                                             <button
                                                 type="button"
-                                                onClick={() => setShowWaitlistModal(true)}
-                                                className="btn-secondary w-full !py-3.5 text-sm"
+                                                onClick={() => openCommunityModal("mobile_inline")}
+                                                className="w-full rounded-full bg-emerald-700 px-5 py-3.5 text-sm font-inter font-bold text-white transition-colors hover:bg-emerald-800"
                                             >
-                                                Join Waitlist
+                                                Workshop is full &mdash; join our WhatsApp community
+                                                for the next dates
                                             </button>
                                         ) : user ? (
                                             <button
@@ -1196,11 +1136,7 @@ export default function WorkshopClient({
                                         date={formatDate(workshop.date)}
                                         city={workshop.city}
                                         seatsRemaining={availableSeatCount}
-                                        url={
-                                            typeof window !== "undefined"
-                                                ? window.location.href
-                                                : ""
-                                        }
+                                        url={isMounted ? window.location.href : ""}
                                     />
                                 </div>
                             </motion.div>
@@ -1622,7 +1558,7 @@ export default function WorkshopClient({
                                     holdError={holdError}
                                     loginRedirectHref={loginRedirectHref}
                                     onBooking={handleBooking}
-                                    onShowWaitlist={() => setShowWaitlistModal(true)}
+                                    onShowCommunity={() => openCommunityModal("sidebar")}
                                 />
                             )}
                         </div>
@@ -1648,9 +1584,17 @@ export default function WorkshopClient({
                             All spots are taken for this workshop
                         </h2>
                         <p className="mt-2 text-sm font-inter text-red-700">
-                            Booking is closed for this event. Try one of these similar workshops
-                            with seats available.
+                            Booking is closed for this event. Join our WhatsApp community to hear
+                            about the next dates, or try one of these similar workshops with seats
+                            available.
                         </p>
+                        <button
+                            type="button"
+                            onClick={() => openCommunityModal("sold_out_panel")}
+                            className="mt-4 inline-flex items-center justify-center rounded-full bg-emerald-700 px-5 py-2.5 text-sm font-inter font-bold text-white transition-colors hover:bg-emerald-800"
+                        >
+                            Join our WhatsApp community
+                        </button>
 
                         {suggestedWorkshops.length > 0 ? (
                             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1772,15 +1716,14 @@ export default function WorkshopClient({
 
             <Footer />
 
-            {/* ═══ WAITLIST MODAL ═══ */}
-            <WorkshopWaitlistModal
-                showWaitlistModal={showWaitlistModal}
-                setShowWaitlistModal={setShowWaitlistModal}
-                waitlistEmail={waitlistEmail}
-                waitlistLoading={waitlistLoading}
-                waitlistError={waitlistError}
-                waitlistSuccess={waitlistSuccess}
-                onJoinWaitlist={handleJoinWaitlist}
+            {/* ═══ SOLD-OUT WHATSAPP COMMUNITY POPUP ═══ */}
+            <WhatsAppCommunityModal
+                open={showCommunityModal}
+                onClose={() => setShowCommunityModal(false)}
+                communityUrl={communityUrl}
+                message={communityMessage}
+                source="workshop_page"
+                workshopId={workshop.id}
             />
 
             {/* ═══ MOBILE STICKY BOOKING BAR ═══ */}
@@ -1800,7 +1743,7 @@ export default function WorkshopClient({
                 loginRedirectHref={loginRedirectHref}
                 isMounted={isMounted}
                 onBooking={handleBooking}
-                onShowWaitlist={() => setShowWaitlistModal(true)}
+                onShowCommunity={() => openCommunityModal("mobile_bar")}
             />
         </div>
     );

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useModalA11y } from "@/lib/use-modal-a11y";
 
 type DialogProps = {
     open: boolean;
@@ -23,39 +24,34 @@ export function Dialog({
     className,
 }: DialogProps) {
     const [isMounted, setIsMounted] = useState(false);
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const titleId = useId();
+    const descriptionId = useId();
 
     useEffect(() => {
         setIsMounted(true);
     }, []);
 
-    useEffect(() => {
-        if (!open) return;
-
-        const handleEscape = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                onOpenChange(false);
-            }
-        };
-
-        const previousOverflow = document.body.style.overflow;
-        document.body.style.overflow = "hidden";
-        window.addEventListener("keydown", handleEscape);
-
-        return () => {
-            document.body.style.overflow = previousOverflow;
-            window.removeEventListener("keydown", handleEscape);
-        };
-    }, [onOpenChange, open]);
+    // Focus trap, initial focus, Escape, scroll lock and focus restore. `open` is gated on the
+    // portal being mounted so the hook never runs before the dialog element exists.
+    useModalA11y({
+        open: open && isMounted,
+        containerRef,
+        onClose: () => onOpenChange(false),
+    });
 
     if (!open || !isMounted) return null;
 
     return createPortal(
         <div
-            className="fixed inset-0 z-[120] flex items-end justify-center bg-black/60 p-2 sm:items-center sm:p-4"
+            ref={containerRef}
+            className="fixed inset-0 z-[120] flex items-end justify-center bg-black/60 p-2 outline-none sm:items-center sm:p-4"
             onClick={() => onOpenChange(false)}
             role="dialog"
             aria-modal="true"
-            aria-label={title}
+            aria-labelledby={titleId}
+            aria-describedby={description ? descriptionId : undefined}
+            tabIndex={-1}
         >
             <div
                 className={cn(
@@ -66,12 +62,20 @@ export function Dialog({
             >
                 <div className="mb-4 flex items-start justify-between gap-4">
                     <div>
-                        <h3 className="font-playfair text-xl font-semibold text-dark">{title}</h3>
+                        <h3 id={titleId} className="font-playfair text-xl font-semibold text-dark">
+                            {title}
+                        </h3>
                         {description ? (
-                            <p className="mt-1 text-sm font-inter text-dark-muted">{description}</p>
+                            <p
+                                id={descriptionId}
+                                className="mt-1 text-sm font-inter text-dark-muted"
+                            >
+                                {description}
+                            </p>
                         ) : null}
                     </div>
                     <button
+                        type="button"
                         onClick={() => onOpenChange(false)}
                         aria-label="Close dialog"
                         className="rounded-full p-1 text-dark-muted hover:bg-gray-100"

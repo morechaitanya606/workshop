@@ -1,6 +1,7 @@
 "use client";
 
-import { motion, useReducedMotion, Variants, Transition } from "framer-motion";
+import { motion, Variants, Transition } from "framer-motion";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import {
     useMotionProps,
     fadeInUp,
@@ -30,7 +31,7 @@ export default function ScrollReveal({
     once = true,
     amount = 0.18,
 }: ScrollRevealProps) {
-    const shouldReduceMotion = Boolean(useReducedMotion());
+    const shouldReduceMotion = usePrefersReducedMotion();
     const resolvedVariants = variants === fadeInUp ? getRevealVariants(preset) : variants;
     const motionProps = useMotionProps(shouldReduceMotion, resolvedVariants, transition, {
         whileInView: true,

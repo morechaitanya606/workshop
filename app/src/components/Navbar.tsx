@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -8,6 +8,8 @@ import { Search, Menu, X, LogOut } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { CONTACT_PAGE_HREF } from "@/lib/contact";
+import { useModalA11y } from "@/lib/use-modal-a11y";
+import { nextNavScrollState, type NavScrollState } from "@/lib/nav-scroll";
 
 const SUGGESTIONS = [
     "Pottery Workshop",
@@ -20,46 +22,12 @@ const SUGGESTIONS = [
     "Baking Masterclass",
 ];
 
-const FOCUSABLE_SELECTOR =
-    'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 function MobileMenuPanel({ onClose, children }: { onClose: () => void; children: ReactNode }) {
     const panelRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        const panel = panelRef.current;
-        if (!panel) return;
-
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape") {
-                onClose();
-                return;
-            }
-
-            if (e.key !== "Tab") return;
-
-            const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
-            if (focusable.length === 0) return;
-
-            const first = focusable[0];
-            const last = focusable[focusable.length - 1];
-
-            if (e.shiftKey && document.activeElement === first) {
-                e.preventDefault();
-                last.focus();
-            } else if (!e.shiftKey && document.activeElement === last) {
-                e.preventDefault();
-                first.focus();
-            }
-        };
-
-        document.addEventListener("keydown", handleKeyDown);
-
-        const firstFocusable = panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
-        firstFocusable?.focus();
-
-        return () => document.removeEventListener("keydown", handleKeyDown);
-    }, [onClose]);
+    // Focus moves in once on mount (not on every re-render), Tab is trapped, Escape closes, the page
+    // behind stops scrolling while the menu is open, and focus returns to the menu button on close.
+    useModalA11y({ open: true, containerRef: panelRef, onClose });
 
     return (
         <motion.div
@@ -67,11 +35,12 @@ function MobileMenuPanel({ onClose, children }: { onClose: () => void; children:
             role="dialog"
             aria-modal="true"
             aria-label="Navigation menu"
+            tabIndex={-1}
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3, ease: "easeOut" }}
-            className="fixed inset-0 z-40 bg-cream pt-24 px-6 md:hidden"
+            className="fixed inset-0 z-40 overflow-y-auto bg-cream pt-24 px-6 outline-none md:hidden"
         >
             {children}
         </motion.div>
@@ -97,7 +66,7 @@ function NavLink({
     return (
         <Link
             href={href}
-            className={`relative inline-flex items-center rounded-full px-3 py-2 text-sm font-inter font-medium transition-all duration-300 ease-out ${
+            className={`relative inline-flex min-h-0 items-center rounded-full px-3 py-1.5 text-sm font-inter font-medium transition-all duration-300 ease-out ${
                 isActive
                     ? "bg-white text-terracotta shadow-[0_12px_24px_-18px_rgba(0,0,0,0.45)]"
                     : isHomeHeroNav
@@ -120,6 +89,8 @@ function NavLink({
 export default function Navbar() {
     const router = useRouter();
     const [isScrolled, setIsScrolled] = useState(false);
+    const [isHidden, setIsHidden] = useState(false);
+    const navScrollRef = useRef<NavScrollState>({ hidden: false, lastY: 0 });
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [query, setQuery] = useState("");
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -132,13 +103,26 @@ export default function Navbar() {
         ? SUGGESTIONS.filter((s) => s.toLowerCase().includes(query.toLowerCase()))
         : SUGGESTIONS;
 
+    // Hide while scrolling down, show on scroll up (see nav-scroll.ts). Browsers already fire
+    // scroll at most once per frame, so the position is read directly rather than deferred to
+    // requestAnimationFrame, which drops updates whenever frames stall.
     useEffect(() => {
         const handleScroll = () => {
             setIsScrolled(window.scrollY > 20);
+            navScrollRef.current = nextNavScrollState(navScrollRef.current, window.scrollY);
+            setIsHidden(navScrollRef.current.hidden);
         };
-        window.addEventListener("scroll", handleScroll);
+
+        handleScroll();
+        window.addEventListener("scroll", handleScroll, { passive: true });
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
+
+    // A new page starts with the bar visible.
+    useEffect(() => {
+        navScrollRef.current = { ...navScrollRef.current, hidden: false };
+        setIsHidden(false);
+    }, [pathname]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -153,6 +137,10 @@ export default function Navbar() {
         };
     }, []);
 
+    const closeMobileMenu = useCallback(() => setIsMobileMenuOpen(false), []);
+    // Never hide what the visitor is using: the open menu or the search suggestions.
+    const isHeaderHidden = isHidden && !isMobileMenuOpen && !showSuggestions;
+
     const userInitial =
         user?.user_metadata?.full_name?.[0] || user?.email?.[0]?.toUpperCase() || "U";
     const userAvatar = user?.user_metadata?.avatar_url || "";
@@ -160,37 +148,46 @@ export default function Navbar() {
     return (
         <>
             <motion.header
-                initial={{ y: -100 }}
-                animate={{ y: 0 }}
-                transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                className={`fixed top-0 left-0 right-0 z-[80] border-b border-black/5 transition-all duration-500 ${
+                // Same unit both ways: animating between "%" and px makes framer-motion convert
+                // units and apply the reveal late.
+                initial={{ y: "-100%" }}
+                animate={{ y: isHeaderHidden ? "-100%" : "0%" }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                // A keyboard user tabbing into a hidden bar gets it back.
+                onFocusCapture={() => {
+                    navScrollRef.current = { ...navScrollRef.current, hidden: false };
+                    setIsHidden(false);
+                }}
+                // No transition on transform: framer-motion drives it, and a CSS transition on
+                // top would lag every frame.
+                className={`fixed top-0 left-0 right-0 z-[80] border-b border-black/5 transition-[background-color,box-shadow,padding] duration-300 ${
                     isScrolled
-                        ? "bg-cream/96 backdrop-blur-xl shadow-soft py-3"
+                        ? "bg-cream/96 backdrop-blur-xl shadow-soft py-1.5"
                         : isHomePage
-                          ? "bg-cream/88 backdrop-blur-lg shadow-[0_10px_30px_-22px_rgba(0,0,0,0.5)] py-4"
-                          : "bg-cream/92 backdrop-blur-lg shadow-soft py-4"
+                          ? "bg-cream/88 backdrop-blur-lg shadow-[0_10px_30px_-22px_rgba(0,0,0,0.5)] py-2"
+                          : "bg-cream/92 backdrop-blur-lg shadow-soft py-2"
                 }`}
             >
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between">
                         <Link href="/" className="flex items-center gap-2.5 group">
-                            <div className="relative w-9 h-9 rounded-lg overflow-hidden transition-transform duration-300 group-hover:scale-110">
+                            <div className="relative w-8 h-8 rounded-lg overflow-hidden transition-transform duration-300 group-hover:scale-110">
                                 <Image
-                                    src="/images/logo-black.jpeg"
+                                    src="/images/logo-black.webp"
                                     alt="Only Workshops"
                                     fill
-                                    sizes="36px"
+                                    sizes="32px"
                                     className="object-cover"
                                 />
                             </div>
-                            <span className="font-playfair text-xl text-dark hidden sm:block">
+                            <span className="font-playfair text-lg text-dark hidden sm:block">
                                 Only Workshops
                             </span>
                         </Link>
 
                         <div
                             ref={searchContainerRef}
-                            className={`hidden md:flex items-center gap-2 rounded-full px-5 py-2.5 shadow-soft border border-gray-100 max-w-md flex-1 mx-8 transition-all duration-300 relative ${
+                            className={`hidden md:flex items-center gap-2 rounded-full px-4 py-1.5 shadow-soft border border-gray-100 max-w-md flex-1 mx-6 transition-all duration-300 relative ${
                                 isScrolled ? "bg-white" : "bg-white/95"
                             }`}
                         >
@@ -213,7 +210,7 @@ export default function Navbar() {
                                         );
                                     }
                                 }}
-                                className="flex-1 w-full bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted"
+                                className="flex-1 w-full min-h-0 bg-transparent outline-none text-sm font-inter text-dark placeholder:text-dark-muted"
                             />
                             {showSuggestions && filteredSuggestions.length > 0 && (
                                 <div
@@ -297,7 +294,7 @@ export default function Navbar() {
                                     </NavLink>
                                     <Link
                                         href="/auth/signup"
-                                        className="btn-primary !py-2.5 !px-6 text-sm"
+                                        className="btn-primary min-h-0 !py-2 !px-5 text-sm"
                                     >
                                         Sign Up
                                     </Link>
@@ -308,7 +305,7 @@ export default function Navbar() {
                                     <Link
                                         href="/profile"
                                         aria-label="Open profile"
-                                        className={`w-9 h-9 rounded-full overflow-hidden flex items-center justify-center font-inter font-bold text-sm hover:opacity-90 transition-opacity ${
+                                        className={`w-8 h-8 min-h-0 rounded-full overflow-hidden flex items-center justify-center font-inter font-bold text-sm hover:opacity-90 transition-opacity ${
                                             userAvatar
                                                 ? "bg-cream border border-clay/40"
                                                 : "bg-terracotta text-white"
@@ -318,8 +315,8 @@ export default function Navbar() {
                                             <Image
                                                 src={userAvatar}
                                                 alt="Profile avatar"
-                                                width={36}
-                                                height={36}
+                                                width={32}
+                                                height={32}
                                                 className="h-full w-full object-cover"
                                             />
                                         ) : (
@@ -329,7 +326,7 @@ export default function Navbar() {
                                     <button
                                         onClick={signOut}
                                         aria-label="Sign out"
-                                        className="text-sm font-inter font-medium text-dark-muted hover:text-terracotta transition-colors duration-300 flex items-center gap-1"
+                                        className="min-h-0 text-sm font-inter font-medium text-dark-muted hover:text-terracotta transition-colors duration-300 flex items-center gap-1"
                                     >
                                         <LogOut className="w-4 h-4" />
                                     </button>
@@ -338,8 +335,10 @@ export default function Navbar() {
                         </nav>
 
                         <button
+                            type="button"
                             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                             aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+                            aria-expanded={isMobileMenuOpen}
                             className="md:hidden p-2 rounded-xl hover:bg-clay/30 transition-colors"
                         >
                             {isMobileMenuOpen ? (
@@ -354,7 +353,7 @@ export default function Navbar() {
 
             <AnimatePresence>
                 {isMobileMenuOpen && (
-                    <MobileMenuPanel onClose={() => setIsMobileMenuOpen(false)}>
+                    <MobileMenuPanel onClose={closeMobileMenu}>
                         {user && (
                             <Link
                                 href="/profile"

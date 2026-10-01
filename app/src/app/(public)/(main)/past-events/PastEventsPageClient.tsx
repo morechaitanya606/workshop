@@ -1,23 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useReducedMotion, motion } from "framer-motion";
-import {
-    ArrowLeft,
-    Calendar,
-    MapPin,
-    ChevronLeft,
-    ChevronRight,
-    Camera,
-    Info,
-} from "lucide-react";
+import { motion } from "framer-motion";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
+import { ArrowLeft, Calendar, MapPin, ChevronLeft, ChevronRight, Camera, Info } from "lucide-react";
 import Footer from "@/components/Footer";
 import { Dialog } from "@/components/ui/dialog";
 import type { Workshop } from "@/lib/data";
 import { formatDate } from "@/lib/utils";
+import { loadMorePastEvents } from "./actions";
 import {
     fadeInUp,
     quickTransition,
@@ -33,24 +27,58 @@ interface LightboxState {
 }
 
 export default function PastEventsPageClient({
-    allWorkshops,
+    initialWorkshops,
+    initialTotal,
+    pageSize,
     source,
-    todayIso,
 }: {
-    allWorkshops: Workshop[];
+    initialWorkshops: Workshop[];
+    initialTotal: number;
+    pageSize: number;
     source: "supabase" | "error";
-    todayIso: string;
 }) {
     const router = useRouter();
-    const shouldReduceMotion = Boolean(useReducedMotion());
+    const shouldReduceMotion = usePrefersReducedMotion();
     const [lightbox, setLightbox] = useState<LightboxState | null>(null);
     const sectionMotionProps = useMotionProps(shouldReduceMotion, fadeInUp, standardTransition);
 
-    const workshops = useMemo(() => {
-        return allWorkshops
-            .filter((workshop) => workshop.date < todayIso)
-            .sort((a, b) => b.date.localeCompare(a.date));
-    }, [allWorkshops, todayIso]);
+    const [workshops, setWorkshops] = useState<Workshop[]>(initialWorkshops);
+    const [total, setTotal] = useState(initialTotal);
+    const [loadedPages, setLoadedPages] = useState(1);
+    const [isLoadingMore, startLoadingMore] = useTransition();
+    const [loadMoreError, setLoadMoreError] = useState(false);
+
+    // The server revalidates every 60s; if a fresh first page arrives, restart from it.
+    useEffect(() => {
+        setWorkshops(initialWorkshops);
+        setTotal(initialTotal);
+        setLoadedPages(1);
+        setLoadMoreError(false);
+    }, [initialWorkshops, initialTotal]);
+
+    const hasMore = workshops.length < total && loadedPages * pageSize <= total;
+
+    const handleLoadMore = () => {
+        const nextPage = loadedPages + 1;
+        setLoadMoreError(false);
+        startLoadingMore(async () => {
+            try {
+                const result = await loadMorePastEvents(nextPage);
+                if (!result.ok) {
+                    setLoadMoreError(true);
+                    return;
+                }
+                setWorkshops((previous) => {
+                    const seen = new Set(previous.map((workshop) => workshop.id));
+                    return [...previous, ...result.workshops.filter((w) => !seen.has(w.id))];
+                });
+                setTotal(result.total);
+                setLoadedPages(nextPage);
+            } catch {
+                setLoadMoreError(true);
+            }
+        });
+    };
 
     const currentWorkshop = lightbox !== null ? workshops[lightbox.workshopIndex] : null;
     const currentPhotos = currentWorkshop?.galleryImages ?? [];
@@ -116,7 +144,6 @@ export default function PastEventsPageClient({
                             Relive the magic of our past workshops. Browse photos, see what
                             attendees experienced, and get inspired for upcoming events.
                         </p>
-
                     </motion.div>
                 </div>
             </section>
@@ -208,22 +235,6 @@ export default function PastEventsPageClient({
                                         )}
                                     </div>
 
-                                    {/* Attendee feedback */}
-                                    {workshop.feedbackHighlight && (
-                                        <div className="px-5 pb-3">
-                                            <div className="bg-cream-100 rounded-xl p-3.5 border border-clay/30">
-                                                <p className="text-xs font-inter text-dark-secondary leading-relaxed italic line-clamp-2">
-                                                    &ldquo;{workshop.feedbackHighlight}&rdquo;
-                                                </p>
-                                                {workshop.feedbackAuthor && (
-                                                    <p className="text-[11px] font-inter text-dark-muted mt-1.5">
-                                                        — {workshop.feedbackAuthor}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-
                                     {/* Photo gallery grid */}
                                     {workshop.galleryImages &&
                                         workshop.galleryImages.length > 0 && (
@@ -279,6 +290,24 @@ export default function PastEventsPageClient({
                                 </motion.div>
                             ))}
                         </motion.div>
+                    )}
+
+                    {workshops.length > 0 && (hasMore || loadMoreError) && (
+                        <div className="mt-10 flex flex-col items-center gap-3">
+                            {loadMoreError && (
+                                <p role="alert" className="text-sm font-inter text-red-700">
+                                    Couldn&apos;t load more events. Please try again.
+                                </p>
+                            )}
+                            <button
+                                type="button"
+                                onClick={handleLoadMore}
+                                disabled={isLoadingMore}
+                                className="btn-secondary inline-flex items-center justify-center disabled:opacity-60"
+                            >
+                                {isLoadingMore ? "Loading..." : "Load more events"}
+                            </button>
+                        </div>
                     )}
                 </div>
             </section>

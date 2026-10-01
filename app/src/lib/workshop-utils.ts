@@ -134,19 +134,81 @@ type BuildWorkshopInsertOptions = {
     approvalStatus?: "pending" | "approved" | "rejected";
 };
 
+function slugifyTitle(title: string) {
+    return (
+        title
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/(^-|-$)/g, "")
+            .slice(0, 36) || "workshop"
+    );
+}
+
+/**
+ * One workshop row per session. A single session keeps the historical `<slug>-<timestamp>` id;
+ * several sessions add the slot's date and time so every id in the batch is unique and readable.
+ */
+function buildSessionWorkshopId(
+    slug: string,
+    timestamp: number,
+    session: { date: string; time: string },
+    multiple: boolean
+) {
+    if (!multiple) return `${slug}-${timestamp}`;
+    const datePart = session.date.replace(/-/g, "");
+    const timePart = session.time.replace(/:/g, "").slice(0, 4);
+    return `${slug}-${timestamp}-${datePart}-${timePart}`;
+}
+
+/**
+ * Builds the rows for a create request: one per session, identical details, own date, time and
+ * capacity. Insert them with a single `.insert(rows)` so the whole batch is atomic.
+ */
+export function buildWorkshopInsertPayloads(
+    input: WorkshopCreateInput,
+    createdBy: string,
+    options: BuildWorkshopInsertOptions = {},
+    timestamp: number = Date.now()
+): TablesInsert<"workshops">[] {
+    const slug = slugifyTitle(input.title);
+    const sessions =
+        Array.isArray(input.sessions) && input.sessions.length > 0
+            ? input.sessions
+            : [{ date: input.date, time: input.time, maxSeats: input.maxSeats }];
+    const multiple = sessions.length > 1;
+    const usedIds = new Set<string>();
+
+    return sessions.map((session, index) => {
+        let id = buildSessionWorkshopId(slug, timestamp, session, multiple);
+        if (usedIds.has(id)) id = `${id}-${index + 1}`;
+        usedIds.add(id);
+
+        const maxSeats = session.maxSeats ?? input.maxSeats;
+        return buildWorkshopRow(input, createdBy, options, {
+            id,
+            date: session.date,
+            time: session.time,
+            maxSeats,
+        });
+    });
+}
+
 export function buildWorkshopInsertPayload(
     input: WorkshopCreateInput,
     createdBy: string,
     options: BuildWorkshopInsertOptions = {}
 ): TablesInsert<"workshops"> {
-    const normalizedTitle = input.title.trim();
-    const slug = normalizedTitle
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "")
-        .slice(0, 36);
+    return buildWorkshopInsertPayloads(input, createdBy, options)[0];
+}
 
-    const id = `${slug || "workshop"}-${Date.now()}`;
+function buildWorkshopRow(
+    input: WorkshopCreateInput,
+    createdBy: string,
+    options: BuildWorkshopInsertOptions,
+    slot: { id: string; date: string; time: string; maxSeats: number }
+): TablesInsert<"workshops"> {
+    const { id } = slot;
     const coverImage = normalizeWorkshopImageUrlInput(input.coverImage);
     const galleryImages = input.galleryImages.map((item: string) =>
         normalizeWorkshopImageUrlInput(item)
@@ -162,10 +224,10 @@ export function buildWorkshopInsertPayload(
         location: input.location,
         city: input.city,
         duration: input.duration,
-        date: input.date,
-        time: input.time,
-        max_seats: input.maxSeats,
-        seats_remaining: input.maxSeats,
+        date: slot.date,
+        time: slot.time,
+        max_seats: slot.maxSeats,
+        seats_remaining: slot.maxSeats,
         cover_image: coverImage,
         gallery_images: galleryImages,
         video_url: videoUrl || null,
@@ -196,6 +258,144 @@ export function buildWorkshopInsertPayload(
     };
 
     return payload;
+}
+
+/** Form fields (all strings, as the create forms hold them) that "start from existing" fills. */
+export type WorkshopFormPrefill = {
+    title: string;
+    description: string;
+    category: string;
+    price: string;
+    location: string;
+    city: string;
+    duration: string;
+    maxSeats: string;
+    coverImage: string;
+    galleryImages: string;
+    videoUrl: string;
+    instagramLink: string;
+    youtubeLink: string;
+    websiteLink: string;
+    hostName: string;
+    hostBio: string;
+    hostExperience: string;
+    hostInstagram: string;
+    hostYoutube: string;
+    hostWebsite: string;
+    whatYouLearn: string;
+    materialsProvided: string;
+    badgeLabels: string;
+    eventAddress: string;
+    latitude: string;
+    longitude: string;
+    locationImages: string;
+    earlyBirdEnabled: string;
+    earlyBirdDiscountType: string;
+    earlyBirdDiscountValue: string;
+    earlyBirdDaysAfterListing: string;
+};
+
+const joinLines = (items: string[] | undefined) => (items ?? []).join("\n");
+
+/**
+ * Maps an existing workshop to create-form values so it can be reused as a template.
+ *
+ * Deliberately NOT copied: date, time, sessions, seats remaining, rating, review count,
+ * approval status, bestseller/new flags, id and timestamps. `maxSeats` is the workshop's capacity
+ * (not a counter), so it is copied as the default seat count for the new sessions.
+ */
+export function mapWorkshopToFormPrefill(workshop: Workshop): WorkshopFormPrefill {
+    return {
+        title: workshop.title ?? "",
+        description: workshop.description ?? "",
+        category: workshop.category ?? "",
+        price: workshop.price ? String(workshop.price) : "",
+        location: workshop.location ?? "",
+        city: workshop.city ?? "",
+        duration: workshop.duration ?? "",
+        maxSeats: workshop.maxSeats ? String(workshop.maxSeats) : "",
+        coverImage: workshop.coverImage ?? "",
+        galleryImages: joinLines(workshop.galleryImages),
+        videoUrl: workshop.videoUrl ?? "",
+        instagramLink: workshop.socialLinks?.instagram ?? "",
+        youtubeLink: workshop.socialLinks?.youtube ?? "",
+        websiteLink: workshop.socialLinks?.website ?? "",
+        hostName: workshop.hostName ?? "",
+        hostBio: workshop.hostBio ?? "",
+        hostExperience: workshop.hostExperience ?? "",
+        hostInstagram: workshop.hostSocialLinks?.instagram ?? "",
+        hostYoutube: workshop.hostSocialLinks?.youtube ?? "",
+        hostWebsite: workshop.hostSocialLinks?.website ?? "",
+        whatYouLearn: joinLines(workshop.whatYouLearn),
+        materialsProvided: joinLines(workshop.materialsProvided),
+        badgeLabels: joinLines(workshop.badgeLabels),
+        eventAddress: workshop.eventAddress ?? "",
+        latitude: typeof workshop.latitude === "number" ? String(workshop.latitude) : "",
+        longitude: typeof workshop.longitude === "number" ? String(workshop.longitude) : "",
+        locationImages: joinLines(workshop.locationImages),
+        earlyBirdEnabled: workshop.earlyBirdEnabled ? "true" : "false",
+        earlyBirdDiscountType: workshop.earlyBirdDiscountType === "fixed" ? "fixed" : "percentage",
+        earlyBirdDiscountValue: workshop.earlyBirdDiscountValue
+            ? String(workshop.earlyBirdDiscountValue)
+            : "",
+        earlyBirdDaysAfterListing: workshop.earlyBirdDaysAfterListing
+            ? String(workshop.earlyBirdDaysAfterListing)
+            : "",
+    };
+}
+
+/**
+ * The create forms hold a category `<select>` (a known label or `__other__`) plus a free-text
+ * field. Given a copied category, returns the state for both.
+ */
+export function getCategorySelectionState(category: string, knownLabels: string[]) {
+    const trimmed = category.trim();
+    if (!trimmed) return { selection: "", custom: "" };
+    if (knownLabels.includes(trimmed)) return { selection: trimmed, custom: "" };
+    return { selection: "__other__", custom: trimmed };
+}
+
+export type ReusableWorkshop = Workshop & {
+    /** How many sessions (rows) share this workshop's title, city and venue. */
+    sessionCount: number;
+};
+
+/**
+ * A workshop run in several sessions exists as several rows with identical details. For the
+ * "start from an existing workshop" list we only want one entry per workshop: the most recently
+ * created row (a later copy is more likely to hold corrected details), most recent first.
+ */
+export function dedupeWorkshopsForReuse(workshops: Workshop[]): ReusableWorkshop[] {
+    const stamp = (workshop: Workshop) => workshop.createdAt || workshop.date || "";
+    const groups = new Map<string, { latest: Workshop; count: number }>();
+
+    for (const workshop of workshops) {
+        const key = [workshop.title, workshop.city, workshop.location]
+            .map((part) =>
+                String(part ?? "")
+                    .trim()
+                    .toLowerCase()
+            )
+            .join("|");
+        const group = groups.get(key);
+        if (!group) {
+            groups.set(key, { latest: workshop, count: 1 });
+            continue;
+        }
+        group.count += 1;
+        if (stamp(workshop) > stamp(group.latest)) group.latest = workshop;
+    }
+
+    return [...groups.values()]
+        .map(({ latest, count }) => ({ ...latest, sessionCount: count }))
+        .sort((a, b) => stamp(b).localeCompare(stamp(a)));
+}
+
+/** Earliest session first (date, then time). Does not mutate the input. */
+export function sortWorkshopsBySession(workshops: Workshop[]) {
+    return [...workshops].sort(
+        (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
+    );
 }
 
 export function sortWorkshops(workshops: Workshop[], sort: WorkshopQueryInput["sort"]) {

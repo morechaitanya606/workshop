@@ -3,10 +3,8 @@
 import { Children } from "react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { motion, useReducedMotion } from "framer-motion";
 import Footer from "@/components/Footer";
 import { RevealGroup, RevealItem } from "@/components/ui";
-import { fadeInUp, standardTransition, revealViewport } from "@/lib/motion-presets";
 import { cn } from "@/lib/utils";
 
 interface StaticPageProps {
@@ -24,7 +22,6 @@ export default function StaticPage({
     children,
     alignment = "left",
 }: StaticPageProps) {
-    const prefersReducedMotion = useReducedMotion();
     const childSections = Children.toArray(children);
     const isCentered = alignment === "center";
 
@@ -32,14 +29,8 @@ export default function StaticPage({
         <>
             <section className="min-h-screen bg-cream pt-28 pb-16 section-padding">
                 <div className="max-w-3xl mx-auto">
-                    <motion.div
-                        className={cn(isCentered && "text-center")}
-                        variants={prefersReducedMotion ? undefined : fadeInUp}
-                        initial={prefersReducedMotion ? undefined : "hidden"}
-                        whileInView={prefersReducedMotion ? undefined : "visible"}
-                        viewport={prefersReducedMotion ? undefined : revealViewport}
-                        transition={prefersReducedMotion ? { duration: 0 } : standardTransition}
-                    >
+                    {/* CSS entrance: always visible in the server HTML, never gated on hydration. */}
+                    <div className={cn("reveal-up", isCentered && "text-center")}>
                         {icon ? (
                             <div
                                 className={cn(
@@ -52,7 +43,7 @@ export default function StaticPage({
                         ) : null}
                         <h1 className="heading-lg mb-3">{title}</h1>
                         <p className="text-body text-dark-muted mb-8">{description}</p>
-                    </motion.div>
+                    </div>
 
                     {childSections.length > 0 ? (
                         <RevealGroup

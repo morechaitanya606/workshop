@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, type MouseEvent } from "react";
+import React, { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
@@ -69,16 +69,28 @@ export default function WorkshopCard({
     const [imageIndex, setImageIndex] = useState(0);
     const [imageLoaded, setImageLoaded] = useState(false);
     const [heartPopping, setHeartPopping] = useState(false);
+    const [shareMessage, setShareMessage] = useState<string | null>(null);
+    const shareMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // "Now" is read after mount. Calling Date.now() during render made the server HTML and
+    // the first client render disagree (the "Starts in Nh" badge and the past/upcoming style),
+    // which React reports as a hydration mismatch. Before mount we only use the date-level
+    // comparison against the server-provided todayIso.
+    const [nowMs, setNowMs] = useState<number | null>(null);
+    useEffect(() => {
+        setNowMs(Date.now());
+    }, []);
 
     const workshopDateTime = getWorkshopDateTime(workshop.date, workshop.time);
-    const now = Date.now();
-    const isPastWorkshop = workshopDateTime
-        ? workshopDateTime.getTime() < now
-        : workshop.date < todayIso;
+    const isPastWorkshop =
+        workshopDateTime && nowMs !== null
+            ? workshopDateTime.getTime() < nowMs
+            : workshop.date < todayIso;
 
-    const hoursUntil = workshopDateTime
-        ? (workshopDateTime.getTime() - now) / (1000 * 60 * 60)
-        : null;
+    const hoursUntil =
+        workshopDateTime && nowMs !== null
+            ? (workshopDateTime.getTime() - nowMs) / (1000 * 60 * 60)
+            : null;
     const isStartingSoon = hoursUntil !== null && hoursUntil > 0 && hoursUntil <= 48;
 
     const imagePool = useMemo(() => {
@@ -209,21 +221,45 @@ export default function WorkshopCard({
         }
     };
 
-    const handleShare = (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
+    useEffect(
+        () => () => {
+            if (shareMessageTimerRef.current) clearTimeout(shareMessageTimerRef.current);
+        },
+        []
+    );
+
+    const announceShare = (message: string) => {
+        setShareMessage(message);
+        if (shareMessageTimerRef.current) clearTimeout(shareMessageTimerRef.current);
+        shareMessageTimerRef.current = setTimeout(() => setShareMessage(null), 2500);
+    };
+
+    const handleShare = async (event: MouseEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
         const url = `${window.location.origin}/workshop/${workshop.id}`;
-        if (navigator.share) {
-            navigator
-                .share({
+
+        if (typeof navigator.share === "function") {
+            try {
+                await navigator.share({
                     title: workshop.title,
                     text: `Check out this workshop: ${workshop.title}`,
-                    url: url,
-                })
-                .catch(console.error);
-        } else {
-            navigator.clipboard.writeText(url);
-            alert("Link copied to clipboard!");
+                    url,
+                });
+            } catch (error) {
+                // Closing the share sheet rejects with AbortError; that is not a failure.
+                if (!(error instanceof DOMException && error.name === "AbortError")) {
+                    announceShare("Could not share this workshop.");
+                }
+            }
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(url);
+            announceShare("Link copied to clipboard.");
+        } catch {
+            announceShare("Could not copy the link.");
         }
     };
 
@@ -237,16 +273,19 @@ export default function WorkshopCard({
                 shouldAnimateOnScroll ? { ...standardTransition, delay: index * 0.08 } : undefined
             }
         >
-            <Link
-                href={`/workshop/${workshop.id}`}
-                className="block group"
-                onFocus={() => setIsHovered(true)}
-                onBlur={() => setIsHovered(false)}
+            {/* The card is a plain container; the Link and the share/save buttons are siblings
+                inside it. Buttons nested inside an <a> are invalid HTML, announce badly, and make
+                the click target ambiguous, which is why the old code needed preventDefault. */}
+            <div
+                className={`group relative card-workshop light-sweep hover-lift active:scale-[0.97] ${isPastWorkshop ? " card-workshop-past" : ""}`}
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
             >
-                <div
-                    className={`card-workshop light-sweep hover-lift active:scale-[0.97] flex flex-row sm:flex-col ${isPastWorkshop ? " card-workshop-past" : ""}`}
-                    onMouseEnter={() => setIsHovered(true)}
-                    onMouseLeave={() => setIsHovered(false)}
+                <Link
+                    href={`/workshop/${workshop.id}`}
+                    className="flex h-full flex-row sm:flex-col"
+                    onFocus={() => setIsHovered(true)}
+                    onBlur={() => setIsHovered(false)}
                 >
                     {/* Image */}
                     <div
@@ -277,44 +316,6 @@ export default function WorkshopCard({
                                 </span>
                             </div>
                         )}
-                        {/* Quick Actions Overlay */}
-                        <div
-                            className={`absolute bottom-3 right-3 flex flex-col gap-2 transition-all duration-300 ${
-                                isHovered || isSaved
-                                    ? "opacity-100 translate-x-0"
-                                    : "opacity-0 translate-x-4 md:opacity-0 md:group-hover:opacity-100 md:group-hover:translate-x-0"
-                            }`}
-                        >
-                            {/* Share Button */}
-                            <button
-                                type="button"
-                                onClick={handleShare}
-                                aria-label="Share workshop"
-                                className="p-2 bg-white/90 backdrop-blur-sm rounded-full shadow-soft transition-all duration-300 hover:bg-white hover:scale-110 hover:text-terracotta active:scale-95"
-                            >
-                                <Share2 className="w-4 h-4 text-dark-muted hover:text-terracotta transition-colors" />
-                            </button>
-
-                            {/* Save Heart */}
-                            <button
-                                type="button"
-                                onClick={handleToggleFavorite}
-                                disabled={favoriteLoading}
-                                aria-label={isSaved ? "Remove from wishlist" : "Save to wishlist"}
-                                aria-pressed={isSaved}
-                                className={`p-2 bg-white/90 backdrop-blur-sm rounded-full shadow-soft transition-all duration-300 hover:bg-white hover:scale-110 active:scale-95 ${
-                                    favoriteLoading ? "cursor-not-allowed opacity-50" : ""
-                                }`}
-                            >
-                                <Heart
-                                    className={`w-4 h-4 transition-colors ${heartPopping ? "heart-pop" : ""} ${
-                                        isSaved
-                                            ? "text-terracotta fill-terracotta"
-                                            : "text-dark-muted hover:text-terracotta"
-                                    }`}
-                                />
-                            </button>
-                        </div>
                         {/* Gradient overlay */}
                         <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/20 via-black/5 to-transparent opacity-70 group-hover:opacity-90 transition-opacity duration-500" />
                     </div>
@@ -451,8 +452,63 @@ export default function WorkshopCard({
                             )}
                         </div>
                     </div>
+                </Link>
+
+                {/* Quick actions. This layer has the same box as the image (same width and
+                    aspect ratio) so the buttons sit over the image while staying outside the
+                    link. Only the buttons capture pointer events. */}
+                <div className="pointer-events-none absolute left-0 top-0 z-10 aspect-[5/4] w-2/5 sm:w-full">
+                    <div
+                        className={`pointer-events-auto absolute bottom-3 right-3 flex flex-col gap-2 transition-all duration-300 focus-within:translate-x-0 focus-within:opacity-100 ${
+                            isHovered || isSaved
+                                ? "opacity-100 translate-x-0"
+                                : "opacity-0 translate-x-4 md:opacity-0 md:group-hover:opacity-100 md:group-hover:translate-x-0"
+                        }`}
+                    >
+                        <button
+                            type="button"
+                            onClick={(event) => void handleShare(event)}
+                            aria-label="Share workshop"
+                            className="p-2 bg-white/90 backdrop-blur-sm rounded-full shadow-soft transition-all duration-300 hover:bg-white hover:scale-110 hover:text-terracotta active:scale-95"
+                        >
+                            <Share2 className="w-4 h-4 text-dark-muted hover:text-terracotta transition-colors" />
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleToggleFavorite}
+                            disabled={favoriteLoading}
+                            aria-label={isSaved ? "Remove from wishlist" : "Save to wishlist"}
+                            aria-pressed={isSaved}
+                            className={`p-2 bg-white/90 backdrop-blur-sm rounded-full shadow-soft transition-all duration-300 hover:bg-white hover:scale-110 active:scale-95 ${
+                                favoriteLoading ? "cursor-not-allowed opacity-50" : ""
+                            }`}
+                        >
+                            <Heart
+                                className={`w-4 h-4 transition-colors ${heartPopping ? "heart-pop" : ""} ${
+                                    isSaved
+                                        ? "text-terracotta fill-terracotta"
+                                        : "text-dark-muted hover:text-terracotta"
+                                }`}
+                            />
+                        </button>
+                    </div>
+
+                    {/* Inline replacement for the old alert(): always mounted so screen readers
+                        announce changes, visible only while there is a message. */}
+                    <p
+                        role="status"
+                        aria-live="polite"
+                        className={
+                            shareMessage
+                                ? "absolute bottom-3 left-3 max-w-[60%] rounded-full bg-dark/90 px-3 py-1.5 text-[11px] font-inter font-semibold text-white"
+                                : "sr-only"
+                        }
+                    >
+                        {shareMessage}
+                    </p>
                 </div>
-            </Link>
+            </div>
         </motion.div>
     );
 }

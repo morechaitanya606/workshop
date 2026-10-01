@@ -71,9 +71,25 @@ These are not hard-required for build success, but they matter for a stable live
 
 - `UPSTASH_REDIS_REST_URL`
 - `UPSTASH_REDIS_REST_TOKEN`
-- `RESEND_API_KEY`
+- `MAILJET_API_KEY` and `MAILJET_SECRET_KEY` (primary mail provider; validate the sending domain
+  in Mailjet first -- SPF and DKIM -- or sends are rejected)
+- `RESEND_API_KEY` (optional fallback, used automatically if Mailjet is rate-limited or down;
+  at least one of the two providers is required in production)
+- `EMAIL_PROVIDER` (`mailjet` or `resend`; optional, picks which one is tried first)
+- `EMAIL_FROM` (optional; defaults to `Only Workshops <no-reply@updates.onlyworkshop.com>`)
 - `CAREERS_INBOX_EMAIL`
 - `CRON_SECRET`
+- `NEXT_PUBLIC_MEDIA_BASE_URL` (optional; leave unset. The hero videos are committed under
+  `public/videos` and served from Vercel's CDN. Set it only to move them to a Cloudflare R2
+  public bucket -- see `public/videos/README.md`)
+
+## Media
+
+- The four hero renditions are committed in `public/videos` and deploy with the site; no
+  upload step. After re-encoding one, replace the file there (a new cut should get a new file
+  name, since browsers cache the old one).
+- Convert any new JPG/PNG/HEIC under `public/` with `node scripts/convert-images-to-webp.mjs`
+  (`--dry-run` to preview). User uploads are converted to WebP by `/api/upload` automatically.
 
 ## Launch-critical routes to verify
 

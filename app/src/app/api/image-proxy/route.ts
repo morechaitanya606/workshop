@@ -10,22 +10,36 @@ const ALLOWED_HOSTS = new Set([
     "drive.usercontent.google.com",
     "images.unsplash.com",
 ]);
-const ALLOWED_HOST_SUFFIXES = [
-    ".supabase.co",
-    ".googleusercontent.com",
-    ".r2.cloudflarestorage.com",
-];
+const ALLOWED_HOST_SUFFIXES = [".googleusercontent.com", ".r2.cloudflarestorage.com"];
 
 const MAX_BYTES = 25 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
 /** Every other outbound call in the app is bounded; this one was not, so a slow upstream
  *  on an allowed host could pin the lambda until Vercel killed it at maxDuration. */
 const UPSTREAM_TIMEOUT_MS = 8000;
+/** The header timeout stops once headers arrive, so a host that trickles the body at a byte
+ *  a second kept the lambda busy for as long as it liked. This bounds the WHOLE exchange. */
+const TOTAL_DEADLINE_MS = 15_000;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+/**
+ * `*.supabase.co` admitted every tenant's project, i.e. any attacker with a free Supabase
+ * account could host a payload on an "allowed" origin. Only OUR project's host is allowed.
+ */
+function getOwnSupabaseHost() {
+    const raw = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+    if (!raw) return null;
+    try {
+        return new URL(raw).hostname.toLowerCase();
+    } catch {
+        return null;
+    }
+}
 
 function isAllowedHost(hostname: string) {
     const host = hostname.toLowerCase();
     if (ALLOWED_HOSTS.has(host)) return true;
+    if (host === getOwnSupabaseHost()) return true;
     return ALLOWED_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
 }
 
@@ -33,21 +47,21 @@ function isAllowedImageUrl(url: URL) {
     return url.protocol === "https:" && isAllowedHost(url.hostname);
 }
 
-async function fetchAllowedImage(initialUrl: URL) {
+/** `deadline` is shared by every hop AND the body read: aborting it tears down the stream. */
+async function fetchAllowedImage(initialUrl: URL, deadline: AbortController) {
     let currentUrl = initialUrl;
 
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+        const headerTimeout = setTimeout(() => deadline.abort(), UPSTREAM_TIMEOUT_MS);
 
         let response: Response;
         try {
             response = await fetch(currentUrl.toString(), {
                 redirect: "manual",
-                signal: controller.signal,
+                signal: deadline.signal,
             });
         } finally {
-            clearTimeout(timeout);
+            clearTimeout(headerTimeout);
         }
 
         if (!REDIRECT_STATUSES.has(response.status)) {
@@ -70,7 +84,7 @@ async function fetchAllowedImage(initialUrl: URL) {
     throw new Error("TOO_MANY_REDIRECTS");
 }
 
-async function readLimitedResponseBuffer(response: Response) {
+async function readLimitedResponseBuffer(response: Response, deadline: AbortController) {
     const contentLength = Number(response.headers.get("content-length") || "");
     if (Number.isFinite(contentLength) && contentLength > MAX_BYTES) {
         throw new Error("IMAGE_TOO_LARGE");
@@ -88,24 +102,45 @@ async function readLimitedResponseBuffer(response: Response) {
     const chunks: Buffer[] = [];
     let totalBytes = 0;
 
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        totalBytes += value.byteLength;
-        if (totalBytes > MAX_BYTES) {
-            await reader.cancel();
-            throw new Error("IMAGE_TOO_LARGE");
+    // Aborting the fetch signal normally errors an in-flight read(), but do not depend on
+    // the runtime to do it: race every read against the deadline explicitly.
+    const deadlineExceeded = new Promise<never>((_, reject) => {
+        if (deadline.signal.aborted) {
+            reject(new Error("DEADLINE_EXCEEDED"));
+            return;
         }
+        deadline.signal.addEventListener("abort", () => reject(new Error("DEADLINE_EXCEEDED")), {
+            once: true,
+        });
+    });
+    // Avoid an unhandled rejection when the read loop finishes before the deadline fires.
+    deadlineExceeded.catch(() => undefined);
 
-        chunks.push(Buffer.from(value));
+    try {
+        while (true) {
+            const { done, value } = await Promise.race([reader.read(), deadlineExceeded]);
+            if (done) break;
+
+            totalBytes += value.byteLength;
+            if (totalBytes > MAX_BYTES) {
+                await reader.cancel();
+                throw new Error("IMAGE_TOO_LARGE");
+            }
+
+            chunks.push(Buffer.from(value));
+        }
+    } catch (error) {
+        await reader.cancel().catch(() => undefined);
+        throw error;
     }
 
     return Buffer.concat(chunks, totalBytes);
 }
 
 export async function GET(request: NextRequest) {
-    const limited = await enforceRateLimit(request, "expensive", "api-image-proxy");
+    const limited = await enforceRateLimit(request, "expensive", "api-image-proxy", undefined, {
+        strict: true,
+    });
     if (!limited.ok) return limited.response;
 
     const target = request.nextUrl.searchParams.get("url");
@@ -124,9 +159,20 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Image host not allowed." }, { status: 400 });
     }
 
+    const deadline = new AbortController();
+    const deadlineTimer = setTimeout(() => deadline.abort(), TOTAL_DEADLINE_MS);
+
+    try {
+        return await proxyImage(parsed, deadline);
+    } finally {
+        clearTimeout(deadlineTimer);
+    }
+}
+
+async function proxyImage(parsed: URL, deadline: AbortController) {
     let upstream: Response;
     try {
-        upstream = await fetchAllowedImage(parsed);
+        upstream = await fetchAllowedImage(parsed, deadline);
     } catch (error) {
         if (error instanceof Error && error.message === "DISALLOWED_REDIRECT") {
             return NextResponse.json(
@@ -160,15 +206,20 @@ export async function GET(request: NextRequest) {
     ]);
 
     if (!upstream.ok || !ALLOWED_IMAGE_TYPES.has(contentType)) {
+        // Release the connection instead of leaving a body we will never read open.
+        upstream.body?.cancel().catch(() => undefined);
         return NextResponse.json({ error: "Upstream is not a valid image." }, { status: 502 });
     }
 
     let buffer: Buffer;
     try {
-        buffer = await readLimitedResponseBuffer(upstream);
+        buffer = await readLimitedResponseBuffer(upstream, deadline);
     } catch (error) {
         if (error instanceof Error && error.message === "IMAGE_TOO_LARGE") {
             return NextResponse.json({ error: "Image is too large to crop." }, { status: 413 });
+        }
+        if (deadline.signal.aborted) {
+            return NextResponse.json({ error: "Image took too long to load." }, { status: 504 });
         }
         return NextResponse.json({ error: "Failed to read image." }, { status: 502 });
     }

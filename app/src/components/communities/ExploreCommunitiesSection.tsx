@@ -37,12 +37,7 @@ export default function ExploreCommunitiesSection({ communities }: { communities
                             Explore Communities
                             <ArrowRight className="h-4 w-4" />
                         </Link>
-                        <Link
-                            href="/communities/new"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn-secondary"
-                        >
+                        <Link href="/communities/new" className="btn-secondary">
                             List Your Community
                         </Link>
                     </div>

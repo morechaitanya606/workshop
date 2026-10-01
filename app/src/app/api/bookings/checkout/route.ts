@@ -57,6 +57,22 @@ function toPaise(amountInRupees: number) {
     return Math.round(amountInRupees * 100);
 }
 
+/**
+ * The service fee snapshotted into the Razorpay order notes at order creation, in whole rupees,
+ * or null when the order predates the snapshot or the note is not a sane non-negative integer.
+ */
+function parseQuotedServiceFee(notes: unknown): number | null {
+    if (!notes || typeof notes !== "object" || Array.isArray(notes)) return null;
+
+    const raw = (notes as Record<string, unknown>).serviceFee;
+    if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > 100_000) return null;
+
+    return parsed;
+}
+
 function isExpired(isoDate: string) {
     return new Date(isoDate).getTime() < Date.now();
 }
@@ -304,30 +320,47 @@ async function sendConfirmedBookingNotification(
 ) {
     if (!booking || booking.status !== "confirmed") return;
 
-    await sendPaymentNotification({
-        event: "booking.confirmed",
-        source: "bookings_checkout",
-        idempotencyKey: `booking-confirmed:${booking.id}`,
-        data: {
-            booking: {
-                id: booking.id,
-                userId: booking.user_id,
-                status: booking.status,
-                guests: booking.guests,
-                total: booking.total,
-                paymentIntentId: booking.payment_intent_id,
-                createdAt: booking.created_at,
-                customer: {
-                    firstName: booking.first_name,
-                    lastName: booking.last_name,
-                    email: booking.email,
-                    phone: booking.phone,
+    // Best effort, by construction. This runs AFTER the money moved and the booking exists,
+    // so nothing it does may turn that success into an error. A thrown idempotency-claim
+    // failure here used to escape to the route's catch, which answered "Checkout failed." to
+    // a customer who had paid and been booked and then ran refund reconciliation against it.
+    try {
+        await sendPaymentNotification({
+            event: "booking.confirmed",
+            source: "bookings_checkout",
+            idempotencyKey: `booking-confirmed:${booking.id}`,
+            data: {
+                booking: {
+                    id: booking.id,
+                    userId: booking.user_id,
+                    status: booking.status,
+                    guests: booking.guests,
+                    total: booking.total,
+                    paymentIntentId: booking.payment_intent_id,
+                    createdAt: booking.created_at,
+                    customer: {
+                        firstName: booking.first_name,
+                        lastName: booking.last_name,
+                        email: booking.email,
+                        phone: booking.phone,
+                    },
+                    workshop: booking.workshop || null,
                 },
-                workshop: booking.workshop || null,
+                context,
             },
-            context,
-        },
-    });
+        });
+    } catch (error) {
+        Sentry.captureException(error, {
+            level: "warning",
+            tags: {
+                layer: "payments",
+                provider: "razorpay",
+                route: "bookings_checkout",
+                action: "confirmed_booking_notification",
+            },
+            extra: { bookingId: booking.id, ...context },
+        });
+    }
 }
 
 type ConfirmBookingRpcParams = {
@@ -505,11 +538,37 @@ async function refundCapturedPayment(
 async function reconcileCapturedPaymentAfterFailure(
     serviceClient: SupabaseServerClient,
     params: { userId: string; workshopId: string; holdId: string; paymentId: string }
-): Promise<{ booking: Awaited<ReturnType<typeof loadBookingById>> | null; refunded: boolean }> {
+): Promise<{
+    booking: Awaited<ReturnType<typeof loadBookingById>> | null;
+    refunded: boolean;
+    /** Money is stranded: the payment is captured, has no booking, and the refund failed. */
+    refundFailed: boolean;
+    /** The payment already bought a booking somewhere else; it must NOT be refunded. */
+    paymentConsumed: boolean;
+}> {
     try {
         const booking = await loadExistingConfirmedBookingForPayment(serviceClient, params);
         if (booking) {
-            return { booking, refunded: false };
+            return { booking, refunded: false, refundFailed: false, paymentConsumed: false };
+        }
+
+        // The lookup above is scoped to THIS hold. A payment that already bought a booking
+        // for a different hold (the caller replaying a valid order/payment/signature triple
+        // against another hold of theirs) has a booking and must keep it; refunding it
+        // would hand back the money while the seat stays sold. bookings.payment_intent_id
+        // is unique, so there is at most one row.
+        const { data: anyBooking, error: anyBookingError } = await serviceClient
+            .from("bookings")
+            .select("id, status")
+            .eq("payment_intent_id", params.paymentId)
+            .maybeSingle();
+
+        if (anyBookingError) {
+            throw anyBookingError;
+        }
+
+        if (anyBooking?.id) {
+            return { booking: null, refunded: false, refundFailed: false, paymentConsumed: true };
         }
 
         const payment = await withRazorpayTimeout(() =>
@@ -521,7 +580,7 @@ async function reconcileCapturedPaymentAfterFailure(
         const alreadyRefundedPaise = Number(payment?.amount_refunded || 0);
 
         if (status !== "captured" || capturedPaise <= 0 || alreadyRefundedPaise >= capturedPaise) {
-            return { booking: null, refunded: false };
+            return { booking: null, refunded: false, refundFailed: false, paymentConsumed: false };
         }
 
         // Refund the REMAINDER, not the original amount. Razorpay rejects a refund that
@@ -535,7 +594,7 @@ async function reconcileCapturedPaymentAfterFailure(
             reason: "checkout_threw_after_capture",
         });
 
-        return { booking: null, refunded };
+        return { booking: null, refunded, refundFailed: !refunded, paymentConsumed: false };
     } catch (reconcileError) {
         // Reconciliation itself failed, so a real charge may still be stranded. This needs a
         // human, and the caller must not report a clean refund it did not perform.
@@ -549,7 +608,10 @@ async function reconcileCapturedPaymentAfterFailure(
             },
             extra: params,
         });
-        return { booking: null, refunded: false };
+        // Unknown is treated as stranded: a verified signature means the customer did pay,
+        // and telling them "contact support" is safer than a plain error that invites a
+        // second payment on top of one nobody has checked.
+        return { booking: null, refunded: false, refundFailed: true, paymentConsumed: false };
     }
 }
 
@@ -624,6 +686,70 @@ export async function POST(request: NextRequest) {
         });
     }
 
+    /**
+     * Every way a VERIFIED payment can fail to become a booking has to end here.
+     *
+     * Once the signature checks out the customer has paid. The early returns below (an expired
+     * hold, a workshop that closed or was un-approved, an order whose amount no longer matches)
+     * used to answer with a bare 4xx and walk away, leaving the card charged with no booking
+     * and no refund. This runs the same reconcile-and-refund path the post-exception handler
+     * uses and returns the response for it, or `null` when no money is stranded (not a payment
+     * confirmation, or Razorpay reports nothing captured) so the caller can send its plain error.
+     */
+    const compensateVerifiedPayment = async (outcome: {
+        code: string;
+        refundedMessage: string;
+    }) => {
+        if (!signatureVerified || !payload.razorpayPaymentId) return null;
+
+        const reconciliation = await reconcileCapturedPaymentAfterFailure(serviceClient, {
+            userId: auth.user.id,
+            workshopId: payload.workshopId,
+            holdId: payload.holdId,
+            paymentId: payload.razorpayPaymentId,
+        });
+
+        if (reconciliation.booking) {
+            return alreadyConfirmedResponse(reconciliation.booking, {
+                holdId: payload.holdId,
+                workshopId: payload.workshopId,
+                paymentId: payload.razorpayPaymentId,
+                paymentStatus: "captured",
+            });
+        }
+
+        if (reconciliation.refunded) {
+            return paymentError(
+                `${outcome.refundedMessage} Your payment has been refunded. It should appear within 5-7 working days.`,
+                409,
+                {
+                    code: outcome.code,
+                    userId: auth.user.id,
+                    holdId: payload.holdId,
+                    workshopId: payload.workshopId,
+                    paymentId: payload.razorpayPaymentId,
+                }
+            );
+        }
+
+        if (reconciliation.refundFailed) {
+            return paymentError(
+                "Payment succeeded, but we could not complete your booking and the automatic refund did not go through. Our team has been alerted -- please contact support.",
+                500,
+                {
+                    code: "REFUND_FAILED",
+                    userId: auth.user.id,
+                    holdId: payload.holdId,
+                    workshopId: payload.workshopId,
+                    paymentId: payload.razorpayPaymentId,
+                    attemptedFor: outcome.code,
+                }
+            );
+        }
+
+        return null;
+    };
+
     try {
         const { data: holdData, error: holdError } = await loadHoldWithWorkshop(
             serviceClient,
@@ -635,6 +761,12 @@ export async function POST(request: NextRequest) {
         const hold = holdData as HoldWithWorkshop | null;
 
         if (holdError || !hold) {
+            const compensated = await compensateVerifiedPayment({
+                code: "HOLD_NOT_FOUND_REFUNDED",
+                refundedMessage: "We could not find your seat hold.",
+            });
+            if (compensated) return compensated;
+
             return paymentError("Seat hold not found for this user/workshop.", 404, {
                 userId: auth.user.id,
                 holdId: payload.holdId,
@@ -643,53 +775,18 @@ export async function POST(request: NextRequest) {
         }
 
         if (hold.status !== "active") {
-            if (isPaymentConfirmation && payload.razorpayPaymentId) {
-                const existingConfirmedBooking = await loadExistingConfirmedBookingForPayment(
-                    serviceClient,
-                    {
-                        userId: auth.user.id,
-                        workshopId: payload.workshopId,
-                        holdId: payload.holdId,
-                        paymentId: payload.razorpayPaymentId,
-                    }
-                );
-
-                if (existingConfirmedBooking) {
-                    return alreadyConfirmedResponse(existingConfirmedBooking, {
-                        holdId: payload.holdId,
-                        workshopId: payload.workshopId,
-                        paymentId: payload.razorpayPaymentId,
-                        paymentStatus: "captured",
-                    });
-                }
-
-                // The hold is gone and this payment did not buy the booking that consumed it
-                // -- a second order against the same hold, paid after the first one won.
-                // Razorpay orders stay payable until they expire, and the checkout UI can
-                // create more than one for a hold, so this is reachable without any malice.
-                // Returning 409 here charged the customer and walked away; ask Razorpay what
-                // actually happened to the money and give it back if it moved.
-                const reconciliation = await reconcileCapturedPaymentAfterFailure(serviceClient, {
-                    userId: auth.user.id,
-                    workshopId: payload.workshopId,
-                    holdId: payload.holdId,
-                    paymentId: payload.razorpayPaymentId,
-                });
-
-                if (reconciliation.refunded) {
-                    return paymentError(
-                        "This seat hold is no longer active, so your payment has been refunded. It should appear within 5-7 working days.",
-                        409,
-                        {
-                            code: "HOLD_NOT_ACTIVE_REFUNDED",
-                            userId: auth.user.id,
-                            holdId: payload.holdId,
-                            workshopId: payload.workshopId,
-                            paymentId: payload.razorpayPaymentId,
-                        }
-                    );
-                }
-            }
+            // The hold is gone. Either this payment already bought the booking that consumed
+            // it (answered as already_confirmed), or it is a second order against the same
+            // hold, paid after the first one won. Razorpay orders stay payable until they
+            // expire, and the checkout UI can create more than one for a hold, so that is
+            // reachable without any malice. Returning 409 there charged the customer and
+            // walked away; the helper asks Razorpay what happened to the money and gives it
+            // back if it moved.
+            const compensated = await compensateVerifiedPayment({
+                code: "HOLD_NOT_ACTIVE_REFUNDED",
+                refundedMessage: "This seat hold is no longer active.",
+            });
+            if (compensated) return compensated;
 
             return paymentError("This seat hold is no longer active.", 409, {
                 code: "HOLD_NOT_ACTIVE",
@@ -705,6 +802,16 @@ export async function POST(request: NextRequest) {
                 .from("booking_holds")
                 .update({ status: "expired" })
                 .eq("id", hold.id);
+
+            // Active-but-expired is exactly what a customer who paid in the last seconds of
+            // the window looks like. The seats may already be someone else's, so there is no
+            // booking to make: refund.
+            const compensated = await compensateVerifiedPayment({
+                code: "HOLD_EXPIRED_REFUNDED",
+                refundedMessage: "Your seat hold expired before payment completed.",
+            });
+            if (compensated) return compensated;
+
             return paymentError("Seat hold expired. Please reserve seats again.", 409, {
                 userId: auth.user.id,
                 holdId: payload.holdId,
@@ -714,6 +821,12 @@ export async function POST(request: NextRequest) {
 
         const workshop = hold.workshop;
         if (!workshop) {
+            const compensated = await compensateVerifiedPayment({
+                code: "WORKSHOP_NOT_FOUND_REFUNDED",
+                refundedMessage: "We could not find this workshop.",
+            });
+            if (compensated) return compensated;
+
             return paymentError("Workshop not found for this hold.", 404, {
                 userId: auth.user.id,
                 holdId: payload.holdId,
@@ -721,6 +834,12 @@ export async function POST(request: NextRequest) {
             });
         }
         if (getWorkshopApprovalStatus(workshop.approval_status) !== "approved") {
+            const compensated = await compensateVerifiedPayment({
+                code: "WORKSHOP_PENDING_APPROVAL_REFUNDED",
+                refundedMessage: "This workshop is not open for bookings.",
+            });
+            if (compensated) return compensated;
+
             return paymentError("This workshop is not open for bookings yet.", 409, {
                 userId: auth.user.id,
                 holdId: payload.holdId,
@@ -730,6 +849,12 @@ export async function POST(request: NextRequest) {
         }
 
         if (workshop.date && isBookingClosedNow(workshop.date, workshop.time)) {
+            const compensated = await compensateVerifiedPayment({
+                code: "BOOKING_CLOSED_REFUNDED",
+                refundedMessage: "Bookings for this workshop have closed.",
+            });
+            if (compensated) return compensated;
+
             return paymentError("Bookings close 3 hours before the workshop starts.", 409, {
                 userId: auth.user.id,
                 holdId: payload.holdId,
@@ -823,8 +948,10 @@ export async function POST(request: NextRequest) {
         }
 
         const subtotal = Math.max(0, subtotalAfterEarlyBird - discountAmount);
-        const total = subtotal + serviceFee;
-        const totalPaise = toPaise(total);
+        // `let`: on confirmation the fee quoted when the ORDER was created replaces the live
+        // setting (see below), and everything derived from it moves with it.
+        let total = subtotal + serviceFee;
+        let totalPaise = toPaise(total);
 
         const razorpay = getRazorpayServerClient();
 
@@ -838,6 +965,11 @@ export async function POST(request: NextRequest) {
                         holdId: payload.holdId,
                         workshopId: payload.workshopId,
                         userId: auth.user.id,
+                        // Snapshot of the fee this amount was built from. Notes are written
+                        // server-side only, so confirmation can trust them: an admin editing
+                        // the service fee between order and payment no longer turns every
+                        // in-flight, correctly-priced payment into a mismatch.
+                        serviceFee: String(serviceFee),
                     },
                 })
             );
@@ -878,6 +1010,12 @@ export async function POST(request: NextRequest) {
         }
 
         if (String(order.receipt || "") !== payload.holdId) {
+            const compensated = await compensateVerifiedPayment({
+                code: "ORDER_HOLD_MISMATCH_REFUNDED",
+                refundedMessage: "This payment does not belong to the current seat hold.",
+            });
+            if (compensated) return compensated;
+
             return paymentError("Order does not match the current seat hold.", 400, {
                 userId: auth.user.id,
                 holdId: payload.holdId,
@@ -886,10 +1024,25 @@ export async function POST(request: NextRequest) {
             });
         }
 
+        // Honour the fee quoted at order time. Orders created before this snapshot existed
+        // carry no note and keep the live-fee behaviour.
+        const quotedServiceFee = parseQuotedServiceFee((order as { notes?: unknown }).notes);
+        if (quotedServiceFee !== null && quotedServiceFee !== serviceFee) {
+            serviceFee = quotedServiceFee;
+            total = subtotal + serviceFee;
+            totalPaise = toPaise(total);
+        }
+
         if (
             Number(order.amount || 0) !== totalPaise ||
             String(order.currency || "").toUpperCase() !== PAYMENT_CURRENCY
         ) {
+            const compensated = await compensateVerifiedPayment({
+                code: "ORDER_AMOUNT_MISMATCH_REFUNDED",
+                refundedMessage: "The price for this booking changed while you were paying.",
+            });
+            if (compensated) return compensated;
+
             return paymentError("Order amount mismatch for this booking.", 400, {
                 userId: auth.user.id,
                 holdId: payload.holdId,
@@ -927,6 +1080,12 @@ export async function POST(request: NextRequest) {
             Number(payment.amount || 0) !== totalPaise ||
             String(payment.currency || "").toUpperCase() !== PAYMENT_CURRENCY
         ) {
+            const compensated = await compensateVerifiedPayment({
+                code: "PAYMENT_AMOUNT_MISMATCH_REFUNDED",
+                refundedMessage: "The amount paid does not match this booking.",
+            });
+            if (compensated) return compensated;
+
             return paymentError("Payment amount mismatch for this booking.", 400, {
                 userId: auth.user.id,
                 holdId: payload.holdId,
@@ -1050,6 +1209,24 @@ export async function POST(request: NextRequest) {
             );
             errorContext.refunded = refunded;
 
+            // confirm_booking_from_hold re-checks approval under the workshop lock
+            // (20261001110400). A workshop pulled between hold and payment lands here, and
+            // the customer should be told why rather than shown a generic failure.
+            const notApproved = (getErrorMessage(confirmation.error) || "").includes(
+                "WORKSHOP_NOT_APPROVED"
+            );
+            if (notApproved) {
+                errorContext.code = "WORKSHOP_PENDING_APPROVAL";
+            }
+
+            if (notApproved && refunded) {
+                return paymentError(
+                    "This workshop is no longer open for bookings, so your payment has been refunded. It should appear within 5-7 working days.",
+                    409,
+                    errorContext
+                );
+            }
+
             return paymentError(
                 refunded
                     ? "We could not complete this booking, so your payment has been refunded. It should appear within 5-7 working days."
@@ -1123,6 +1300,20 @@ export async function POST(request: NextRequest) {
                         409,
                         {
                             code: "CHECKOUT_FAILED_REFUNDED",
+                            userId: auth.user.id,
+                            holdId: payload.holdId,
+                            workshopId: payload.workshopId,
+                            paymentId: payload.razorpayPaymentId,
+                        }
+                    );
+                }
+
+                if (reconciliation.refundFailed) {
+                    return paymentError(
+                        "Payment succeeded, but we could not complete your booking and the automatic refund did not go through. Our team has been alerted -- please contact support.",
+                        500,
+                        {
+                            code: "REFUND_FAILED",
                             userId: auth.user.id,
                             holdId: payload.holdId,
                             workshopId: payload.workshopId,

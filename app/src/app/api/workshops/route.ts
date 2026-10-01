@@ -7,6 +7,7 @@ import { isMissingColumnError } from "@/lib/workshop-approval-compat";
 import { normalizeGroupFilterLabel, resolveCategoryFilterValues } from "@/lib/data";
 import { createSupabaseAnonServerClient, isSupabasePublicConfigured } from "@/lib/supabase-server";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { buildIlikeOrFilter } from "@/lib/search-sanitize";
 
 const WORKSHOP_LIST_CACHE_HEADERS = {
     "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
@@ -35,11 +36,11 @@ function buildWorkshopListQuery(
         dbQuery = dbQuery.eq("approval_status", "approved");
     }
 
-    if (query.q) {
-        const q = query.q.replace(/[%]/g, "");
-        dbQuery = dbQuery.or(
-            `title.ilike.%${q}%,description.ilike.%${q}%,location.ilike.%${q}%,city.ilike.%${q}%`
-        );
+    // Strips every PostgREST structural character and caps the length; stripping only `%`
+    // let `x,id.neq.0` smuggle an extra filter into the .or() expression.
+    const searchFilter = buildIlikeOrFilter(["title", "description", "location", "city"], query.q);
+    if (searchFilter) {
+        dbQuery = dbQuery.or(searchFilter);
     }
     if (normalizedCategory) {
         // Browse groups fan out to several stored category values.

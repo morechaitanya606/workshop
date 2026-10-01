@@ -1,11 +1,13 @@
 import sharp from "sharp";
 
-// HEIC/HEIF (the default iPhone photo format) and a number of other "exotic"
-// image formats either cannot be rendered by browsers or are rejected by
-// Supabase Storage buckets that restrict MIME types. To guarantee a portable,
-// universally displayable result we normalise EVERY uploaded image to a
-// standard web raster format: PNG when the source has transparency, otherwise
-// JPEG. JPEG/PNG inputs are already acceptable and are passed through untouched.
+// Every uploaded image is normalised to WebP: it is smaller than JPEG/PNG at the same
+// quality, keeps transparency (so logos need no separate PNG path), and every current browser
+// renders it. HEIC/HEIF (the default iPhone photo format) and other "exotic" formats either
+// cannot be rendered by browsers or are rejected by storage buckets that restrict MIME types.
+//
+// WebP uploads are re-encoded too rather than passed through. That validates the bytes really
+// are an image, and sharp drops EXIF on output, so GPS coordinates in phone photos are not
+// published with the file.
 
 const HEIC_EXTENSIONS = new Set(["heic", "heics", "heif", "heifs", "hif"]);
 const HEIC_CONTENT_TYPES = new Set([
@@ -15,29 +17,18 @@ const HEIC_CONTENT_TYPES = new Set([
     "image/heif-sequence",
 ]);
 
-// Formats that already satisfy the JPEG/PNG requirement and need no conversion.
-const STANDARD_CONTENT_TYPES = new Set(["image/jpeg", "image/png"]);
-const STANDARD_EXTENSIONS = new Set(["jpg", "jpeg", "png"]);
+/** Nothing on the site renders wider than this; phone photos are often 4000px+. */
+const MAX_DIMENSION = 2560;
+const WEBP_QUALITY = 80;
 
-export type NormalizedImageFormat = {
-    extension: "jpg" | "png";
-    contentType: "image/jpeg" | "image/png";
-};
-
-export type NormalizedImage = NormalizedImageFormat & {
+export type NormalizedImage = {
     buffer: Buffer;
+    extension: "webp";
+    contentType: "image/webp";
 };
 
 export function isHeicLike(contentType: string, extension: string) {
     return HEIC_CONTENT_TYPES.has(contentType) || HEIC_EXTENSIONS.has(extension);
-}
-
-/**
- * Returns true when the image is already a standard web format (JPEG/PNG) and
- * therefore does not need to be transcoded.
- */
-export function isStandardWebImage(contentType: string, extension: string) {
-    return STANDARD_CONTENT_TYPES.has(contentType) || STANDARD_EXTENSIONS.has(extension);
 }
 
 export type CropAspect = { width: number; height: number };
@@ -78,7 +69,7 @@ async function cropToAspect(buffer: Buffer, aspect: CropAspect): Promise<Buffer>
 }
 
 async function decodeHeicToJpeg(buffer: Buffer): Promise<Buffer> {
-    // sharp's prebuilt binaries can encode JPEG/PNG but cannot decode HEIC/HEVC
+    // sharp's prebuilt binaries can encode JPEG/PNG/WebP but cannot decode HEIC/HEVC
     // (the HEVC decoder is omitted for licensing reasons), so decode with the
     // pure-JS heic-convert first, then hand the JPEG bytes to sharp.
     const heicConvert = (await import("heic-convert")).default;
@@ -87,18 +78,18 @@ async function decodeHeicToJpeg(buffer: Buffer): Promise<Buffer> {
 }
 
 /**
- * Convert any supported image buffer to JPEG or PNG.
+ * Convert any supported image buffer to WebP.
  *
  * - HEIC/HEIF is decoded to JPEG first (sharp cannot decode it directly).
- * - Images with an alpha channel become PNG so transparency is preserved.
- * - Everything else becomes JPEG.
+ * - Alpha is preserved natively by WebP.
  * - EXIF orientation is applied via `.rotate()` so phone photos are upright.
  * - When `cropAspect` is provided, the image is center-cropped to that aspect
  *   ratio (e.g. 5:4) before encoding.
+ * - Images larger than MAX_DIMENSION on either side are scaled down (never up).
  *
  * Throws if the source cannot be decoded; callers decide how to handle that.
  */
-export async function convertImageToJpegOrPng(
+export async function convertImageToWebp(
     input: Buffer,
     source: { contentType: string; extension: string },
     options?: { cropAspect?: CropAspect }
@@ -107,23 +98,25 @@ export async function convertImageToJpegOrPng(
         ? await decodeHeicToJpeg(input)
         : input;
 
-    let pipeline = sharp(decoded).rotate();
-
+    let upright: Buffer | null = null;
     if (options?.cropAspect) {
         // Bake EXIF rotation first so the crop math uses upright dimensions,
         // then center-crop to the requested aspect ratio.
-        const rotated = await pipeline.toBuffer();
-        const cropped = await cropToAspect(rotated, options.cropAspect);
-        pipeline = sharp(cropped);
+        const rotated = await sharp(decoded).rotate().toBuffer();
+        upright = await cropToAspect(rotated, options.cropAspect);
     }
 
-    const metadata = await pipeline.metadata();
+    const pipeline = upright ? sharp(upright) : sharp(decoded).rotate();
 
-    if (metadata.hasAlpha) {
-        const buffer = await pipeline.png({ compressionLevel: 9 }).toBuffer();
-        return { buffer, extension: "png", contentType: "image/png" };
-    }
+    const buffer = await pipeline
+        .resize({
+            width: MAX_DIMENSION,
+            height: MAX_DIMENSION,
+            fit: "inside",
+            withoutEnlargement: true,
+        })
+        .webp({ quality: WEBP_QUALITY })
+        .toBuffer();
 
-    const buffer = await pipeline.jpeg({ quality: 85, mozjpeg: true }).toBuffer();
-    return { buffer, extension: "jpg", contentType: "image/jpeg" };
+    return { buffer, extension: "webp", contentType: "image/webp" };
 }

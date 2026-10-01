@@ -4,8 +4,25 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Bot, MessageCircle, PhoneCall, Send, X } from "lucide-react";
 import { useParams, usePathname } from "next/navigation";
-import { askChatbot, getChatbotConfig } from "@/lib/api-client";
-import { normalizePhoneNumber, type ChatbotStage } from "@/lib/chatbot-text";
+import { getChatbotConfig } from "@/lib/api-client";
+import {
+    ChatbotRequestError,
+    sendChatbotMessage,
+    type ChatbotHistoryPayload,
+} from "@/lib/chatbot-client";
+import { getChatbotStrings } from "@/lib/chatbot-i18n";
+import {
+    CHATBOT_MULTILINGUAL,
+    localeFromBrowserLanguage,
+    resolveChatLocale,
+    type ChatLocale,
+} from "@/lib/chatbot-language";
+import {
+    getSafeChatHref,
+    normalizePhoneNumber,
+    parseChatMessageContent,
+    type ChatbotStage,
+} from "@/lib/chatbot-text";
 import { CONTACT_PHONE_NUMBERS } from "@/lib/contact";
 
 type SupportChatbotProps = {
@@ -17,8 +34,36 @@ type ChatMessage = {
     id: string;
     role: "user" | "bot";
     content: string;
+    /** The welcome text is rendered from the current UI language, so it has no stored content. */
+    kind?: "welcome" | "error";
     showBookingButton?: boolean;
+    /** Left out of the conversation history sent to the model (lead details, errors). */
+    excludeFromHistory?: boolean;
+    /** Set on error messages: the text to resend and the user message it belongs to. */
+    retryText?: string;
+    retryOfId?: string;
 };
+
+const HISTORY_TURNS = 8;
+const HISTORY_TURN_CHARS = 500;
+const MAX_INPUT_CHARS = 1000;
+const WELCOME_MESSAGE: ChatMessage = {
+    id: "welcome-message",
+    role: "bot",
+    content: "",
+    kind: "welcome",
+};
+
+function buildHistory(messages: ChatMessage[]): ChatbotHistoryPayload[] {
+    return messages
+        .filter((message) => message.kind === undefined && !message.excludeFromHistory)
+        .filter((message) => message.content.trim().length > 0)
+        .slice(-HISTORY_TURNS)
+        .map((message) => ({
+            role: message.role === "bot" ? ("assistant" as const) : ("user" as const),
+            content: message.content.slice(0, HISTORY_TURN_CHARS),
+        }));
+}
 
 type LeadDraft = {
     name: string;
@@ -36,16 +81,6 @@ function createMessageId() {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function buildWelcomeMessage(clientName?: string) {
-    return {
-        id: "welcome-message",
-        role: "bot" as const,
-        content: clientName
-            ? `Hi! Main ${clientName} ka AI assistant hoon. Aap mujhse fee, booking, materials, parking, ya cancellation ke baare mein pooch sakte ho.`
-            : "Hi! Aap mujhse workshop FAQs, booking, fee, materials, parking, ya cancellation ke baare mein pooch sakte ho.",
-    };
-}
-
 function buildWhatsAppHref(pathname: string, contextWorkshopId: string | null) {
     const primarySupportNumber = CONTACT_PHONE_NUMBERS[0]?.value ?? "+917028478109";
     const supportMessage = [
@@ -60,22 +95,34 @@ function buildWhatsAppHref(pathname: string, contextWorkshopId: string | null) {
     )}`;
 }
 
+/**
+ * Renders reply text with [label](href) links and **bold**. Link targets come from model
+ * output and stored FAQ text, so they are validated first: only same-site paths and
+ * http(s), mailto and tel survive; anything else (javascript:, data:, //host) shows as text.
+ */
 function renderMessageContent(content: string) {
-    return content.split(/(\[.*?\]\(.*?\))/g).map((part, index) => {
-        const linkMatch = part.match(/\[(.*?)\]\((.*?)\)/);
-        if (linkMatch) {
+    return parseChatMessageContent(content).map((segment, index) => {
+        if (segment.type === "link") {
+            const opensNewTab = segment.kind === "external";
+
             return (
                 <a
-                    key={`${linkMatch[2]}-${index}`}
-                    href={linkMatch[2]}
+                    key={`link-${index}`}
+                    href={segment.href}
+                    target={opensNewTab ? "_blank" : undefined}
+                    rel={segment.kind === "internal" ? undefined : "noopener noreferrer"}
                     className="font-medium text-[#0b6b5f] underline decoration-[#0b6b5f]/35 underline-offset-2 transition-colors hover:text-[#075E54]"
                 >
-                    {linkMatch[1]}
+                    {segment.label}
                 </a>
             );
         }
 
-        return <span key={`text-${index}`}>{part}</span>;
+        if (segment.type === "bold") {
+            return <strong key={`bold-${index}`}>{segment.text}</strong>;
+        }
+
+        return <span key={`text-${index}`}>{segment.text}</span>;
     });
 }
 
@@ -104,7 +151,22 @@ export default function SupportChatbot({
     });
     const [isTyping, setIsTyping] = useState(false);
     const [chatbotConfig, setChatbotConfig] = useState<ChatbotConfigState | null>(null);
+    const [uiLocale, setUiLocale] = useState<ChatLocale>("en");
+    const hasChosenLocaleRef = useRef(false);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
+    const strings = getChatbotStrings(uiLocale);
+
+    // English-only by default. In multilingual mode, start in the browser language; once the
+    // visitor types, their own language wins.
+    useEffect(() => {
+        if (
+            CHATBOT_MULTILINGUAL &&
+            !hasChosenLocaleRef.current &&
+            typeof navigator !== "undefined"
+        ) {
+            setUiLocale(localeFromBrowserLanguage(navigator.language));
+        }
+    }, []);
 
     useEffect(() => {
         if (!isOpen) {
@@ -117,10 +179,10 @@ export default function SupportChatbot({
     }, [isOpen, isTyping, messages, prefersReducedMotion]);
 
     useEffect(() => {
-        if (mode === "embedded" && messages.length === 0) {
-            setMessages([buildWelcomeMessage()]);
+        if (isOpen && messages.length === 0) {
+            setMessages([WELCOME_MESSAGE]);
         }
-    }, [messages.length, mode]);
+    }, [isOpen, messages.length]);
 
     // Only fetch once the widget is actually opened. This used to run on mount for every
     // visitor on every route (the widget is mounted from the root layout), which cost one
@@ -146,18 +208,6 @@ export default function SupportChatbot({
                         clientId: result.clientId,
                         clientName: result.clientName,
                     });
-
-                    setMessages((current) => {
-                        if (current.length === 0) {
-                            return [buildWelcomeMessage(result.clientName)];
-                        }
-
-                        if (current[0]?.id !== "welcome-message") {
-                            return current;
-                        }
-
-                        return [buildWelcomeMessage(result.clientName), ...current.slice(1)];
-                    });
                 }
             } catch {
                 if (!cancelled) {
@@ -179,18 +229,16 @@ export default function SupportChatbot({
         };
     }, [chatbotConfig, clientApiKey, contextWorkshopId, isOpen, shouldHideFloatingWidget]);
 
+    // The booking URL comes from the config API (host-editable), so validate it like any link.
     const bookingHref =
-        chatbotConfig?.bookingUrl ||
-        (contextWorkshopId ? `/workshop/${contextWorkshopId}` : "/explore");
+        getSafeChatHref(
+            chatbotConfig?.bookingUrl ||
+                (contextWorkshopId ? `/workshop/${contextWorkshopId}` : "/explore")
+        )?.href ?? "/explore";
 
     const openChat = () => {
         setIsLauncherOpen(false);
         setIsOpen(true);
-        setMessages((current) =>
-            current.length > 0
-                ? current
-                : [buildWelcomeMessage(chatbotConfig?.clientName || "Workshop Assistant")]
-        );
     };
 
     const closeChat = () => {
@@ -205,29 +253,48 @@ export default function SupportChatbot({
         setMessages((current) => [...current, message]);
     };
 
-    const handleSubmit = async () => {
-        const trimmed = input.trim();
+    const sendMessage = async (rawText: string, baseMessages: ChatMessage[]) => {
+        const trimmed = rawText.trim().slice(0, MAX_INPUT_CHARS);
         if (!trimmed || isTyping) {
             return;
         }
 
         const previousStage = stage;
-        appendMessage({
-            id: createMessageId(),
-            role: "user",
-            content: trimmed,
-        });
+        const priorHistory = buildHistory(baseMessages);
+        // Multilingual mode: the visitor's own language wins over the browser language from
+        // here on. Otherwise every reply, and the widget itself, stays in English.
+        const replyLocale: ChatLocale = CHATBOT_MULTILINGUAL
+            ? resolveChatLocale({ message: trimmed, history: priorHistory, hint: uiLocale }).locale
+            : "en";
+        hasChosenLocaleRef.current = true;
+        setUiLocale(replyLocale);
+
+        const userMessageId = createMessageId();
+        const isLeadStep = previousStage === "asking_name" || previousStage === "asking_phone";
+        setMessages([
+            ...baseMessages,
+            {
+                id: userMessageId,
+                role: "user",
+                content: trimmed,
+                // Names and phone numbers typed during lead capture never go to the model.
+                excludeFromHistory: isLeadStep,
+            },
+        ]);
         setInput("");
         setIsTyping(true);
 
         try {
-            const response = await askChatbot({
+            const response = await sendChatbotMessage({
                 message: trimmed,
                 stage: previousStage,
                 lead: leadDraft,
-                clientId: chatbotConfig?.clientId ?? undefined,
+                // No clientId: the server resolves the client from the API key or the page's
+                // workshop; an id alone is not trusted and used to fail the request.
                 clientApiKey: clientApiKey ?? undefined,
                 contextWorkshopId,
+                history: isLeadStep ? [] : priorHistory,
+                language: replyLocale,
             });
 
             if (previousStage === "idle" && response.askName) {
@@ -266,25 +333,54 @@ export default function SupportChatbot({
                 role: "bot",
                 content: response.reply,
                 showBookingButton: response.showBookingButton,
+                excludeFromHistory:
+                    isLeadStep ||
+                    response.askName ||
+                    response.askPhone ||
+                    response.showBookingButton,
             });
-        } catch {
+        } catch (error) {
+            const failureStrings = getChatbotStrings(replyLocale);
+            const isRateLimited = error instanceof ChatbotRequestError && error.status === 429;
+
             appendMessage({
                 id: createMessageId(),
                 role: "bot",
-                content:
-                    "Sorry, main abhi reply nahi kar pa raha hoon. Please thodi der baad try karo.",
+                kind: "error",
+                content: isRateLimited ? failureStrings.rateLimited : failureStrings.error,
+                excludeFromHistory: true,
+                retryText: trimmed,
+                retryOfId: userMessageId,
             });
         } finally {
             setIsTyping(false);
         }
     };
 
+    const handleSubmit = () => sendMessage(input, messages);
+
+    const handleRetry = (failed: ChatMessage) => {
+        if (!failed.retryText) {
+            return;
+        }
+
+        // Drop the failed attempt (the question and the error) and ask again.
+        void sendMessage(
+            failed.retryText,
+            messages.filter(
+                (message) => message.id !== failed.id && message.id !== failed.retryOfId
+            )
+        );
+    };
+
     const inputPlaceholder =
         stage === "asking_name"
-            ? "Apna name enter karo"
+            ? strings.placeholderName
             : stage === "asking_phone"
-              ? "Apna phone number enter karo"
-              : "Apna message type karo";
+              ? strings.placeholderPhone
+              : strings.placeholderIdle;
+    const showQuickReplies =
+        messages.length === 1 && messages[0]?.kind === "welcome" && stage === "idle" && !isTyping;
     const launcherBottomClass = isWorkshopPage
         ? "bottom-[calc(var(--floating-support-bottom)+6rem)] lg:bottom-6"
         : "bottom-[var(--floating-support-bottom)] lg:bottom-[var(--floating-support-bottom)]";
@@ -311,24 +407,28 @@ export default function SupportChatbot({
                     <p className="truncate text-sm font-inter font-semibold">
                         {chatbotConfig?.clientName || "Workshop Assistant"}
                     </p>
-                    <p className="text-[11px] font-inter text-white/75">
-                        FAQ, booking, and lead support
-                    </p>
+                    <p className="text-[11px] font-inter text-white/75">{strings.subtitle}</p>
                 </div>
                 {mode === "floating" && (
                     <button
                         type="button"
                         onClick={closeChat}
                         className="shrink-0 rounded-full p-2 transition-colors hover:bg-white/10"
-                        aria-label="Close chat"
+                        aria-label={strings.close}
                     >
                         <X className="h-5 w-5" />
                     </button>
                 )}
             </div>
 
-            <div className="flex-1 space-y-3 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.34),rgba(255,255,255,0.1))] px-3 py-4">
-                {messages.map((message) => (
+            <div
+                role="log"
+                aria-live="polite"
+                aria-relevant="additions text"
+                aria-busy={isTyping}
+                className="flex-1 space-y-3 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.34),rgba(255,255,255,0.1))] px-3 py-4"
+            >
+                {messages.map((message, index) => (
                     <div
                         key={message.id}
                         className={`flex ${
@@ -342,8 +442,12 @@ export default function SupportChatbot({
                                     : "rounded-bl-md bg-[#F1F0F0] text-slate-800"
                             }`}
                         >
-                            <div className="whitespace-pre-wrap">
-                                {renderMessageContent(message.content)}
+                            <div className="whitespace-pre-wrap break-words">
+                                {renderMessageContent(
+                                    message.kind === "welcome"
+                                        ? strings.welcome(chatbotConfig?.clientName)
+                                        : message.content
+                                )}
                             </div>
                             {message.showBookingButton && (
                                 <a
@@ -352,17 +456,51 @@ export default function SupportChatbot({
                                     rel="noopener noreferrer"
                                     className="mt-3 inline-flex items-center justify-center rounded-full bg-[#25D366] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#1fa855]"
                                 >
-                                    Complete Booking
+                                    {strings.completeBooking}
                                 </a>
                             )}
+                            {message.kind === "error" &&
+                                message.retryText &&
+                                index === messages.length - 1 &&
+                                !isTyping && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRetry(message)}
+                                        className="mt-3 inline-flex items-center justify-center rounded-full border border-[#075E54]/30 bg-white px-4 py-1.5 text-xs font-semibold text-[#075E54] transition-colors hover:bg-[#ecfff4]"
+                                    >
+                                        {strings.retry}
+                                    </button>
+                                )}
                         </div>
                     </div>
                 ))}
 
+                {showQuickReplies && (
+                    <div
+                        role="group"
+                        aria-label={strings.quickRepliesLabel}
+                        className="flex flex-wrap gap-2 pt-1"
+                    >
+                        {strings.quickReplies.map((reply) => (
+                            <button
+                                key={reply}
+                                type="button"
+                                onClick={() => void sendMessage(reply, messages)}
+                                className="rounded-full border border-[#075E54]/25 bg-white px-3 py-1.5 text-xs font-inter font-medium text-[#075E54] transition-colors hover:bg-[#ecfff4]"
+                            >
+                                {reply}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
                 {isTyping && (
                     <div className="flex justify-start">
-                        <div className="rounded-2xl rounded-bl-md bg-[#F1F0F0] px-4 py-2.5 text-sm font-inter text-slate-700 shadow-sm">
-                            Assistant is typing...
+                        <div
+                            role="status"
+                            className="rounded-2xl rounded-bl-md bg-[#F1F0F0] px-4 py-2.5 text-sm font-inter text-slate-700 shadow-sm"
+                        >
+                            {strings.typing}
                         </div>
                     </div>
                 )}
@@ -377,12 +515,18 @@ export default function SupportChatbot({
                         value={input}
                         onChange={(event) => setInput(event.target.value)}
                         onKeyDown={(event) => {
-                            if (event.key === "Enter") {
+                            // Ignore the Enter that confirms an IME composition (Devanagari
+                            // keyboards), which would otherwise send half-typed text.
+                            if (event.key === "Enter" && !event.nativeEvent.isComposing) {
                                 event.preventDefault();
                                 void handleSubmit();
                             }
                         }}
                         placeholder={inputPlaceholder}
+                        aria-label={strings.inputLabel}
+                        maxLength={MAX_INPUT_CHARS}
+                        enterKeyHint="send"
+                        autoComplete="off"
                         className="h-11 flex-1 rounded-full border border-slate-200 bg-slate-50 px-4 text-sm font-inter text-slate-900 outline-none transition-colors focus:border-[#25D366]"
                     />
                     <button
@@ -390,7 +534,7 @@ export default function SupportChatbot({
                         onClick={() => void handleSubmit()}
                         disabled={!input.trim() || isTyping}
                         className="flex h-11 w-11 items-center justify-center rounded-full bg-[#25D366] text-white transition-colors hover:bg-[#1fa855] disabled:cursor-not-allowed disabled:bg-slate-300"
-                        aria-label="Send message"
+                        aria-label={strings.send}
                     >
                         <Send className="h-4 w-4" />
                     </button>

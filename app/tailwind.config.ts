@@ -73,12 +73,12 @@ const config: Config = {
                 },
             },
             fontFamily: {
-                playfair: ["var(--font-playfair)", "serif"],
-                inter: ["var(--font-inter)", "sans-serif"],
+                playfair: ["var(--font-playfair)", "Georgia", "Times New Roman", "serif"],
+                inter: ["var(--font-inter)", "Segoe UI", "Arial", "sans-serif"],
                 /**
                  * Alias used in profile/admin pages (font-display -> Playfair).
                  */
-                display: ["var(--font-playfair)", "serif"],
+                display: ["var(--font-playfair)", "Georgia", "Times New Roman", "serif"],
             },
             borderRadius: {
                 "2xl": "1rem",

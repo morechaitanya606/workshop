@@ -142,7 +142,7 @@ export default function SignupPage() {
                     <Link href="/" className="flex items-center gap-2.5 mb-10">
                         <div className="relative w-10 h-10 rounded-xl overflow-hidden">
                             <Image
-                                src="/images/logo-black.jpeg"
+                                src="/images/logo-black.webp"
                                 alt="Only Workshops"
                                 fill
                                 className="object-cover"

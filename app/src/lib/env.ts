@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ChatbotLlmProvider, ChatbotLlmProviderName } from "@/lib/chatbot-llm-shared";
 
 const nonEmpty = z.string().trim().min(1);
 
@@ -17,6 +18,14 @@ const publicEnvSchema = z.object({
 
 const serverEnvSchema = z.object({
     GROQ_API_KEY: nonEmpty.optional(),
+    GROQ_MODEL: nonEmpty.optional(),
+    GROQ_FALLBACK_MODEL: nonEmpty.optional(),
+    OPENAI_API_KEY: nonEmpty.optional(),
+    OPENAI_MODEL: nonEmpty.optional(),
+    ANTHROPIC_API_KEY: nonEmpty.optional(),
+    ANTHROPIC_MODEL: nonEmpty.optional(),
+    HUGGINGFACE_CHAT_MODEL: nonEmpty.optional(),
+    CHATBOT_LLM_PROVIDERS: nonEmpty.optional(),
     HUGGINGFACE_API_KEY: nonEmpty.optional(),
     HUGGINGFACE_EMBEDDING_MODEL: nonEmpty.optional(),
     HUGGINGFACE_EMBEDDING_ENDPOINT: z.string().url().optional(),
@@ -29,6 +38,10 @@ const serverEnvSchema = z.object({
     PAYMENT_NOTIFICATIONS_WEBHOOK_URL: z.string().url().optional(),
     PAYMENT_NOTIFICATIONS_WEBHOOK_SECRET: nonEmpty.optional(),
     RESEND_API_KEY: nonEmpty.optional(),
+    MAILJET_API_KEY: nonEmpty.optional(),
+    MAILJET_SECRET_KEY: nonEmpty.optional(),
+    EMAIL_PROVIDER: z.enum(["mailjet", "resend"]).optional(),
+    EMAIL_FROM: nonEmpty.optional(),
     CAREERS_INBOX_EMAIL: z.string().email().optional(),
     UPSTASH_REDIS_REST_URL: z.string().url().optional(),
     UPSTASH_REDIS_REST_TOKEN: nonEmpty.optional(),
@@ -69,6 +82,15 @@ export const env = parseOrThrow(
     {
         ...publicEnv,
         GROQ_API_KEY: process.env.GROQ_API_KEY,
+        // `|| undefined` so a blank `GROQ_MODEL=` line means "use the default", not a boot error.
+        GROQ_MODEL: process.env.GROQ_MODEL?.trim() || undefined,
+        GROQ_FALLBACK_MODEL: process.env.GROQ_FALLBACK_MODEL?.trim() || undefined,
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY?.trim() || undefined,
+        OPENAI_MODEL: process.env.OPENAI_MODEL?.trim() || undefined,
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY?.trim() || undefined,
+        ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL?.trim() || undefined,
+        HUGGINGFACE_CHAT_MODEL: process.env.HUGGINGFACE_CHAT_MODEL?.trim() || undefined,
+        CHATBOT_LLM_PROVIDERS: process.env.CHATBOT_LLM_PROVIDERS?.trim() || undefined,
         HUGGINGFACE_API_KEY: process.env.HUGGINGFACE_API_KEY,
         HUGGINGFACE_EMBEDDING_MODEL: process.env.HUGGINGFACE_EMBEDDING_MODEL,
         HUGGINGFACE_EMBEDDING_ENDPOINT: process.env.HUGGINGFACE_EMBEDDING_ENDPOINT,
@@ -81,6 +103,10 @@ export const env = parseOrThrow(
         PAYMENT_NOTIFICATIONS_WEBHOOK_URL: process.env.PAYMENT_NOTIFICATIONS_WEBHOOK_URL,
         PAYMENT_NOTIFICATIONS_WEBHOOK_SECRET: process.env.PAYMENT_NOTIFICATIONS_WEBHOOK_SECRET,
         RESEND_API_KEY: process.env.RESEND_API_KEY,
+        MAILJET_API_KEY: process.env.MAILJET_API_KEY,
+        MAILJET_SECRET_KEY: process.env.MAILJET_SECRET_KEY,
+        EMAIL_PROVIDER: process.env.EMAIL_PROVIDER || undefined,
+        EMAIL_FROM: process.env.EMAIL_FROM,
         CAREERS_INBOX_EMAIL: process.env.CAREERS_INBOX_EMAIL,
         UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
         UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
@@ -204,11 +230,91 @@ export function getGroqConfig() {
         return null;
     }
 
+    // The old hard-coded default, llama3-8b-8192, was decommissioned by Groq on 2025-08-30, so
+    // every call failed and the chatbot silently fell back to raw FAQ text. The default is now
+    // a current production model (strong multilingual quality); the fallback is the fast 8B
+    // model, which has its own rate-limit bucket. Both can be overridden per environment.
+    const model = env.GROQ_MODEL || "llama-3.3-70b-versatile";
+    const fallbackModel = env.GROQ_FALLBACK_MODEL || "llama-3.1-8b-instant";
+
     return {
         apiKey,
         endpoint: "https://api.groq.com/openai/v1/chat/completions",
-        model: "llama3-8b-8192",
+        model,
+        fallbackModel: fallbackModel === model ? null : fallbackModel,
     };
+}
+
+/** Claude first for answer quality; a provider without a key is simply skipped. */
+const CHATBOT_PROVIDER_ORDER: readonly ChatbotLlmProviderName[] = [
+    "anthropic",
+    "groq",
+    "openai",
+    "huggingface",
+];
+
+/** `CHATBOT_LLM_PROVIDERS=anthropic,groq` picks which providers run and in what order. */
+function parseChatbotProviderOrder(value: string | undefined): ChatbotLlmProviderName[] {
+    const requested = (value || "")
+        .split(",")
+        .map((part) => part.trim().toLowerCase())
+        .filter((part): part is ChatbotLlmProviderName =>
+            (CHATBOT_PROVIDER_ORDER as readonly string[]).includes(part)
+        );
+    const unique = Array.from(new Set(requested));
+    return unique.length > 0 ? unique : [...CHATBOT_PROVIDER_ORDER];
+}
+
+/**
+ * Every chatbot model provider that has a key, in failover order. Each key is optional: the
+ * chain uses whatever is configured, and with none at all the chatbot still answers from
+ * workshop data and FAQs.
+ */
+export function getChatbotLlmProviders(): ChatbotLlmProvider[] {
+    const configured: Partial<Record<ChatbotLlmProviderName, ChatbotLlmProvider>> = {};
+
+    const groq = getGroqConfig();
+    if (groq) {
+        configured.groq = {
+            name: "groq",
+            apiKey: groq.apiKey,
+            endpoint: groq.endpoint,
+            models: [groq.model, groq.fallbackModel].filter((m): m is string => !!m),
+        };
+    }
+
+    if (env.OPENAI_API_KEY) {
+        configured.openai = {
+            name: "openai",
+            apiKey: env.OPENAI_API_KEY,
+            endpoint: "https://api.openai.com/v1/chat/completions",
+            // gpt-4o-mini backs up a configured model that is retired or unavailable to the key.
+            models: Array.from(new Set([env.OPENAI_MODEL || "gpt-4.1-mini", "gpt-4o-mini"])),
+        };
+    }
+
+    if (env.ANTHROPIC_API_KEY) {
+        configured.anthropic = {
+            name: "anthropic",
+            apiKey: env.ANTHROPIC_API_KEY,
+            models: [env.ANTHROPIC_MODEL || "claude-opus-5-5"],
+        };
+    }
+
+    // The same token as embeddings; it needs the "Make calls to Inference Providers"
+    // permission. Without it the router answers 401/403 and the chain moves on.
+    if (env.HUGGINGFACE_API_KEY) {
+        configured.huggingface = {
+            name: "huggingface",
+            apiKey: env.HUGGINGFACE_API_KEY,
+            endpoint: "https://router.huggingface.co/v1/chat/completions",
+            models: [env.HUGGINGFACE_CHAT_MODEL || "meta-llama/Llama-3.1-8B-Instruct"],
+        };
+    }
+
+    return parseChatbotProviderOrder(env.CHATBOT_LLM_PROVIDERS)
+        .map((name) => configured[name])
+        .filter((provider): provider is ChatbotLlmProvider => !!provider);
 }
 
 export function getHuggingFaceEmbeddingConfig() {
@@ -287,8 +393,9 @@ export function getMissingProductionEnvVars() {
         if (!env.RAZORPAY_WEBHOOK_SECRET) {
             missing.push("RAZORPAY_WEBHOOK_SECRET");
         }
-        if (!env.RESEND_API_KEY) {
-            missing.push("RESEND_API_KEY");
+        // One working mail provider is enough: Mailjet (both keys) or Resend.
+        if (!env.RESEND_API_KEY && !(env.MAILJET_API_KEY && env.MAILJET_SECRET_KEY)) {
+            missing.push("MAILJET_API_KEY + MAILJET_SECRET_KEY (or RESEND_API_KEY)");
         }
         // Without a shared counter store, every guarded route falls back to a per-instance
         // Map. On Vercel that multiplies every limit by the number of live lambdas, so "20

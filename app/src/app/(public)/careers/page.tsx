@@ -1,13 +1,20 @@
 import { BriefcaseBusiness } from "lucide-react";
 import StaticPage from "@/components/StaticPage";
-import { Metadata } from "next";
+import type { Metadata } from "next";
+import { getAbsoluteUrl } from "@/lib/env";
+import { DEFAULT_OG_IMAGES } from "@/lib/seo";
 import CareersApplicationForm from "./CareersApplicationForm";
 
 export const metadata: Metadata = {
     title: "Careers | Only Workshops",
     description:
         "Join our team at Only Workshops. We are looking for talented creators, storytellers, and marketing talent to shape the future of creative experiences.",
+    alternates: {
+        canonical: getAbsoluteUrl("/careers"),
+    },
     openGraph: {
+        url: getAbsoluteUrl("/careers"),
+        images: DEFAULT_OG_IMAGES,
         title: "Careers | Only Workshops",
         description:
             "Join our team at Only Workshops. We are looking for talented creators, storytellers, and marketing talent to shape the future of creative experiences.",

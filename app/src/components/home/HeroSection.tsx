@@ -3,39 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
-import {
-    fadeIn,
-    fadeInUp,
-    quickTransition,
-    scaleIn,
-    slowBounce,
-    standardTransition,
-    useMotionProps,
-} from "@/lib/motion-presets";
+import { heroVideoUrl } from "@/lib/media";
+import { fadeIn, quickTransition, slowBounce, useMotionProps } from "@/lib/motion-presets";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 
 const HERO_MOBILE_QUERY = "(max-width: 640px)";
 
 /**
- * Where the hero renditions are served from.
- *
- * Unset (the default) serves them from `public/videos`, which is where the four renditions
- * the homepage uses actually live -- Vercel's CDN includes 100GB/month on this plan, against
- * 5GB on Supabase's free tier that is shared with API, auth and database traffic.
- *
- * Setting NEXT_PUBLIC_MEDIA_BASE_URL moves them to an object store without touching this
- * file. Worth doing once traffic is real; see app/public/videos/README.md.
- *
- * Pick that origin deliberately: these clips are 4-8MB each, so on a metered store they
- * dominate the egress bill. Cloudflare R2 (already allow-listed in next.config.mjs and the
- * image proxy) charges nothing for egress and is the intended home.
+ * The renditions are committed under public/videos and served from Vercel's CDN; `@/lib/media`
+ * resolves the origin (and how to move it to R2 later). Keep the file names here in step with
+ * the exceptions in .gitignore and .vercelignore, or a deploy ships without them.
  */
-const MEDIA_BASE_URL = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL || "").replace(/\/+$/, "");
-
-function heroVideoUrl(fileName: string) {
-    return MEDIA_BASE_URL ? `${MEDIA_BASE_URL}/${fileName}` : `/videos/${fileName}`;
-}
 
 /**
  * Desktop shows all three clips at once as a pre-composited 1920x1080 triptych, so the
@@ -72,7 +52,8 @@ export default function HeroSection({
     heroImageUrl?: string;
 }) {
     const heroRef = useRef<HTMLDivElement>(null);
-    const shouldReduceMotion = Boolean(useReducedMotion());
+    // Hydration-safe: false on the server and on the first client render, then the real value.
+    const shouldReduceMotion = usePrefersReducedMotion();
     const { scrollYProgress } = useScroll({
         target: heroRef,
         offset: ["start start", "end start"],
@@ -86,18 +67,6 @@ export default function HeroSection({
         [0, shouldReduceMotion ? 0 : 1]
     );
 
-    const heroBadgeMotionProps = useMotionProps(shouldReduceMotion, scaleIn, quickTransition, {
-        whileInView: false,
-        delay: 0.2,
-    });
-    const heroBodyMotionProps = useMotionProps(shouldReduceMotion, fadeInUp, standardTransition, {
-        whileInView: false,
-        delay: 0.45,
-    });
-    const heroCtaMotionProps = useMotionProps(shouldReduceMotion, fadeInUp, standardTransition, {
-        whileInView: false,
-        delay: 0.7,
-    });
     const scrollIndicatorMotionProps = useMotionProps(shouldReduceMotion, fadeIn, quickTransition, {
         whileInView: false,
         delay: 1.5,
@@ -116,7 +85,9 @@ export default function HeroSection({
     const [failedSrcs, setFailedSrcs] = useState<ReadonlySet<string>>(() => new Set());
 
     useEffect(() => {
-        if (shouldReduceMotion) {
+        // Read the preference directly here: `shouldReduceMotion` starts false for hydration, and
+        // keying this effect on it would briefly mount (then abort) a video for those visitors.
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
             setIsMobileRendition(null);
             return;
         }
@@ -127,7 +98,7 @@ export default function HeroSection({
         applyRendition();
         mediaQuery.addEventListener("change", applyRendition);
         return () => mediaQuery.removeEventListener("change", applyRendition);
-    }, [shouldReduceMotion]);
+    }, []);
 
     const videoSrc =
         isMobileRendition === null
@@ -227,65 +198,53 @@ export default function HeroSection({
                 style={shouldReduceMotion ? undefined : { opacity: heroOpacity }}
                 className="relative z-10 h-full flex flex-col items-center justify-center text-center px-4"
             >
-                <motion.div
-                    {...heroBadgeMotionProps}
-                    className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-md border border-white/20 rounded-full px-5 py-2 mb-8 hover-lift"
+                <div
+                    style={{ "--reveal-delay": "0.2s" } as React.CSSProperties}
+                    className="reveal-scale inline-flex items-center gap-2 bg-white/15 backdrop-blur-md border border-white/20 rounded-full px-5 py-2 mb-8 hover-lift"
                 >
                     <Sparkles className="w-4 h-4 text-terracotta-300" />
                     <span className="text-sm font-inter font-medium text-white/90">
                         Creative experiences in the city
                     </span>
-                </motion.div>
+                </div>
 
                 <div className="mb-6">
                     <h1 className="heading-xl text-white max-w-4xl text-balance text-glow-soft">
                         {headlineWords.map((word, i) => (
-                            <motion.span
+                            <span
                                 key={word}
-                                initial={shouldReduceMotion ? undefined : { opacity: 0, y: 20 }}
-                                animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
-                                transition={
-                                    shouldReduceMotion
-                                        ? { duration: 0 }
-                                        : {
-                                              duration: 0.5,
-                                              delay: 0.3 + i * 0.12,
-                                              ease: [0.22, 1, 0.36, 1],
-                                          }
+                                style={
+                                    {
+                                        "--reveal-delay": `${0.3 + i * 0.12}s`,
+                                    } as React.CSSProperties
                                 }
-                                className="inline-block mr-[0.3em]"
+                                className="reveal-up inline-block mr-[0.3em]"
                             >
                                 {word}
-                            </motion.span>
+                            </span>
                         ))}
                         <br />
-                        <motion.span
-                            initial={shouldReduceMotion ? undefined : { opacity: 0, y: 20 }}
-                            animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
-                            transition={
-                                shouldReduceMotion
-                                    ? { duration: 0 }
-                                    : { duration: 0.5, delay: 0.66, ease: [0.22, 1, 0.36, 1] }
-                            }
-                            className="text-terracotta-300 inline-block"
+                        <span
+                            style={{ "--reveal-delay": "0.66s" } as React.CSSProperties}
+                            className="reveal-up text-terracotta-300 inline-block"
                         >
                             Awaits.
-                        </motion.span>
+                        </span>
                     </h1>
                 </div>
 
                 <div className="overflow-hidden mb-10">
-                    <motion.p
-                        {...heroBodyMotionProps}
-                        className="text-lg sm:text-xl font-inter text-white/80 max-w-xl"
+                    <p
+                        style={{ "--reveal-delay": "0.45s" } as React.CSSProperties}
+                        className="reveal-up text-lg sm:text-xl font-inter text-white/80 max-w-xl"
                     >
                         Celebrate through experience. Connect through creativity.
-                    </motion.p>
+                    </p>
                 </div>
 
-                <motion.div
-                    {...heroCtaMotionProps}
-                    className="flex flex-col sm:flex-row items-center gap-4"
+                <div
+                    style={{ "--reveal-delay": "0.7s" } as React.CSSProperties}
+                    className="reveal-up flex flex-col sm:flex-row items-center gap-4"
                 >
                     <Link
                         href="/explore"
@@ -294,7 +253,7 @@ export default function HeroSection({
                         Explore Workshops
                         <ArrowRight className="w-5 h-5" />
                     </Link>
-                </motion.div>
+                </div>
             </motion.div>
 
             {!shouldReduceMotion && (

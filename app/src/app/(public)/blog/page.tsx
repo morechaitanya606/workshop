@@ -1,8 +1,13 @@
+import type { Metadata } from "next";
 import StaticPage from "@/components/StaticPage";
+import { getAbsoluteUrl } from "@/lib/env";
 
-export const metadata = {
+export const metadata: Metadata = {
     title: "Blog | Only Workshops",
     description: "Stories, hosting lessons, and creative community updates from Only Workshops.",
+    alternates: {
+        canonical: getAbsoluteUrl("/blog"),
+    },
 };
 
 export default function BlogPage() {

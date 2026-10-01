@@ -6,6 +6,7 @@ import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { adminFeedbackQuerySchema } from "@/lib/validators";
 import { isMissingFeedbackTableError } from "@/lib/feedback-fallback";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { buildIlikeOrFilter } from "@/lib/search-sanitize";
 
 type WorkshopInfo = {
     id: string;
@@ -54,11 +55,9 @@ function applyFeedbackFilters(query: any, q: string, workshopId: string) {
         next = next.eq("workshop_id", workshopId);
     }
 
-    if (q) {
-        const safeQ = q.replace(/[%(),]/g, "");
-        if (safeQ) {
-            next = next.or(`comment.ilike.%${safeQ}%,workshop_id.ilike.%${safeQ}%`);
-        }
+    const searchFilter = buildIlikeOrFilter(["comment", "workshop_id"], q);
+    if (searchFilter) {
+        next = next.or(searchFilter);
     }
 
     return next;

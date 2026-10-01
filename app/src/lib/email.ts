@@ -1,26 +1,11 @@
-import { Resend } from "resend";
+import { render } from "@react-email/components";
 import { BookingConfirmationEmail } from "@/emails/BookingConfirmation";
 import { WorkshopReminderEmail } from "@/emails/WorkshopReminder";
 import { FeedbackRequestEmail } from "@/emails/FeedbackRequest";
 import { createSupabaseServiceClient } from "./supabase-server";
 import { claimIdempotencyKey, releaseIdempotencyKey } from "./idempotency";
+import { deliverEmail } from "./email-provider";
 import * as Sentry from "@sentry/nextjs";
-
-const FROM_EMAIL = "Only Workshops <no-reply@updates.onlyworkshop.com>"; // Replace with verified domain
-let resendClient: Resend | null = null;
-
-function getResendClient() {
-    const apiKey = process.env.RESEND_API_KEY?.trim();
-    if (!apiKey) {
-        throw new Error("RESEND_API_KEY is not configured.");
-    }
-
-    if (!resendClient) {
-        resendClient = new Resend(apiKey);
-    }
-
-    return resendClient;
-}
 
 interface SendEmailParams {
     to: string;
@@ -103,17 +88,9 @@ async function sendEmailAndLog({ to, subject, templateName, react, referenceId }
     }
 
     try {
-        // 2. Send the email via Resend
-        const { data: resendData, error: resendError } = await getResendClient().emails.send({
-            from: FROM_EMAIL,
-            to,
-            subject,
-            react,
-        });
-
-        if (resendError) {
-            throw new Error(resendError.message);
-        }
+        // 2. Render once, then hand off to the provider layer (Mailjet, falling back to Resend)
+        const [html, text] = await Promise.all([render(react), render(react, { plainText: true })]);
+        const delivery = await deliverEmail({ to, subject, html, text });
 
         // 3. Update log entry to "sent"
         if (logEntry) {
@@ -126,7 +103,7 @@ async function sendEmailAndLog({ to, subject, templateName, react, referenceId }
                 .eq("id", logEntry.id);
         }
 
-        return { success: true, data: resendData };
+        return { success: true, data: { id: delivery.messageId, provider: delivery.provider } };
     } catch (error: unknown) {
         Sentry.captureException(error, {
             tags: { layer: "email", action: "send" },

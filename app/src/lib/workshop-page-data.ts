@@ -15,6 +15,8 @@ import {
 import type { Workshop } from "@/lib/data";
 import type { SpecialPageSettings } from "@/lib/special-page";
 import { WORKSHOPS_LIST_TAG } from "@/lib/cached-reads";
+import { getIstTodayIso } from "@/lib/ist-date";
+import { buildIlikeOrFilter } from "@/lib/search-sanitize";
 
 export type WorkshopPageSource = "supabase" | "error";
 
@@ -76,11 +78,9 @@ function buildExploreWorkshopQuery(
         dbQuery = dbQuery.eq("approval_status", "approved");
     }
 
-    if (query.q) {
-        const q = query.q.replace(/[%]/g, "");
-        dbQuery = dbQuery.or(
-            `title.ilike.%${q}%,description.ilike.%${q}%,location.ilike.%${q}%,city.ilike.%${q}%`
-        );
+    const searchFilter = buildIlikeOrFilter(["title", "description", "location", "city"], query.q);
+    if (searchFilter) {
+        dbQuery = dbQuery.or(searchFilter);
     }
     const isPastEventsCategory =
         normalizedCategory.toLowerCase() === PAST_EVENTS_CATEGORY_LABEL.toLowerCase();
@@ -93,14 +93,8 @@ function buildExploreWorkshopQuery(
             dbQuery = dbQuery.in("category", categoryValues);
         }
     }
-    if (isPastEventsCategory) {
-        const today = new Date().toISOString().slice(0, 10);
-        dbQuery = dbQuery.lt("date", today);
-    }
-    if (!isPastEventsCategory) {
-        const today = new Date().toISOString().slice(0, 10);
-        dbQuery = dbQuery.gte("date", today);
-    }
+    const today = getIstTodayIso();
+    dbQuery = isPastEventsCategory ? dbQuery.lt("date", today) : dbQuery.gte("date", today);
     if (query.city) {
         dbQuery = dbQuery.eq("city", query.city);
     }
@@ -124,7 +118,7 @@ export async function loadHomeWorkshops(): Promise<HomeWorkshopsResult> {
     if (isSupabaseServiceConfigured) {
         try {
             const serviceClient = createSupabaseServiceClient({ requestTimeoutMs: 5000 });
-            const today = new Date().toISOString().slice(0, 10);
+            const today = getIstTodayIso();
 
             let [upcomingRes, pastRes] = await Promise.all([
                 buildHomeWorkshopQuery(serviceClient, {
@@ -271,17 +265,22 @@ async function fetchExploreWorkshops(
 export async function loadExploreWorkshops(searchParams: {
     [key: string]: string | string[] | undefined;
 }): Promise<ExploreWorkshopsResult> {
+    // A repeated param (`?q=a&q=b`) arrives as an array; only the first value is meaningful.
+    const param = (key: string) => {
+        const value = searchParams[key];
+        return Array.isArray(value) ? value[0] : value;
+    };
     const rawQuery = {
-        q: searchParams.q ?? "",
-        category: searchParams.category ?? "",
-        city: searchParams.city ?? "",
-        dateFrom: searchParams.dateFrom ?? "",
-        dateTo: searchParams.dateTo ?? "",
-        minPrice: searchParams.minPrice ?? undefined,
-        maxPrice: searchParams.maxPrice ?? undefined,
-        sort: searchParams.sort ?? "date_asc",
-        page: searchParams.page ?? 1,
-        pageSize: searchParams.pageSize ?? 8,
+        q: param("q") ?? "",
+        category: param("category") ?? "",
+        city: param("city") ?? "",
+        dateFrom: param("dateFrom") ?? "",
+        dateTo: param("dateTo") ?? "",
+        minPrice: param("minPrice") ?? undefined,
+        maxPrice: param("maxPrice") ?? undefined,
+        sort: param("sort") ?? "date_asc",
+        page: param("page") ?? 1,
+        pageSize: param("pageSize") ?? 8,
     };
 
     const parsed = workshopQuerySchema.safeParse(rawQuery);
@@ -302,6 +301,68 @@ export async function loadExploreWorkshops(searchParams: {
         ["explore-workshops", cacheKey],
         { revalidate: 60, tags: [WORKSHOPS_LIST_TAG] }
     )();
+}
+
+export type PastWorkshopsResult = {
+    data: Workshop[];
+    total: number;
+    source: WorkshopPageSource;
+};
+
+export const PAST_WORKSHOPS_PAGE_SIZE = 12;
+
+/**
+ * Dedicated, paginated query for the past-events page. Reusing `loadHomeWorkshops` meant fetching
+ * (and throwing away) a dozen upcoming rows and capping the archive at 8 events.
+ */
+export async function loadPastWorkshops(
+    page = 1,
+    pageSize = PAST_WORKSHOPS_PAGE_SIZE
+): Promise<PastWorkshopsResult> {
+    const safePage = Number.isFinite(page) ? Math.min(Math.max(Math.floor(page), 1), 200) : 1;
+    const safeSize = Math.min(Math.max(Math.floor(pageSize), 1), 48);
+    const from = (safePage - 1) * safeSize;
+    const to = from + safeSize - 1;
+
+    if (isSupabaseServiceConfigured) {
+        try {
+            const serviceClient = createSupabaseServiceClient({ requestTimeoutMs: 5000 });
+            const today = getIstTodayIso();
+            const run = (includeApprovalFilter: boolean) => {
+                let dbQuery = serviceClient.from("workshops").select("*", { count: "exact" });
+                if (includeApprovalFilter) {
+                    dbQuery = dbQuery.eq("approval_status", "approved");
+                }
+                return dbQuery
+                    .lt("date", today)
+                    .order("date", { ascending: false })
+                    .range(from, to);
+            };
+
+            let { data, error, count } = await run(true);
+            if (error && isMissingApprovalStatusColumnError(error)) {
+                ({ data, error, count } = await run(false));
+            }
+
+            if (!error) {
+                return {
+                    data: (data || []).map((row) => mapWorkshopRowToWorkshop(row)),
+                    total: count || 0,
+                    source: "supabase",
+                };
+            }
+
+            Sentry.captureException(error, {
+                tags: { layer: "web", route: "past_events_page" },
+            });
+        } catch (error) {
+            Sentry.captureException(error, {
+                tags: { layer: "web", route: "past_events_page" },
+            });
+        }
+    }
+
+    return { data: [], total: 0, source: "error" };
 }
 
 export type PlatformSettingsType = {

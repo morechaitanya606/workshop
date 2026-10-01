@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useId, useRef } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useModalA11y } from "@/lib/use-modal-a11y";
 
 type SheetSide = "left" | "right" | "bottom";
 
@@ -42,42 +43,35 @@ export function Sheet({
     className,
     overlayClassName,
 }: SheetProps) {
-    useEffect(() => {
-        if (!open) return;
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const titleId = useId();
 
-        const handleEscape = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                onOpenChange(false);
-            }
-        };
-
-        const previousOverflow = document.body.style.overflow;
-        document.body.style.overflow = "hidden";
-        window.addEventListener("keydown", handleEscape);
-
-        return () => {
-            document.body.style.overflow = previousOverflow;
-            window.removeEventListener("keydown", handleEscape);
-        };
-    }, [onOpenChange, open]);
+    // Focus trap, initial focus, Escape, scroll lock and focus restore.
+    useModalA11y({ open, containerRef, onClose: () => onOpenChange(false) });
 
     if (!open) return null;
 
     return (
         <div
-            className={cn("fixed inset-0 z-[120] bg-black/45", overlayClassName)}
+            ref={containerRef}
+            className={cn("fixed inset-0 z-[120] bg-black/45 outline-none", overlayClassName)}
             onClick={() => onOpenChange(false)}
             role="dialog"
             aria-modal="true"
-            aria-label={title || "Sheet"}
+            aria-labelledby={title ? titleId : undefined}
+            aria-label={title ? undefined : "Sheet"}
+            tabIndex={-1}
         >
             <aside
                 className={cn(panelBaseClassName(side), sideClassName(side), className)}
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="mb-4 flex items-center justify-between">
-                    <p className="font-playfair text-lg font-semibold text-dark">{title}</p>
+                    <p id={titleId} className="font-playfair text-lg font-semibold text-dark">
+                        {title}
+                    </p>
                     <button
+                        type="button"
                         onClick={() => onOpenChange(false)}
                         aria-label="Close sheet"
                         className="rounded-full p-1 text-dark-muted hover:bg-gray-100"

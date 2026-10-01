@@ -14,6 +14,18 @@ type Params = {
     params: Promise<{ slug: string }>;
 };
 
+function escapeLikePattern(value: string) {
+    return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+function alreadyRequestedResponse() {
+    return NextResponse.json({
+        success: true,
+        alreadyRequested: true,
+        message: "You have already requested to join this community.",
+    });
+}
+
 export async function POST(request: NextRequest, { params }: Params) {
     const { slug } = await params;
     const rateLimitResult = await assertRateLimit({
@@ -56,16 +68,40 @@ export async function POST(request: NextRequest, { params }: Params) {
             return jsonError("Community not found.", 404);
         }
 
+        // Stored lower-cased so the (community_id, lower(email)) unique index and this
+        // pre-check agree on what "the same person" means.
+        const email = parsed.data.email.trim().toLowerCase();
+
+        const { data: existing, error: existingError } = await serviceClient
+            .from("community_join_requests")
+            .select("id")
+            .eq("community_id", community.id)
+            // ilike with the LIKE metacharacters escaped == case-insensitive equality.
+            .ilike("email", escapeLikePattern(email))
+            .limit(1);
+
+        if (existingError) {
+            throw existingError;
+        }
+        if (Array.isArray(existing) && existing.length > 0) {
+            return alreadyRequestedResponse();
+        }
+
         const { error } = await serviceClient.from("community_join_requests").insert({
             community_id: community.id,
             full_name: parsed.data.fullName,
-            email: parsed.data.email,
+            email,
             phone: parsed.data.phone,
             note: parsed.data.note || null,
             status: "pending",
         });
 
         if (error) {
+            // Two simultaneous submissions both pass the pre-check; the unique index lets one
+            // win and rejects the other with 23505. That is "already requested", not a failure.
+            if (error.code === "23505") {
+                return alreadyRequestedResponse();
+            }
             throw error;
         }
 

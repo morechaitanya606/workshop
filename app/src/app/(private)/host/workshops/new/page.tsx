@@ -1,15 +1,32 @@
 "use client";
 
-import { type ChangeEvent, type FormEvent, useState } from "react";
+import { type ChangeEvent, type FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Crop, Loader2, Upload, X } from "lucide-react";
 import HostShell from "@/components/host/HostShell";
 import { useAuth } from "@/lib/auth-context";
-import { categories, PAST_EVENTS_CATEGORY_ID } from "@/lib/data";
-import { createHostWorkshop, toApiErrorMessage, uploadMedia } from "@/lib/api-client";
+import { categories, PAST_EVENTS_CATEGORY_ID, type Workshop } from "@/lib/data";
+import {
+    createHostWorkshop,
+    getHostWorkshop,
+    getHostWorkshops,
+    toApiErrorMessage,
+    uploadMedia,
+} from "@/lib/api-client";
 import { workshopCreateSchema } from "@/lib/validators";
 import { useImageCropper } from "@/components/ImageCropper";
+import ExistingWorkshopPicker from "@/components/workshop-form/ExistingWorkshopPicker";
+import SessionSlotsEditor from "@/components/workshop-form/SessionSlotsEditor";
+import { getCategorySelectionState, mapWorkshopToFormPrefill } from "@/lib/workshop-utils";
+import {
+    type SessionSlotForm,
+    buildSessionsPayload,
+    collectSessionErrors,
+    createSessionSlot,
+    sessionIssuesToErrors,
+    validateSessionList,
+} from "@/lib/workshop-sessions";
 
 function toList(value: string) {
     return value
@@ -26,8 +43,6 @@ type CreateWorkshopForm = {
     location: string;
     city: string;
     duration: string;
-    date: string;
-    time: string;
     maxSeats: string;
     coverImage: string;
     galleryImages: string;
@@ -64,8 +79,6 @@ const FIELD_VALIDATION_MESSAGES: Partial<Record<keyof CreateWorkshopForm, string
     location: "Location must be at least 2 characters.",
     city: "City must be at least 2 characters.",
     duration: "Duration is required.",
-    date: "Date is required.",
-    time: "Time is required.",
     maxSeats: "Max seats must be a whole number between 1 and 500.",
     coverImage: "Cover image is required. Upload an image or paste a valid image URL.",
     galleryImages: "Each gallery image must be a valid image URL.",
@@ -141,7 +154,18 @@ function UploadButton(props: {
 }
 
 export default function HostCreateWorkshopPage() {
+    // `useSearchParams` (for the `?from=<workshopId>` deep link) needs a Suspense boundary.
+    return (
+        <Suspense fallback={null}>
+            <HostCreateWorkshopForm />
+        </Suspense>
+    );
+}
+
+function HostCreateWorkshopForm() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const fromWorkshopId = searchParams.get("from");
     const { session } = useAuth();
     const categoryOptions = categories.filter(
         (item) => item.id !== "trending" && item.id !== PAST_EVENTS_CATEGORY_ID
@@ -164,8 +188,6 @@ export default function HostCreateWorkshopPage() {
         location: "",
         city: "",
         duration: "",
-        date: "",
-        time: "",
         maxSeats: "",
         coverImage: "",
         galleryImages: "",
@@ -191,6 +213,55 @@ export default function HostCreateWorkshopPage() {
         earlyBirdDiscountValue: "",
         earlyBirdDaysAfterListing: "",
     });
+    const [slots, setSlots] = useState<SessionSlotForm[]>(() => [createSessionSlot()]);
+    const [slotErrors, setSlotErrors] = useState<Record<string, string>>({});
+    const [prefillSource, setPrefillSource] = useState<{ id: string; title: string } | null>(null);
+    const [prefillError, setPrefillError] = useState<string | null>(null);
+
+    // Fill everything except date, time, seats remaining, rating and approval from a workshop.
+    const applyPrefill = (workshop: Workshop) => {
+        const prefill = mapWorkshopToFormPrefill(workshop);
+        setForm((prev) => ({ ...prev, ...prefill }));
+        const category = getCategorySelectionState(
+            prefill.category,
+            categoryOptions.map((item) => item.label)
+        );
+        setCategorySelection(category.selection);
+        setCustomCategory(category.custom);
+        setFieldErrors({});
+        setError(null);
+        setPrefillError(null);
+        setPrefillSource({ id: workshop.id, title: workshop.title });
+    };
+
+    const accessToken = session?.access_token;
+    useEffect(() => {
+        if (!fromWorkshopId || !accessToken) return;
+        let cancelled = false;
+        // The endpoint only returns workshops this host owns (admins may copy any).
+        getHostWorkshop(accessToken, fromWorkshopId)
+            .then((result) => {
+                if (!cancelled) applyPrefill(result.workshop);
+            })
+            .catch((loadError) => {
+                if (!cancelled) {
+                    setPrefillError(
+                        toApiErrorMessage(loadError, "Unable to load that workshop to copy from.")
+                    );
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+        // applyPrefill only uses setters and the static category list.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fromWorkshopId, accessToken]);
+
+    const loadReusableWorkshops = async () => {
+        if (!accessToken) throw new Error("Your session expired. Please log in again.");
+        const result = await getHostWorkshops(accessToken);
+        return Array.isArray(result.data) ? result.data : [];
+    };
 
     const update = (field: keyof CreateWorkshopForm, value: string) => {
         setForm((prev) => ({ ...prev, [field]: value }));
@@ -269,8 +340,7 @@ export default function HostCreateWorkshopPage() {
             location: form.location.trim(),
             city: form.city.trim(),
             duration: form.duration.trim(),
-            date: form.date.trim(),
-            time: form.time.trim(),
+            sessions: buildSessionsPayload(slots),
             maxSeats: Number(form.maxSeats),
             coverImage: form.coverImage.trim(),
             galleryImages: toList(form.galleryImages),
@@ -305,10 +375,16 @@ export default function HostCreateWorkshopPage() {
                 : 0,
         };
 
+        // Slot checks run on their own too, so past/duplicate slots are flagged together with
+        // other field errors instead of only after everything else is fixed.
+        const slotCheckErrors = sessionIssuesToErrors(validateSessionList(payload.sessions));
+
         const validation = workshopCreateSchema.safeParse(payload);
-        if (!validation.success) {
+        if (!validation.success || Object.keys(slotCheckErrors).length > 0) {
             const nextErrors: FieldErrors = {};
-            for (const issue of validation.error.issues) {
+            const issues = validation.success ? [] : validation.error.issues;
+            setSlotErrors({ ...collectSessionErrors(issues), ...slotCheckErrors });
+            for (const issue of issues) {
                 const [root, nested] = issue.path;
                 let field: keyof CreateWorkshopForm | null = null;
                 if (root === "socialLinks")
@@ -343,6 +419,7 @@ export default function HostCreateWorkshopPage() {
         setSaving(true);
         setError(null);
         setFieldErrors({});
+        setSlotErrors({});
         try {
             await createHostWorkshop(session.access_token, validation.data);
             router.push("/host/workshops");
@@ -370,6 +447,27 @@ export default function HostCreateWorkshopPage() {
                     </p>
                 </div>
             </div>
+
+            <div className="mb-5">
+                <ExistingWorkshopPicker
+                    loadWorkshops={loadReusableWorkshops}
+                    onSelect={applyPrefill}
+                    selectedId={prefillSource?.id}
+                    disabled={saving}
+                />
+            </div>
+
+            {prefillSource && (
+                <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-inter text-emerald-800">
+                    Details copied from &ldquo;{prefillSource.title}&rdquo;. Add the new date and
+                    time slot(s) below; check the other details before you submit.
+                </div>
+            )}
+            {prefillError && (
+                <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-inter text-red-700">
+                    {prefillError}
+                </div>
+            )}
 
             <form
                 onSubmit={handleSubmit}
@@ -523,31 +621,17 @@ export default function HostCreateWorkshopPage() {
                         />
                         <FieldError error={fieldErrors.longitude} />
                     </div>
-                    <div>
-                        <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
-                            Date
-                        </label>
-                        <input
-                            type="date"
-                            value={form.date}
-                            onChange={(e) => update("date", e.target.value)}
-                            className="w-full rounded-xl border border-gray-200 bg-cream-100 px-4 py-3 text-sm font-inter"
-                            required
+                    <div className="md:col-span-2">
+                        <SessionSlotsEditor
+                            slots={slots}
+                            onChange={(next) => {
+                                setSlots(next);
+                                setSlotErrors({});
+                            }}
+                            defaultMaxSeats={form.maxSeats}
+                            errors={slotErrors}
+                            disabled={saving}
                         />
-                        <FieldError error={fieldErrors.date} />
-                    </div>
-                    <div>
-                        <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
-                            Time
-                        </label>
-                        <input
-                            type="time"
-                            value={form.time}
-                            onChange={(e) => update("time", e.target.value)}
-                            className="w-full rounded-xl border border-gray-200 bg-cream-100 px-4 py-3 text-sm font-inter"
-                            required
-                        />
-                        <FieldError error={fieldErrors.time} />
                     </div>
                     <div>
                         <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
@@ -563,7 +647,7 @@ export default function HostCreateWorkshopPage() {
                     </div>
                     <div>
                         <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
-                            Max Seats
+                            Max Seats (default for every slot)
                         </label>
                         <input
                             type="number"

@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { loadPublicCommunities } from "@/lib/community-page-data";
 import { getAbsoluteUrl } from "@/lib/env";
+import { getIstTodayIso } from "@/lib/ist-date";
 import { loadExploreWorkshops } from "@/lib/workshop-page-data";
 import ExploreClient from "./ExploreClient";
 
@@ -20,7 +21,7 @@ export default async function ExplorePage({
     searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
     const resolvedSearchParams = await searchParams;
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = getIstTodayIso();
     const [{ data, total, source }, { data: featuredCommunities }] = await Promise.all([
         loadExploreWorkshops(resolvedSearchParams),
         loadPublicCommunities(3),

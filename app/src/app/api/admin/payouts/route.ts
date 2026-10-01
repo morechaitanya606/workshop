@@ -6,6 +6,13 @@ import { requireSupabaseService } from "@/lib/api-helpers";
 import { handleApiError, parseBody } from "@/lib/api-route";
 import type { Tables } from "@/lib/database.types";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
+import { callUntypedRpc } from "@/lib/payments-rpc";
+
+type PayoutRpcRow = {
+    payout_id: string | null;
+    amount: number | string | null;
+    earnings_count: number | null;
+};
 
 const createPayoutSchema = z.object({
     hostId: z.string().uuid(),
@@ -123,61 +130,48 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const { data: availableEarnings, error: earningsError } = await service.client
-            .from("host_earnings")
-            .select("id, amount")
-            .eq("host_id", parsed.data.hostId)
-            .eq("status", "available");
+        // One transaction in the database (20261001110100_atomic_host_payouts): lock the
+        // host's available earnings, insert the payout from that locked sum and mark exactly
+        // those rows paid. The old select -> insert -> update sequence let two concurrent
+        // requests both read the same 'available' rows and pay the host twice.
+        const { data: rows, error: payoutError } = await callUntypedRpc<PayoutRpcRow[]>(
+            service.client,
+            "create_host_payout",
+            {
+                p_host_id: parsed.data.hostId,
+                p_note: parsed.data.referenceNote || "Manual payout",
+                p_admin: auth.user.id,
+            }
+        );
 
-        if (earningsError) {
-            throw earningsError;
+        if (payoutError) {
+            throw payoutError;
         }
 
-        const earnings = availableEarnings || [];
-        if (!earnings.length) {
+        const created = Array.isArray(rows) ? rows[0] : null;
+        if (!created?.payout_id) {
+            // Nothing was available -- or a concurrent request just paid it all out. Either
+            // way no payout row was written and no earning was touched.
             return NextResponse.json(
                 { error: "No available host earnings to pay out." },
                 { status: 409 }
             );
         }
 
-        const amount = earnings.reduce((sum, row) => sum + Number(row.amount || 0), 0);
-        if (amount <= 0) {
-            return NextResponse.json(
-                { error: "Available earnings amount must be greater than zero." },
-                { status: 409 }
-            );
-        }
-
-        const { data: payout, error: payoutError } = await service.client
+        const { data: payout, error: payoutReadError } = await service.client
             .from("payouts")
-            .insert({
-                host_id: parsed.data.hostId,
-                amount,
-                status: "completed",
-                reference_note: parsed.data.referenceNote || "Manual payout",
-            })
             .select("*")
+            .eq("id", created.payout_id)
             .single();
 
-        if (payoutError) {
-            throw payoutError;
-        }
-
-        const earningIds = earnings.map((row) => row.id);
-        const { error: markPaidError } = await service.client
-            .from("host_earnings")
-            .update({ status: "paid" })
-            .in("id", earningIds);
-
-        if (markPaidError) {
-            throw markPaidError;
+        if (payoutReadError) {
+            throw payoutReadError;
         }
 
         return NextResponse.json(
             {
                 payout,
-                paidEarningsCount: earningIds.length,
+                paidEarningsCount: Number(created.earnings_count || 0),
                 message: "Payout recorded and earnings marked as paid.",
             },
             { status: 201 }

@@ -37,12 +37,13 @@ export default function BookingConfirmation({
     bookingId: string;
 }) {
     return (
-        <>
+        <div className="mx-auto max-w-3xl">
             <button
+                type="button"
                 onClick={onBack}
-                className="inline-flex items-center gap-2 text-sm font-medium text-dark-muted hover:text-dark transition-colors mb-6"
+                className="mb-6 inline-flex items-center gap-2 rounded text-sm font-medium text-dark-muted transition-colors hover:text-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
             >
-                <ArrowLeft className="w-4 h-4" />
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
                 Back
             </button>
             <motion.div
@@ -50,7 +51,7 @@ export default function BookingConfirmation({
                 initial={prefersReducedMotion ? undefined : "hidden"}
                 animate={prefersReducedMotion ? undefined : "visible"}
                 transition={prefersReducedMotion ? { duration: 0 } : standardTransition}
-                className="max-w-2xl mx-auto text-center"
+                className="text-center"
             >
                 <motion.div
                     variants={prefersReducedMotion ? undefined : scaleIn}
@@ -61,16 +62,22 @@ export default function BookingConfirmation({
                             ? { duration: 0 }
                             : { ...standardTransition, delay: 0.1 }
                     }
-                    className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6"
+                    className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 ring-8 ring-emerald-50"
                 >
-                    <Check className="w-10 h-10 text-emerald-600" />
+                    <Check
+                        className="h-10 w-10 text-emerald-600"
+                        strokeWidth={2.5}
+                        aria-hidden="true"
+                    />
                 </motion.div>
-                <h1 className="heading-lg mb-3">Booking Confirmed</h1>
-                <p className="text-body text-dark-muted mb-8">
-                    Your booking for <strong>{bookingWorkshopTitle}</strong> is confirmed.
+                <h1 className="heading-lg mb-3" role="status">
+                    You&apos;re booked!
+                </h1>
+                <p className="text-body mx-auto mb-8 max-w-xl text-dark-muted">
+                    Your booking for <strong className="text-dark">{bookingWorkshopTitle}</strong>{" "}
+                    is confirmed. Keep this ticket handy.
                 </p>
 
-                {/* Workshop Ticket */}
                 <WorkshopTicket
                     bookingId={bookingId}
                     workshopId={workshopId}
@@ -85,7 +92,7 @@ export default function BookingConfirmation({
                     prefersReducedMotion={prefersReducedMotion}
                 />
 
-                <div className="flex gap-3 justify-center mt-8 mb-6">
+                <div className="mb-6 mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                     <Link href="/profile" className="btn-primary">
                         View My Tickets
                     </Link>
@@ -94,16 +101,17 @@ export default function BookingConfirmation({
                     </Link>
                 </div>
 
-                <div className="border-t border-gray-100 pt-6 mt-2">
-                    <h3 className="text-sm font-inter font-bold text-dark-muted uppercase tracking-wider mb-4 text-center">
-                        Add to Calendar
-                    </h3>
-                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <div className="mt-2 border-t border-clay/40 pt-6">
+                    <h2 className="mb-4 text-center text-sm font-inter font-bold uppercase tracking-wider text-dark-muted">
+                        Add to calendar
+                    </h2>
+                    <div className="flex flex-col justify-center gap-3 sm:flex-row">
                         <button
+                            type="button"
                             onClick={() => downloadICSFile(calendarData, `${workshopId}.ics`)}
                             className="btn-secondary inline-flex items-center gap-2"
                         >
-                            <CalendarPlus className="w-4 h-4" />
+                            <CalendarPlus className="h-4 w-4" aria-hidden="true" />
                             Apple / Outlook (.ics)
                         </button>
                         <a
@@ -112,12 +120,12 @@ export default function BookingConfirmation({
                             rel="noopener noreferrer"
                             className="btn-secondary inline-flex items-center gap-2"
                         >
-                            <CalendarPlus className="w-4 h-4" />
+                            <CalendarPlus className="h-4 w-4" aria-hidden="true" />
                             Google Calendar
                         </a>
                     </div>
                 </div>
             </motion.div>
-        </>
+        </div>
     );
 }

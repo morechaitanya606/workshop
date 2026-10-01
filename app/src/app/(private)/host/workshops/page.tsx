@@ -3,7 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Calendar, MapPin, Users, Loader2, Plus, Clock, Pencil, Lock, Trash2 } from "lucide-react";
+import {
+    Calendar,
+    Copy,
+    MapPin,
+    Users,
+    Loader2,
+    Plus,
+    Clock,
+    Pencil,
+    Lock,
+    Trash2,
+} from "lucide-react";
 import HostShell from "@/components/host/HostShell";
 import { useAuth } from "@/lib/auth-context";
 import { deleteHostWorkshop, getHostWorkshops, toApiErrorMessage } from "@/lib/api-client";
@@ -225,6 +236,14 @@ export default function HostWorkshopsPage() {
                                     >
                                         <Users className="w-4 h-4" />
                                         Attendees
+                                    </Link>
+                                    <Link
+                                        href={`/host/workshops/new?from=${encodeURIComponent(workshop.id)}`}
+                                        className="btn-secondary !py-2 !px-4 text-sm flex-1 min-w-[8rem] justify-center"
+                                        title="Create a new workshop pre-filled with these details"
+                                    >
+                                        <Copy className="w-4 h-4" />
+                                        Duplicate
                                     </Link>
                                     {canHostEditWorkshop(workshop.approvalStatus) ? (
                                         <>

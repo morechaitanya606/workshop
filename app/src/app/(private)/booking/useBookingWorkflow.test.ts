@@ -30,8 +30,10 @@ const bookingTestWorkshop: Workshop = {
     materialsProvided: ["Materials"],
 };
 
+const routerMocks = vi.hoisted(() => ({ replace: vi.fn() }));
+
 vi.mock("next/navigation", () => ({
-    useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
+    useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: routerMocks.replace }),
     useSearchParams: () => new URLSearchParams(mockSearchParams),
 }));
 
@@ -62,6 +64,7 @@ vi.mock("@/lib/analytics", () => ({
 }));
 
 vi.mock("@/lib/api-client", () => ({
+    createBookingHold: vi.fn(),
     createCheckoutOrder: vi.fn(),
     confirmCheckoutPayment: vi.fn(),
     getWorkshopById: vi.fn(),
@@ -253,5 +256,100 @@ describe("useBookingWorkflow", () => {
             });
         });
         expect(result.current.showCouponInput).toBe(false);
+    });
+
+    describe("seat picking", () => {
+        it("derives the seat limits from the workshop and the current hold", async () => {
+            const { result } = renderHook(() => useBookingWorkflow());
+            await waitForReady(result);
+
+            expect(result.current.guests).toBe(2);
+            expect(result.current.selectedGuests).toBe(2);
+            expect(result.current.seatsRemaining).toBe(6);
+            expect(result.current.maxSelectableGuests).toBe(6);
+            expect(result.current.seatChangePending).toBe(false);
+        });
+
+        it("clamps the draft guest count and blocks checkout until it is applied", async () => {
+            const { result } = renderHook(() => useBookingWorkflow());
+            await waitForReady(result);
+
+            act(() => result.current.setDraftGuests(99));
+            expect(result.current.selectedGuests).toBe(6);
+            expect(result.current.seatChangePending).toBe(true);
+            expect(result.current.isCheckoutDisabled).toBe(true);
+
+            act(() => result.current.setDraftGuests(0));
+            expect(result.current.selectedGuests).toBe(1);
+
+            // Back to the held count: nothing to apply.
+            act(() => result.current.setDraftGuests(2));
+            expect(result.current.seatChangePending).toBe(false);
+
+            act(() => result.current.setDraftGuests(4));
+            act(() => result.current.resetDraftGuests());
+            expect(result.current.selectedGuests).toBe(2);
+        });
+
+        it("re-holds seats, swaps the hold and recalculates the total", async () => {
+            const expiresAt = new Date(Date.now() + 8 * 60 * 1000).toISOString();
+            vi.spyOn(apiClient, "createBookingHold").mockResolvedValue({
+                hold: { id: "h2", guests: 3, expires_at: expiresAt },
+                holdDurationMinutes: 8,
+            });
+
+            const { result } = renderHook(() => useBookingWorkflow());
+            await waitForReady(result);
+            act(() => result.current.setDraftGuests(3));
+
+            await act(async () => {
+                await result.current.reholdSeats();
+            });
+
+            expect(apiClient.createBookingHold).toHaveBeenCalledWith("mock-token", {
+                workshopId: "w1",
+                guests: 3,
+            });
+            expect(result.current.holdId).toBe("h2");
+            expect(result.current.guests).toBe(3);
+            expect(result.current.seatChangePending).toBe(false);
+            expect(result.current.subtotalOriginal).toBe(1800 * 3);
+            expect(result.current.total).toBe(1800 * 3 + 99);
+            expect(result.current.holdExpired).toBe(false);
+            expect(routerMocks.replace).toHaveBeenCalledWith(
+                expect.stringContaining("hold=h2"),
+                expect.anything()
+            );
+            expect(routerMocks.replace).toHaveBeenCalledWith(
+                expect.stringContaining("guests=3"),
+                expect.anything()
+            );
+        });
+
+        it("keeps the existing hold and learns the real availability when re-hold is rejected", async () => {
+            vi.mocked(apiClient.toApiErrorMessage).mockReturnValue("Only 1 seat left");
+            vi.spyOn(apiClient, "createBookingHold").mockRejectedValue(
+                Object.assign(new Error("Only 1 seat left"), {
+                    details: { availableSeats: 1 },
+                })
+            );
+
+            const { result } = renderHook(() => useBookingWorkflow());
+            await waitForReady(result);
+            act(() => result.current.setDraftGuests(4));
+
+            await act(async () => {
+                await result.current.reholdSeats();
+            });
+
+            expect(result.current.holdId).toBe("h1");
+            expect(result.current.guests).toBe(2);
+            expect(result.current.seatError).toBe("Only 1 seat left");
+            expect(result.current.seatsRemaining).toBe(1);
+            // Held guests always stay selectable even if fewer seats are now free.
+            expect(result.current.maxSelectableGuests).toBe(2);
+            expect(result.current.seatChangePending).toBe(false);
+            expect(routerMocks.replace).not.toHaveBeenCalled();
+        });
     });
 });

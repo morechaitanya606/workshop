@@ -1,3 +1,4 @@
+﻿import * as Sentry from "@sentry/nextjs";
 import { NextResponse, type NextRequest } from "next/server";
 import { revalidateTag } from "next/cache";
 import { createSupabaseServiceClient } from "@/lib/supabase-server";
@@ -5,6 +6,7 @@ import { requireAdminUser, jsonError } from "@/lib/api-auth";
 import type { Json } from "@/lib/database.types";
 import { PLATFORM_SETTINGS_TAG } from "@/lib/cached-reads";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
+import { pickPublicSettings, validateSettingsPatch } from "@/lib/platform-settings-schema";
 
 export async function GET(request: NextRequest) {
     const limit = await assertRateLimit({
@@ -19,16 +21,22 @@ export async function GET(request: NextRequest) {
         const { data, error } = await supabase.from("platform_settings").select("*");
 
         if (error) {
-            return jsonError(error.message, 500);
+            // The database message names tables and columns: report it, never return it.
+            Sentry.captureException(error, { tags: { layer: "api", route: "settings:get" } });
+            return jsonError("Unable to load settings right now.", 500);
         }
 
-        const settings = data.reduce(
+        const record = data.reduce(
             (acc, row) => {
                 acc[row.setting_key] = row.setting_value;
                 return acc;
             },
             {} as Record<string, Json>
         );
+
+        // Public endpoint: only allowlisted keys leave the server, so a row added to the
+        // table for server-side use never becomes readable by every visitor.
+        const settings = pickPublicSettings(record);
 
         // Non-personal, changes a few times a month: let the CDN absorb it. The app itself
         // now reads settings server-side via getCachedPlatformSettings, so this endpoint only
@@ -51,21 +59,30 @@ export async function PATCH(request: NextRequest) {
     const auth = await requireAdminUser(request);
     if (!auth.ok) return auth.response;
 
+    let body: unknown;
     try {
-        const body = await request.json();
-        const { settings } = body;
+        body = await request.json();
+    } catch {
+        return jsonError("Invalid payload. Expected JSON.", 400);
+    }
 
-        if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
-            return jsonError("Invalid payload. Expected { settings: object }", 400);
-        }
-        const settingsRecord = settings as Record<string, Json>;
+    const settings =
+        body && typeof body === "object" && !Array.isArray(body)
+            ? (body as { settings?: unknown }).settings
+            : undefined;
+    const parsed = validateSettingsPatch(settings);
+    if (!parsed.ok) {
+        return jsonError(parsed.error, 400, parsed.key ? { field: parsed.key } : undefined);
+    }
 
+    try {
         const supabase = createSupabaseServiceClient();
 
-        const upserts = Object.entries(settingsRecord).map(([key, value]) => ({
+        const updatedAt = new Date().toISOString();
+        const upserts = Object.entries(parsed.values).map(([key, value]) => ({
             setting_key: key,
-            setting_value: value,
-            updated_at: new Date().toISOString(),
+            setting_value: value as Json,
+            updated_at: updatedAt,
         }));
 
         const { error } = await supabase
@@ -73,7 +90,8 @@ export async function PATCH(request: NextRequest) {
             .upsert(upserts, { onConflict: "setting_key" });
 
         if (error) {
-            return jsonError(error.message, 500);
+            Sentry.captureException(error, { tags: { layer: "api", route: "settings:patch" } });
+            return jsonError("Unable to save settings right now.", 500);
         }
 
         revalidateTag(PLATFORM_SETTINGS_TAG);

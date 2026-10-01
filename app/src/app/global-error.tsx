@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 
 export default function GlobalError({
     error,
@@ -10,7 +11,13 @@ export default function GlobalError({
     reset: () => void;
 }) {
     useEffect(() => {
-        console.error("Global error:", error);
+        // The root layout itself failed, so no other boundary has seen this error.
+        Sentry.captureException(error, {
+            tags: {
+                route: "global",
+                layer: "web",
+            },
+        });
     }, [error]);
 
     return (

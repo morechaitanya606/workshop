@@ -9,6 +9,16 @@ import type { Database } from "@/lib/database.types";
 import { getPublicSupabaseConfig } from "@/lib/env";
 import { enforceRateLimit } from "@/lib/rate-limit";
 
+/**
+ * The login page renders `?error=` as text. Copying the provider's `error_description` (which
+ * anyone can put in a link to this callback) straight into that redirect let an attacker write
+ * arbitrary text onto our login page -- "Your account is locked, call +1-555-..." -- so only
+ * messages WE wrote ever reach the redirect. The raw value is used for classification only.
+ */
+const SIGN_IN_EXPIRED_MESSAGE = "Google sign-in expired. Please click Continue with Google again.";
+const SIGN_IN_CANCELLED_MESSAGE = "Sign-in was cancelled. Please try again.";
+const SIGN_IN_FAILED_MESSAGE = "Sign-in could not be completed. Please try again.";
+
 function getUserFacingAuthError(errorMessage: string) {
     const normalizedMessage = errorMessage.toLowerCase();
     if (
@@ -16,10 +26,14 @@ function getUserFacingAuthError(errorMessage: string) {
         normalizedMessage.includes("pkce") ||
         normalizedMessage.includes("auth flow was initiated")
     ) {
-        return "Google sign-in expired. Please click Continue with Google again.";
+        return SIGN_IN_EXPIRED_MESSAGE;
     }
 
-    return errorMessage;
+    if (normalizedMessage.includes("access_denied") || normalizedMessage.includes("cancel")) {
+        return SIGN_IN_CANCELLED_MESSAGE;
+    }
+
+    return SIGN_IN_FAILED_MESSAGE;
 }
 
 function createRedirectResponse(
@@ -50,8 +64,14 @@ export async function GET(request: NextRequest) {
     const code = requestUrl.searchParams.get("code");
     const appOrigin = getAuthAppOrigin(request);
     const next = sanitizeInternalRedirect(requestUrl.searchParams.get("next"), appOrigin);
-    const oauthError =
-        requestUrl.searchParams.get("error_description") || requestUrl.searchParams.get("error");
+    // Both params are classified, never echoed (see getUserFacingAuthError).
+    const oauthError = [
+        requestUrl.searchParams.get("error"),
+        requestUrl.searchParams.get("error_code"),
+        requestUrl.searchParams.get("error_description"),
+    ]
+        .filter(Boolean)
+        .join(" ");
 
     if (oauthError) {
         return redirectToLoginWithError(request, next, oauthError);

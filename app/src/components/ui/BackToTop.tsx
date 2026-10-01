@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import { ArrowUp } from "lucide-react";
 
 export default function BackToTop() {
     const [visible, setVisible] = useState(false);
-    const prefersReducedMotion = Boolean(useReducedMotion());
+    const prefersReducedMotion = usePrefersReducedMotion();
 
     useEffect(() => {
         const handleScroll = () => {

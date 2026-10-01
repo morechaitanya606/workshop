@@ -20,6 +20,18 @@ export async function POST(request: NextRequest) {
     // The submission form lives under the (private) route group, so the UI already
     // assumes a session. The route did not enforce it, which left anonymous callers able
     // to publish to a public page with no author to trace or ban.
+    //
+    // Address-keyed limit first: requireAuthenticatedUser is a remote Supabase call.
+    const preAuthLimit = await assertRateLimit({
+        key: getRateLimitKey(request, "community-create-ip"),
+        limit: 40,
+        windowMs: 60_000,
+        message: "Too many community submissions. Please wait and try again.",
+    });
+    if (!preAuthLimit.ok) {
+        return preAuthLimit.response;
+    }
+
     const auth = await requireAuthenticatedUser(request);
     if (!auth.ok) {
         return auth.response;

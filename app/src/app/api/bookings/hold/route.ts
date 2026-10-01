@@ -6,14 +6,14 @@ import { jsonError, requireAuthenticatedUser } from "@/lib/api-auth";
 import { bookingHoldSchema } from "@/lib/validators";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
-import { BOOKING_CUTOFF_HOURS, isBookingClosedNow } from "@/lib/booking-time";
+import { BOOKING_CUTOFF_HOURS, BOOKING_HOLD_MINUTES, isBookingClosedNow } from "@/lib/booking-time";
 import type { SupabaseServerClient } from "@/lib/supabase-server";
 import {
     getWorkshopApprovalStatus,
     isMissingApprovalStatusColumnError,
 } from "@/lib/workshop-approval-compat";
 
-const HOLD_DURATION_MINUTES = 15;
+const HOLD_DURATION_MINUTES = BOOKING_HOLD_MINUTES;
 
 /**
  * True only when the RPC itself is not installed -- never when it ran and raised.
@@ -67,6 +67,25 @@ function holdRpcErrorResponse(error: { message?: string }) {
     }
     if (message.includes("INVALID_GUEST_COUNT")) {
         return jsonError("Invalid guest count.", 400);
+    }
+    if (message.includes("HOLD_LIMIT_EXCEEDED")) {
+        // Raised by create_booking_hold (20261001110500): a user may pin at most 20 seats
+        // across all workshops at once. 'HOLD_LIMIT_EXCEEDED:<seats still allowed>'.
+        const allowed = /HOLD_LIMIT_EXCEEDED:([0-9]+)/.exec(message)?.[1];
+        return jsonError(
+            allowed === undefined || Number(allowed) === 0
+                ? "You are already holding the maximum number of seats. Complete or release an existing reservation first."
+                : `You can hold at most ${allowed} more seat${Number(allowed) === 1 ? "" : "s"} right now.`,
+            429,
+            { code: "HOLD_LIMIT_EXCEEDED" }
+        );
+    }
+    if (message.includes("HOLD_TIME_LIMIT_REACHED")) {
+        return jsonError(
+            "You have held these seats for the maximum time. Please try again in a few minutes.",
+            429,
+            { code: "HOLD_TIME_LIMIT_REACHED" }
+        );
     }
 
     // Transient: lock timeout, deadlock, statement timeout. Ask the client to retry

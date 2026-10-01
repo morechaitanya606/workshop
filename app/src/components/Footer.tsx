@@ -9,6 +9,9 @@ import { CONTACT_PAGE_HREF, CONTACT_PHONE_NUMBERS } from "@/lib/contact";
 
 export default function Footer() {
     const pathname = usePathname();
+    // The server and the visitor's browser can disagree about the year around New Year (different
+    // time zones), which is the one expected hydration difference here; React keeps the server text.
+    const currentYear = new Date().getFullYear();
     const isHomePage = pathname === "/";
     const showCompactMobileFooter = !isHomePage;
     const footerPhoneText = CONTACT_PHONE_NUMBERS.map((phone) =>
@@ -40,7 +43,8 @@ export default function Footer() {
                             ))}
                         </div>
                         <p className="text-xs font-inter text-dark-muted">
-                            &copy; {new Date().getFullYear()} Only Workshops Inc.
+                            &copy; <span suppressHydrationWarning>{currentYear}</span> Only
+                            Workshops Inc.
                         </p>
                     </div>
                 </div>
@@ -54,7 +58,7 @@ export default function Footer() {
                             <Link href="/" className="flex items-center gap-2.5 mb-4">
                                 <div className="interactive-surface relative w-8 h-8 rounded-lg overflow-hidden">
                                     <Image
-                                        src="/images/logo-black.jpeg"
+                                        src="/images/logo-black.webp"
                                         alt="Only Workshops"
                                         fill
                                         sizes="32px"
@@ -162,8 +166,8 @@ export default function Footer() {
                     >
                         <RevealItem className="sm:w-1/3">
                             <p className="text-xs font-inter text-dark-muted text-center sm:text-left text-balance">
-                                &copy; {new Date().getFullYear()} Only Workshops Inc. All rights
-                                reserved.
+                                &copy; <span suppressHydrationWarning>{currentYear}</span> Only
+                                Workshops Inc. All rights reserved.
                             </p>
                         </RevealItem>
                         <RevealItem className="sm:w-1/3">

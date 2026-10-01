@@ -623,6 +623,16 @@ export default function AdminEditWorkshopPage() {
                             <p className="mt-1 text-xs font-inter text-dark-muted">
                                 Venue, date, timing and seat limits.
                             </p>
+                            <p className="mt-1 text-xs font-inter text-dark-muted">
+                                This workshop is a single session. To run it on more dates or times,{" "}
+                                <Link
+                                    href={`/admin/workshops/new?from=${encodeURIComponent(workshopId ?? "")}`}
+                                    className="font-semibold text-terracotta underline"
+                                >
+                                    duplicate it with new time slots
+                                </Link>
+                                .
+                            </p>
                         </div>
 
                         <div>

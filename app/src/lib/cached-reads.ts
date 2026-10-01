@@ -5,6 +5,7 @@ import { unstable_cache } from "next/cache";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import type { PlatformSettings } from "@/lib/api-client";
 import type { Json } from "@/lib/database.types";
+import { PUBLIC_SETTING_KEYS, pickPublicSettings } from "@/lib/platform-settings-schema";
 
 /**
  * Cache tags. Mutations revalidate by tag rather than by path, because the same data
@@ -24,19 +25,26 @@ async function readPlatformSettings(): Promise<PlatformSettings> {
     }
 
     const supabase = createSupabaseServiceClient();
-    const { data, error } = await supabase.from("platform_settings").select("*");
+    const { data, error } = await supabase
+        .from("platform_settings")
+        .select("setting_key, setting_value")
+        .in("setting_key", [...PUBLIC_SETTING_KEYS]);
 
     if (error || !data) {
         return {};
     }
 
-    return data.reduce(
+    const record = data.reduce(
         (acc, row) => {
             acc[row.setting_key] = row.setting_value;
             return acc;
         },
         {} as Record<string, Json>
-    ) as PlatformSettings;
+    );
+
+    // This result is serialised into the root layout and shipped to every browser, so it
+    // must only ever contain allowlisted public keys -- not whatever rows the table holds.
+    return pickPublicSettings(record) as PlatformSettings;
 }
 
 /**

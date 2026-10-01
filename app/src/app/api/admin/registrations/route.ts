@@ -6,6 +6,7 @@ import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { adminRegistrationsQuerySchema } from "@/lib/validators";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { buildIlikeOrFilter } from "@/lib/search-sanitize";
 
 const BOOKING_STATUSES: Tables<"bookings">["status"][] = ["confirmed", "cancelled", "refunded"];
 
@@ -67,11 +68,11 @@ export async function GET(request: NextRequest) {
             query = query.eq("status", status as Tables<"bookings">["status"]);
         }
 
-        if (q) {
-            const safeQ = q.replace(/[%]/g, "");
-            query = query.or(
-                `first_name.ilike.%${safeQ}%,last_name.ilike.%${safeQ}%,email.ilike.%${safeQ}%`
-            );
+        // buildIlikeOrFilter strips every PostgREST structural character (`, ( ) * " \ %`) and
+        // caps the length: stripping only `%` let `x,id.neq.0` smuggle in an extra filter.
+        const searchFilter = buildIlikeOrFilter(["first_name", "last_name", "email"], q);
+        if (searchFilter) {
+            query = query.or(searchFilter);
         }
 
         const { data, error, count } = await query
