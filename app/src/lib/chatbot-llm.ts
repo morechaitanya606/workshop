@@ -65,8 +65,25 @@ function isOpenAiReasoningModel(model: string) {
     return /^(o\d|gpt-5)/i.test(model);
 }
 
+/** Groq's reasoning models (gpt-oss, qwen3) also spend completion tokens on thinking first. */
+function isGroqReasoningModel(model: string) {
+    return /gpt-oss|qwen3/i.test(model);
+}
+
 function buildOpenAiCompatibleBody(input: ChatbotAttemptInput) {
     const { provider, model, messages } = input;
+
+    if (provider.name === "groq" && isGroqReasoningModel(model)) {
+        // Low effort keeps short support answers fast; include_reasoning: false leaves the
+        // thinking out of the response, so only the answer reaches the visitor.
+        return {
+            model,
+            reasoning_effort: "low",
+            max_completion_tokens: REASONING_MAX_COMPLETION_TOKENS,
+            include_reasoning: false,
+            messages,
+        };
+    }
 
     if (provider.name === "openai") {
         // OpenAI deprecated max_tokens for chat completions; max_completion_tokens works on

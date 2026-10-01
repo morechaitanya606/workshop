@@ -29,27 +29,33 @@ describe("getGroqConfig", () => {
         expect(config).toEqual({
             apiKey: "gsk_test",
             endpoint: "https://api.groq.com/openai/v1/chat/completions",
-            model: "llama-3.3-70b-versatile",
-            fallbackModel: "llama-3.1-8b-instant",
+            model: "openai/gpt-oss-120b",
+            fallbackModel: "openai/gpt-oss-20b",
         });
-        // llama3-8b-8192 was decommissioned by Groq on 2025-08-30.
-        expect(config?.model).not.toBe("llama3-8b-8192");
+        // All retired by Groq: each answered 404 model_not_found, failing every Groq call.
+        for (const retired of [
+            "llama3-8b-8192",
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant",
+        ]) {
+            expect([config?.model, config?.fallbackModel]).not.toContain(retired);
+        }
     });
 
     it("lets GROQ_MODEL and GROQ_FALLBACK_MODEL override the defaults", async () => {
         const config = await loadGroqConfig({
-            GROQ_MODEL: "openai/gpt-oss-120b",
-            GROQ_FALLBACK_MODEL: "openai/gpt-oss-20b",
+            GROQ_MODEL: "qwen/qwen3.8-27b",
+            GROQ_FALLBACK_MODEL: "openai/gpt-oss-120b",
         });
 
-        expect(config?.model).toBe("openai/gpt-oss-120b");
-        expect(config?.fallbackModel).toBe("openai/gpt-oss-20b");
+        expect(config?.model).toBe("qwen/qwen3.8-27b");
+        expect(config?.fallbackModel).toBe("openai/gpt-oss-120b");
     });
 
     it("drops a fallback identical to the primary model", async () => {
-        const config = await loadGroqConfig({ GROQ_MODEL: "llama-3.1-8b-instant" });
+        const config = await loadGroqConfig({ GROQ_MODEL: "openai/gpt-oss-20b" });
 
-        expect(config?.model).toBe("llama-3.1-8b-instant");
+        expect(config?.model).toBe("openai/gpt-oss-20b");
         expect(config?.fallbackModel).toBeNull();
     });
 

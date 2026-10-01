@@ -230,12 +230,13 @@ export function getGroqConfig() {
         return null;
     }
 
-    // The old hard-coded default, llama3-8b-8192, was decommissioned by Groq on 2025-08-30, so
-    // every call failed and the chatbot silently fell back to raw FAQ text. The default is now
-    // a current production model (strong multilingual quality); the fallback is the fast 8B
-    // model, which has its own rate-limit bucket. Both can be overridden per environment.
-    const model = env.GROQ_MODEL || "llama-3.3-70b-versatile";
-    const fallbackModel = env.GROQ_FALLBACK_MODEL || "llama-3.1-8b-instant";
+    // Groq retires models without notice to callers: llama3-8b-8192 went on 2025-08-30, and by
+    // 2026-10 llama-3.3-70b-versatile and llama-3.1-8b-instant answered 404 model_not_found,
+    // so every message silently fell through to the next provider. gpt-oss-120b answered the
+    // multilingual policy questions correctly in ~1.5s; gpt-oss-20b is the faster fallback with
+    // its own rate-limit bucket. List what a key can use: GET /openai/v1/models.
+    const model = env.GROQ_MODEL || "openai/gpt-oss-120b";
+    const fallbackModel = env.GROQ_FALLBACK_MODEL || "openai/gpt-oss-20b";
 
     return {
         apiKey,

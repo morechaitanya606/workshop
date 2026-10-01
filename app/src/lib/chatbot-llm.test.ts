@@ -248,6 +248,28 @@ describe("requestChatbotCompletion: provider failover", () => {
         expect(body.max_completion_tokens).toBeGreaterThan(1000);
     });
 
+    it("sends Groq's gpt-oss models low effort, room to think and no reasoning text back", async () => {
+        const fetchMock = routedFetch({
+            "https://example.com/groq": [() => chatCompletion("ok")],
+        });
+
+        await requestChatbotCompletion({
+            messages,
+            providers: [{ ...groq, models: ["openai/gpt-oss-120b"] }],
+            fetchImpl: fetchMock,
+        });
+
+        const body = bodyOf(callsTo(fetchMock, "https://example.com/groq")[0]);
+        expect(body).toMatchObject({
+            model: "openai/gpt-oss-120b",
+            reasoning_effort: "low",
+            include_reasoning: false,
+        });
+        expect(body.max_completion_tokens).toBeGreaterThan(1000);
+        // max_tokens would let the thinking consume the whole budget and return an empty answer.
+        expect(body).not.toHaveProperty("max_tokens");
+    });
+
     it("returns null when no provider is configured", async () => {
         const fetchMock = vi.fn<typeof fetch>();
         expect(

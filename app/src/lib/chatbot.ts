@@ -478,7 +478,13 @@ const PROMPT_LEAK_PATTERN = /<\/?context>|HOW TO ANSWER|\bSECURITY\b\s*\n\s*-/;
  */
 export function finalizeModelReply(raw: string, strings: Pick<ChatbotStrings, "fallback">) {
     const unsure = new RegExp(UNSURE_PATTERN.source, "i").test(raw);
-    const text = raw.replace(UNSURE_PATTERN, "").trim();
+    const text = raw
+        .replace(UNSURE_PATTERN, "")
+        // The widget renders plain text plus [text](/path) links, so **bold** / __bold__
+        // (which gpt-oss likes to add despite the prompt) would show as literal asterisks.
+        .replace(/\*\*(.+?)\*\*/g, "$1")
+        .replace(/__(.+?)__/g, "$1")
+        .trim();
 
     if (!text || PROMPT_LEAK_PATTERN.test(text)) {
         return { reply: strings.fallback, unsure: true };

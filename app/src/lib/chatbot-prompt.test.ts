@@ -89,8 +89,10 @@ describe("buildWorkshopContext", () => {
     it("says so when nothing is upcoming", () => {
         const empty = buildWorkshopContext({ workshops: [workshops[0]], now: NOW });
         expect(empty).toMatch(/none are scheduled/i);
-        // Stops the model offering recommendations it has nothing to back up with.
-        expect(empty).toContain("do not offer to recommend");
+        // Stops the model offering recommendations it has nothing to back up with...
+        expect(empty).toContain("without offering to recommend");
+        // ...without hijacking unrelated questions (a refund question once got "no workshops").
+        expect(empty).toContain("do not bring this up");
         expect(buildWorkshopContext({ workshops: undefined, now: NOW })).toMatch(
             /none are scheduled/i
         );

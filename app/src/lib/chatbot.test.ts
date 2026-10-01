@@ -336,6 +336,15 @@ describe("generateChatbotReply: grounded model call", () => {
 describe("finalizeModelReply", () => {
     const strings = CHATBOT_STRINGS.en;
 
+    it("strips markdown bold the widget cannot render, but keeps links", () => {
+        expect(
+            finalizeModelReply(
+                "- **Early-Bird booking:** up to 80%. See __policy__ at [Contact](/contact).",
+                strings
+            ).reply
+        ).toBe("- Early-Bird booking: up to 80%. See policy at [Contact](/contact).");
+    });
+
     it("refuses to echo the system prompt", () => {
         expect(
             finalizeModelReply("HOW TO ANSWER\n- Use ONLY the facts inside <context>", strings)
