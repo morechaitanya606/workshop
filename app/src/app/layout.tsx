@@ -4,6 +4,7 @@ import "./globals.css";
 import AnalyticsProvider from "@/components/AnalyticsProvider";
 import GlobalFloatingWidgets from "@/components/GlobalFloatingWidgets";
 import MotionProvider from "@/components/MotionProvider";
+import SpeedInsights from "@/components/SpeedInsights";
 import ToastProvider from "@/components/ToastProvider";
 import { AuthProvider } from "@/lib/auth-context";
 import { getAppUrl } from "@/lib/env";
@@ -145,6 +146,7 @@ export default async function RootLayout({
                         </ToastProvider>
                     </AnalyticsProvider>
                 </MotionProvider>
+                <SpeedInsights />
             </body>
         </html>
     );
