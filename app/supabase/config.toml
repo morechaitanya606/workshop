@@ -254,10 +254,34 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# Auth email templates. Their links go to /auth/confirm with a token_hash, which works in any
+# browser (the default {{ .ConfirmationURL }} links only work in the browser that asked).
+# These apply to the LOCAL stack; production is set in the dashboard, see
+# supabase/templates/README.md. Do not `supabase config push` this file as-is: the rest of
+# [auth] (site_url = localhost, rate limits) is local-dev configuration.
+[auth.email.template.confirmation]
+subject = "Confirm your email for Only Workshops"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your Only Workshops password"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.magic_link]
+subject = "Your Only Workshops sign-in link"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.invite]
+subject = "You're invited to Only Workshops"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.email_change]
+subject = "Confirm your new email for Only Workshops"
+content_path = "./supabase/templates/email_change.html"
+
+[auth.email.template.reauthentication]
+subject = "Your Only Workshops verification code"
+content_path = "./supabase/templates/reauthentication.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

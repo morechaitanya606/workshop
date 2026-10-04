@@ -82,7 +82,7 @@ describe("POST /api/careers/apply", () => {
         vi.mocked(assertRateLimit).mockResolvedValue({ ok: true } as any);
         sendEmailMock.mockResolvedValue({ data: { id: "email_123" }, error: null });
         process.env.RESEND_API_KEY = "re_test_key";
-        process.env.CAREERS_INBOX_EMAIL = "hello@onlyworkshop.com";
+        process.env.CAREERS_INBOX_EMAIL = "reachout@onlyworkshops.com";
     });
 
     it("submits an application with a resume attachment", async () => {
@@ -109,7 +109,7 @@ describe("POST /api/careers/apply", () => {
         expect(body.message).toContain("Thanks for applying");
         expect(sendEmailMock).toHaveBeenCalledWith(
             expect.objectContaining({
-                to: "hello@onlyworkshop.com",
+                to: "reachout@onlyworkshops.com",
                 replyTo: "aarav@example.com",
                 attachments: [
                     expect.objectContaining({

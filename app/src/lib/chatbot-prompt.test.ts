@@ -245,7 +245,7 @@ describe("buildChatbotMessages", () => {
         expect(messages[0].content).toContain("[pottery-101] Pottery Basics");
         expect(messages[0].content).toContain("Q: Parking?");
         expect(messages[0].content).toContain("Reserve Spot");
-        expect(messages[0].content).toContain("hello@onlyworkshop.com");
+        expect(messages[0].content).toContain("reachout@onlyworkshops.com");
         expect(messages[3]).toEqual({ role: "user", content: "and in Pune?" });
     });
 

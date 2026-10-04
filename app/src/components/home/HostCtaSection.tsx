@@ -4,6 +4,10 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Mail } from "lucide-react";
 import { fadeInUp, standardTransition, useMotionProps } from "@/lib/motion-presets";
+import { CONTACT_EMAILS } from "@/lib/contact";
+
+/** One source of truth for the address, so it cannot drift from the contact page again. */
+const HOST_CONTACT_EMAIL = CONTACT_EMAILS[0];
 
 export default function HostCtaSection({ shouldReduceMotion }: { shouldReduceMotion: boolean }) {
     const hostSectionMotionProps = useMotionProps(shouldReduceMotion, fadeInUp, standardTransition);
@@ -33,11 +37,11 @@ export default function HostCtaSection({ shouldReduceMotion }: { shouldReduceMot
                             Apply to Host
                         </Link>
                         <a
-                            href="mailto:hello@onlyworkshop.com"
+                            href={`mailto:${HOST_CONTACT_EMAIL.value}`}
                             className="inline-flex items-center gap-2.5 bg-white/15 backdrop-blur-sm text-white border-2 border-white/30 font-inter font-semibold px-8 py-4 rounded-full hover:border-white/60 hover:bg-white/25 transition-all duration-300"
                         >
                             <Mail className="w-5 h-5" />
-                            hello@onlyworkshop.com
+                            {HOST_CONTACT_EMAIL.label}
                         </a>
                     </div>
                 </div>

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
 import { sanitizeInternalRedirect } from "@/lib/auth-origin";
+import { getClientAppUrl } from "@/lib/client-url";
 import { User, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./supabase";
 import { getAuthMe } from "@/lib/api-client";
@@ -23,7 +24,18 @@ interface AuthContextType {
         fullName: string
     ) => Promise<{ error: string | null }>;
     signInWithGoogle: (redirectPath?: string) => Promise<{ error: string | null }>;
+    /** Sends the signup confirmation email again (Supabase allows one per address per minute). */
+    resendConfirmation: (email: string) => Promise<{ error: string | null }>;
     signOut: () => Promise<void>;
+}
+
+/**
+ * Where a confirmation link returns to. /auth/confirm verifies it and signs the visitor in;
+ * `flow=signup` lets it say "email confirmed, log in" when the link is opened in another
+ * browser. Must be allow-listed under Supabase > Authentication > URL Configuration.
+ */
+function getSignupConfirmRedirect() {
+    return getClientAppUrl("/auth/confirm?flow=signup&next=/");
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -35,6 +47,7 @@ const AuthContext = createContext<AuthContextType>({
     signIn: async () => ({ error: null }),
     signUp: async () => ({ error: null }),
     signInWithGoogle: async () => ({ error: null }),
+    resendConfirmation: async () => ({ error: null }),
     signOut: async () => {},
 });
 
@@ -247,7 +260,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { error } = await supabase.auth.signUp({
             email,
             password,
-            options: { data: { full_name: fullName } },
+            options: {
+                data: { full_name: fullName },
+                emailRedirectTo: getSignupConfirmRedirect(),
+            },
+        });
+        return { error: error?.message ?? null };
+    };
+
+    const resendConfirmation = async (email: string) => {
+        if (!isSupabaseConfigured) {
+            return { error: "Authentication is not configured." };
+        }
+        const { error } = await supabase.auth.resend({
+            type: "signup",
+            email,
+            options: { emailRedirectTo: getSignupConfirmRedirect() },
         });
         return { error: error?.message ?? null };
     };
@@ -286,6 +314,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 signIn,
                 signUp,
                 signInWithGoogle,
+                resendConfirmation,
                 signOut,
             }}
         >

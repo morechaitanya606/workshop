@@ -1,6 +1,12 @@
 "use client";
 
-const PRODUCTION_APP_ORIGIN = "https://onlyworkshops.com";
+/**
+ * The host the site is served from: the bare domain answers 308 to www. Auth email links are
+ * built on it, so they match the `https://www.onlyworkshops.com/**` entry in Supabase's
+ * Redirect URLs (the bare domain is only allow-listed for /auth/callback and
+ * /auth/reset-password) and skip a redirect hop.
+ */
+const PRODUCTION_APP_ORIGIN = "https://www.onlyworkshops.com";
 
 function isLocalhost(hostname: string) {
     return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";

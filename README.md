@@ -20,6 +20,17 @@
 
 ---
 
+## 🚦 Branches & releases (read first)
+
+The site is live. Code is written on **`developer`** and promoted by pull request:
+
+`developer` → `testing` → `production` → `main` (live, deployed by Vercel)
+
+Never commit to `testing`, `production` or `main` directly (a git hook blocks it). Full rules,
+including database migrations and previews: [RELEASE_WORKFLOW.md](RELEASE_WORKFLOW.md).
+
+---
+
 ## ✨ Overview
 
 **OnlyWorkshop** is a modern SaaS web application for discovering and booking creative, hands-on workshops in cities across India. The platform lets users explore curated experiences — from pottery and painting to baking and woodworking — view rich workshop details with videos and creator profiles, and book spots with a seamless checkout flow.

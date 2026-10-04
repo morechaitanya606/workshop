@@ -13,7 +13,7 @@ describe("getSafeChatHref", () => {
             kind: "external",
         });
         expect(getSafeChatHref("http://example.com")?.kind).toBe("external");
-        expect(getSafeChatHref("mailto:hello@onlyworkshop.com")?.kind).toBe("contact");
+        expect(getSafeChatHref("mailto:reachout@onlyworkshops.com")?.kind).toBe("contact");
         expect(getSafeChatHref("tel:+917028478109")?.kind).toBe("contact");
     });
 

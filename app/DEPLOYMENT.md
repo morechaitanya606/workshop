@@ -1,5 +1,11 @@
 # Deployment Checklist
 
+## Release flow
+
+`developer` → `testing` → `production` → `main`. Vercel deploys `main` to
+www.onlyworkshops.com; every other branch gets a preview. Changes move up one step at a time
+by pull request; see [RELEASE_WORKFLOW.md](../RELEASE_WORKFLOW.md).
+
 ## Before Vercel deploy
 
 Run this from `app/`:
@@ -76,7 +82,7 @@ These are not hard-required for build success, but they matter for a stable live
 - `RESEND_API_KEY` (optional fallback, used automatically if Mailjet is rate-limited or down;
   at least one of the two providers is required in production)
 - `EMAIL_PROVIDER` (`mailjet` or `resend`; optional, picks which one is tried first)
-- `EMAIL_FROM` (optional; defaults to `Only Workshops <no-reply@updates.onlyworkshop.com>`)
+- `EMAIL_FROM` (optional; defaults to `Only Workshops <reachout@onlyworkshops.com>`, which must be a validated sender in Mailjet)
 - `CAREERS_INBOX_EMAIL`
 - `CRON_SECRET`
 - `NEXT_PUBLIC_MEDIA_BASE_URL` (optional; leave unset. The hero videos are committed under
@@ -90,6 +96,13 @@ These are not hard-required for build success, but they matter for a stable live
   name, since browsers cache the old one).
 - Convert any new JPG/PNG/HEIC under `public/` with `node scripts/convert-images-to-webp.mjs`
   (`--dry-run` to preview). User uploads are converted to WebP by `/api/upload` automatically.
+
+## Auth emails
+
+Confirm-signup, reset-password and the other auth emails are sent by Supabase, which needs
+custom SMTP, the redirect allow-list and the templates set in its dashboard. Email
+confirmation is on, so without working SMTP new users cannot log in. The full checklist is in
+`supabase/templates/README.md`; every email link lands on `/auth/confirm`.
 
 ## Launch-critical routes to verify
 

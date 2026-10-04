@@ -16,6 +16,7 @@ import {
     CheckCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { getFriendlyAuthError } from "@/lib/auth-notices";
 import {
     cardReveal,
     quickTransition,
@@ -25,7 +26,9 @@ import {
 } from "@/lib/motion-presets";
 
 export default function SignupPage() {
-    const { signUp, signInWithGoogle } = useAuth();
+    const { signUp, signInWithGoogle, resendConfirmation } = useAuth();
+    const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
+    const [resendError, setResendError] = useState<string | null>(null);
     const prefersReducedMotion = useReducedMotion();
     const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");
@@ -63,12 +66,24 @@ export default function SignupPage() {
 
         const { error: authError } = await signUp(email, password, fullName);
         if (authError) {
-            setError(authError);
+            setError(getFriendlyAuthError(authError));
             setLoading(false);
         } else {
             setSuccess(true);
             setLoading(false);
         }
+    };
+
+    const handleResend = async () => {
+        setResendError(null);
+        setResendState("sending");
+        const { error: sendError } = await resendConfirmation(email);
+        if (sendError) {
+            setResendState("idle");
+            setResendError(getFriendlyAuthError(sendError));
+            return;
+        }
+        setResendState("sent");
     };
 
     const handleGoogleSignIn = async () => {
@@ -97,9 +112,29 @@ export default function SignupPage() {
                         <CheckCircle className="w-8 h-8 text-emerald-600" />
                     </motion.div>
                     <h1 className="heading-lg mb-3">Check your email!</h1>
-                    <p className="text-body text-dark-muted mb-8">
+                    <p className="text-body text-dark-muted mb-4">
                         We have sent a confirmation link to <strong>{email}</strong>. Click it to
-                        activate your account.
+                        activate your account. If it is not in your inbox, check spam.
+                    </p>
+                    <p className="text-sm font-inter text-dark-muted mb-8" role="status">
+                        {resendState === "sent" ? (
+                            "A new confirmation email is on its way."
+                        ) : (
+                            <>
+                                Didn&apos;t get it?{" "}
+                                <button
+                                    type="button"
+                                    onClick={handleResend}
+                                    disabled={resendState === "sending"}
+                                    className="font-semibold text-terracotta hover:underline disabled:opacity-60"
+                                >
+                                    {resendState === "sending" ? "Sending..." : "Resend email"}
+                                </button>
+                            </>
+                        )}
+                        {resendError && (
+                            <span className="mt-2 block text-red-700">{resendError}</span>
+                        )}
                     </p>
                     <Link href="/auth/login" className="btn-primary">
                         Back to Login

@@ -10,7 +10,7 @@ import { careersApplicationSchema } from "@/lib/validators";
 
 export const runtime = "nodejs";
 
-const DEFAULT_CAREERS_INBOX = "hello@onlyworkshop.com";
+const DEFAULT_CAREERS_INBOX = "reachout@onlyworkshops.com";
 const MAX_RESUME_SIZE_BYTES = 5 * 1024 * 1024;
 const RESUME_TYPE_ERROR = "Resume must be a PDF, DOC, or DOCX file.";
 

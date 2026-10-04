@@ -15,8 +15,10 @@ export const CONTACT_PHONE_NUMBERS = [
 
 export const CONTACT_EMAILS = [
     {
-        label: "hello@onlyworkshop.com",
-        value: "hello@onlyworkshop.com",
+        // The only mailbox (Hostinger). The old hello@onlyworkshop.com -- no "s" -- is a
+        // different domain on someone else's mail server.
+        label: "reachout@onlyworkshops.com",
+        value: "reachout@onlyworkshops.com",
         description: "General support, partnerships, and host onboarding",
     },
 ] as const;

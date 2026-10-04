@@ -5,9 +5,24 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
-import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import {
+    Mail,
+    Lock,
+    ArrowRight,
+    Eye,
+    EyeOff,
+    Loader2,
+    AlertCircle,
+    CheckCircle,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { sanitizeInternalRedirect } from "@/lib/auth-origin";
+import {
+    getAuthNotice,
+    getFriendlyAuthError,
+    getKnownSignInError,
+    isEmailNotConfirmedError,
+} from "@/lib/auth-notices";
 import { getAuthMe } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
 import { cardReveal, standardTransition, useMotionProps } from "@/lib/motion-presets";
@@ -39,12 +54,14 @@ async function getAdminRedirectPath() {
 function LoginContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { signIn, signInWithGoogle } = useAuth();
+    const { signIn, signInWithGoogle, resendConfirmation } = useAuth();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [needsConfirmation, setNeedsConfirmation] = useState(false);
+    const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
     const prefersReducedMotion = useReducedMotion();
     const cardMotionProps = useMotionProps(prefersReducedMotion, cardReveal, standardTransition, {
         whileInView: false,
@@ -65,16 +82,23 @@ function LoginContent() {
     }
     const redirectPath = sanitizeInternalRedirect(decodedRedirect);
 
-    const oauthError = searchParams.get("error");
+    // Only messages this app wrote are ever shown from the URL (see auth-notices.ts); any other
+    // ?error= text is ignored, so a crafted link cannot put words on this page.
+    const oauthError = getKnownSignInError(searchParams.get("error"));
+    const notice = getAuthNotice(searchParams.get("notice"));
+
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         setError(null);
+        setNeedsConfirmation(false);
+        setResendState("idle");
         setLoading(true);
 
         try {
             const { error: authError } = await signIn(email, password);
             if (authError) {
-                setError(authError);
+                setNeedsConfirmation(isEmailNotConfirmedError(authError));
+                setError(getFriendlyAuthError(authError));
                 return;
             }
 
@@ -91,6 +115,17 @@ function LoginContent() {
             setError(oauthError);
         }
     }, [oauthError]);
+
+    const handleResendConfirmation = async () => {
+        setResendState("sending");
+        const { error: resendError } = await resendConfirmation(email);
+        if (resendError) {
+            setResendState("idle");
+            setError(getFriendlyAuthError(resendError));
+            return;
+        }
+        setResendState("sent");
+    };
 
     const handleGoogleSignIn = async () => {
         setError(null);
@@ -123,14 +158,48 @@ function LoginContent() {
                         Log in to discover and book your next creative adventure.
                     </p>
 
+                    {notice && !error && (
+                        <div
+                            role="status"
+                            className={`flex items-center gap-2 text-sm font-inter rounded-xl px-4 py-3 mb-6 border ${
+                                notice.tone === "success"
+                                    ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                                    : "bg-red-50 border-red-200 text-red-700"
+                            }`}
+                        >
+                            {notice.tone === "success" ? (
+                                <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                            ) : (
+                                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                            )}
+                            {notice.text}
+                        </div>
+                    )}
+
                     {error && (
                         <div
                             id="login-error"
                             role="alert"
-                            className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm font-inter rounded-xl px-4 py-3 mb-6"
+                            className="bg-red-50 border border-red-200 text-red-700 text-sm font-inter rounded-xl px-4 py-3 mb-6"
                         >
-                            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                            {error}
+                            <div className="flex items-center gap-2">
+                                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                                {error}
+                            </div>
+                            {needsConfirmation && (
+                                <button
+                                    type="button"
+                                    onClick={handleResendConfirmation}
+                                    disabled={resendState !== "idle" || !email}
+                                    className="mt-2 ml-6 font-semibold text-terracotta hover:underline disabled:opacity-60 disabled:no-underline"
+                                >
+                                    {resendState === "sent"
+                                        ? "Confirmation email sent. Check your inbox."
+                                        : resendState === "sending"
+                                          ? "Sending..."
+                                          : "Resend confirmation email"}
+                                </button>
+                            )}
                         </div>
                     )}
 

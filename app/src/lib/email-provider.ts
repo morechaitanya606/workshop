@@ -54,7 +54,9 @@ export class EmailSendError extends Error {
     }
 }
 
-const DEFAULT_FROM = "Only Workshops <no-reply@updates.onlyworkshop.com>";
+// The only mailbox on the domain. It must be a validated sender in Mailjet (or the domain
+// verified in Resend), or the provider refuses the mail.
+const DEFAULT_FROM = "Only Workshops <reachout@onlyworkshops.com>";
 const MAILJET_ENDPOINT = "https://api.mailjet.com/v3.1/send";
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_ATTEMPTS_PER_PROVIDER = 3;

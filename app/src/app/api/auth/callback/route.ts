@@ -8,16 +8,18 @@ import { getUserRole } from "@/lib/api-auth";
 import type { Database } from "@/lib/database.types";
 import { getPublicSupabaseConfig } from "@/lib/env";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import {
+    SIGN_IN_CANCELLED_MESSAGE,
+    SIGN_IN_EXPIRED_MESSAGE,
+    SIGN_IN_FAILED_MESSAGE,
+} from "@/lib/auth-notices";
 
 /**
- * The login page renders `?error=` as text. Copying the provider's `error_description` (which
- * anyone can put in a link to this callback) straight into that redirect let an attacker write
- * arbitrary text onto our login page -- "Your account is locked, call +1-555-..." -- so only
- * messages WE wrote ever reach the redirect. The raw value is used for classification only.
+ * The login page shows `?error=` only when it is one of these fixed messages (see
+ * auth-notices.ts). Copying the provider's `error_description` (which anyone can put in a link
+ * to this callback) into the redirect would let an attacker write arbitrary text onto our login
+ * page -- "Your account is locked, call +1-555-..." -- so the raw value only classifies.
  */
-const SIGN_IN_EXPIRED_MESSAGE = "Google sign-in expired. Please click Continue with Google again.";
-const SIGN_IN_CANCELLED_MESSAGE = "Sign-in was cancelled. Please try again.";
-const SIGN_IN_FAILED_MESSAGE = "Sign-in could not be completed. Please try again.";
 
 function getUserFacingAuthError(errorMessage: string) {
     const normalizedMessage = errorMessage.toLowerCase();

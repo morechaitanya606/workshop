@@ -1,11 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { Loader2, Mail, CheckCircle, AlertCircle } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { getClientAppUrl } from "@/lib/client-url";
+import { getAuthNotice, getFriendlyAuthError } from "@/lib/auth-notices";
+
+/**
+ * The reset email returns through /auth/confirm, which signs the visitor in and sends them to
+ * /auth/reset-password. `flow=recovery` makes a stale link come back here with a notice.
+ * Must be allow-listed under Supabase > Authentication > URL Configuration.
+ */
+const RESET_REDIRECT_PATH = "/auth/confirm?flow=recovery&next=/auth/reset-password";
 import { cardReveal, standardTransition, useMotionProps } from "@/lib/motion-presets";
 
 export default function ForgotPasswordPage() {
@@ -17,6 +25,13 @@ export default function ForgotPasswordPage() {
     const cardMotionProps = useMotionProps(prefersReducedMotion, cardReveal, standardTransition, {
         whileInView: false,
     });
+
+    // /auth/confirm sends a stale or already-used reset link back here with ?notice=link-expired.
+    // Read once from the URL (not useSearchParams, which would need a Suspense boundary).
+    useEffect(() => {
+        const notice = getAuthNotice(new URLSearchParams(window.location.search).get("notice"));
+        if (notice?.tone === "error") setError(notice.text);
+    }, []);
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -30,12 +45,12 @@ export default function ForgotPasswordPage() {
 
         setLoading(true);
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: getClientAppUrl("/auth/reset-password"),
+            redirectTo: getClientAppUrl(RESET_REDIRECT_PATH),
         });
         setLoading(false);
 
         if (resetError) {
-            setError(resetError.message);
+            setError(getFriendlyAuthError(resetError.message));
             return;
         }
 
@@ -63,7 +78,8 @@ export default function ForgotPasswordPage() {
                 {success && (
                     <div className="mb-4 flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl px-4 py-3 text-sm font-inter">
                         <CheckCircle className="w-4 h-4" />
-                        Reset link sent. Check your inbox.
+                        If an account exists for that email, a reset link is on its way. Check your
+                        inbox and spam folder.
                     </div>
                 )}
 

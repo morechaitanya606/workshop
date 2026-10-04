@@ -88,7 +88,7 @@ describe("email provider", () => {
         );
         const sent = JSON.parse(init.body).Messages[0];
         expect(sent.From).toEqual({
-            Email: "no-reply@updates.onlyworkshop.com",
+            Email: "reachout@onlyworkshops.com",
             Name: "Only Workshops",
         });
         expect(sent.To).toEqual([{ Email: "guest@example.com" }]);

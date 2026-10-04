@@ -15,7 +15,10 @@ function isAdminRoute(pathname: string) {
 }
 
 function shouldRecoverAuthCallback(request: NextRequest) {
+    // Both are route handlers that consume these params themselves; /auth/confirm handles
+    // email links (reset, confirm signup), whose errors must not get Google sign-in wording.
     if (request.nextUrl.pathname === "/auth/callback") return false;
+    if (request.nextUrl.pathname === "/auth/confirm") return false;
     return AUTH_CALLBACK_PARAMS.some((param) => request.nextUrl.searchParams.has(param));
 }
 

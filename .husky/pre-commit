@@ -1,4 +1,19 @@
 #!/usr/bin/env sh
 
+# Release flow (RELEASE_WORKFLOW.md): code is written on `developer` and reaches
+# testing -> production -> main (live) only by pull request, so no commits on those three.
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+case "$branch" in
+    main | production | testing)
+        if [ "$ALLOW_PROTECTED_BRANCH_COMMIT" != "1" ]; then
+            echo "Commit blocked: '$branch' only receives changes by pull request."
+            echo "Write code on developer:  git switch developer"
+            echo "Flow: developer -> testing -> production -> main (live). See RELEASE_WORKFLOW.md."
+            echo "Emergency override (humans only): ALLOW_PROTECTED_BRANCH_COMMIT=1 git commit ..."
+            exit 1
+        fi
+        ;;
+esac
+
 cd app || exit 1
 npm run lint-staged

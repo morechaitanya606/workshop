@@ -1,0 +1,13 @@
+---
+description: Branch and release workflow for this live site
+alwaysApply: true
+---
+
+This site is live (https://www.onlyworkshops.com). Follow RELEASE_WORKFLOW.md at the repo root.
+
+- Code only on the `developer` branch. If on `main`, `production` or `testing`, switch with
+  `git switch developer && git pull` before editing.
+- Never commit or push to `testing`, `production` or `main` directly. Promote by pull request,
+  one step at a time: developer -> testing -> production -> main (main = live).
+- Do not apply database migrations or change Supabase/Vercel/Razorpay settings unless the user
+  explicitly asks: there is one live database and previews share it.
