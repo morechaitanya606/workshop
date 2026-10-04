@@ -62,8 +62,17 @@ the code is on.
 - Apply them (`npm --prefix app run db:push`) when promoting `production` -> `main`, right
   before merging, after checking `npm --prefix app run db:validate`.
 
-## One-time setup (GitHub)
+## GitHub rulesets (Settings > Rules > Rulesets)
 
-Settings > Branches > Add branch ruleset for `main`, `production` and `testing`:
-require a pull request before merging, require the **CI** status check to pass, and block
-force pushes. That makes the rules above impossible to skip, not just discouraged.
+These make the rules above impossible to skip, not just discouraged:
+
+| Ruleset              | Branches                        | Rules |
+| -------------------- | ------------------------------- | ----- |
+| `release-branches`   | `testing`, `production`, `main` | Require a pull request (0 approvals: a solo maintainer cannot approve their own); require status checks `app-checks` and `promotion-order`; block force pushes; restrict deletions |
+| `live-branch`        | `main`                          | Also require `migration-drift`: a release with a migration merges only after `db:push` |
+| `developer-branch`   | `developer`                     | Block force pushes; restrict deletions |
+
+`promotion-order` (`.github/workflows/promotion-order.yml`) fails any pull request that skips a
+step, because rulesets cannot restrict which branch a pull request comes from.
+`migration-drift` is required only on `main`: on `testing` and `production` it would block every
+release that adds a migration, since migrations are applied just before the merge to `main`.
