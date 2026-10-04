@@ -43,7 +43,7 @@ The application is designed to be **production-ready, scalable, and visually pre
 
 | Homepage | Workshop Detail | Admin Panel |
 |----------|-----------------|-------------|
-| ![Home](public/images/workshops/1.webp) | Immersive gallery, video player, creator profiles | Dashboard + workshop creation form |
+| ![Home](app/public/images/og-default.jpg) | Immersive gallery, video player, creator profiles | Dashboard + workshop creation form |
 
 ---
 
