@@ -870,41 +870,6 @@ export type Database = {
                     },
                 ];
             };
-            waitlists: {
-                Row: {
-                    created_at: string;
-                    email: string;
-                    id: string;
-                    status: Database["public"]["Enums"]["waitlist_status"];
-                    user_id: string | null;
-                    workshop_id: string | null;
-                };
-                Insert: {
-                    created_at?: string;
-                    email: string;
-                    id?: string;
-                    status?: Database["public"]["Enums"]["waitlist_status"];
-                    user_id?: string | null;
-                    workshop_id?: string | null;
-                };
-                Update: {
-                    created_at?: string;
-                    email?: string;
-                    id?: string;
-                    status?: Database["public"]["Enums"]["waitlist_status"];
-                    user_id?: string | null;
-                    workshop_id?: string | null;
-                };
-                Relationships: [
-                    {
-                        foreignKeyName: "waitlists_workshop_id_fkey";
-                        columns: ["workshop_id"];
-                        isOneToOne: false;
-                        referencedRelation: "workshops";
-                        referencedColumns: ["id"];
-                    },
-                ];
-            };
             user_favorites: {
                 Row: {
                     created_at: string;
@@ -1211,10 +1176,6 @@ export type Database = {
                 };
                 Returns: string;
             };
-            client_owned_by_current_user: {
-                Args: { p_client_id: string };
-                Returns: boolean;
-            };
             create_booking_hold: {
                 Args: {
                     p_guests: number;
@@ -1245,11 +1206,6 @@ export type Database = {
                     payloads_redacted: number;
                 }[];
             };
-            user_has_any_role: {
-                Args: { required_roles: string[] };
-                Returns: boolean;
-            };
-            user_has_role: { Args: { required_role: string }; Returns: boolean };
         };
         Enums: {
             earning_status: "pending" | "available" | "paid";
@@ -1257,7 +1213,6 @@ export type Database = {
             host_application_status: "pending" | "approved" | "rejected";
             payout_status: "processing" | "completed";
             support_ticket_status: "open" | "in_progress" | "resolved";
-            waitlist_status: "pending" | "notified" | "joined";
         };
         CompositeTypes: {
             [_ in never]: never;
