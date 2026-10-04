@@ -19,3 +19,10 @@ This repository is a live website (https://www.onlyworkshops.com). Follow
 
 Project layout: the Next.js app lives in `app/` (see `app/DEPLOYMENT.md`); Supabase
 migrations and auth email templates are in `app/supabase/`.
+
+Writing migrations: the RLS helpers live in the `private` schema (not exposed by the API), so
+policies and functions must call `(select private.user_has_role('admin'))` and
+`private.client_owned_by_current_user(client_id)`, never `public.` versions. Extensions
+(`vector`, `pg_trgm`) live in `extensions`: a function using their types or operators needs
+`set search_path = public, extensions`. Keep one permissive policy per table, role and action
+(combine conditions with `or`) so the Supabase advisor stays clean.
