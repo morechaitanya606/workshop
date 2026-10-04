@@ -1,0 +1,42 @@
+name: Promotion order
+
+# Release flow (RELEASE_WORKFLOW.md): developer -> testing -> production -> main (live).
+# GitHub rulesets cannot say which branch a pull request may come FROM, so this check does:
+# it is a required status check on testing, production and main, and fails any pull request
+# that skips a step (developer -> main, a feature branch -> production, ...).
+on:
+  pull_request:
+    branches: [testing, production, main]
+
+permissions: {}
+
+jobs:
+  promotion-order:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the pull request comes from the branch below
+        env:
+          # Passed through env, never interpolated into the script: a branch name is
+          # attacker-controlled input on a pull request.
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          if [ "$SAME_REPO" != "true" ]; then
+            echo "::error::Promotions must come from a branch of this repository, not a fork."
+            exit 1
+          fi
+
+          case "$BASE" in
+            testing) expected=developer ;;
+            production) expected=testing ;;
+            main) expected=production ;;
+            *) echo "::error::Unexpected target branch: $BASE"; exit 1 ;;
+          esac
+
+          if [ "$HEAD" != "$expected" ]; then
+            echo "::error::$BASE only accepts pull requests from $expected (got $HEAD). Flow: developer -> testing -> production -> main."
+            exit 1
+          fi
+
+          echo "OK: $HEAD -> $BASE"
