@@ -178,9 +178,33 @@ export function getPublicSupabaseConfig() {
     return { url, key };
 }
 
+/**
+ * The live site, www included (the bare domain answers 308 to it).
+ *
+ * The production deployment always uses this, whatever NEXT_PUBLIC_APP_URL says: a
+ * `http://localhost:3000` copied from .env.local into Vercel once made every canonical URL,
+ * sitemap entry, social preview image and customer email link on the live site point at
+ * localhost, which Google and WhatsApp cannot reach.
+ */
+export const PRODUCTION_SITE_URL = "https://www.onlyworkshops.com";
+
+function isLocalUrl(value: string) {
+    try {
+        const { hostname } = new URL(value);
+        return ["localhost", "127.0.0.1", "[::1]", "::1"].includes(hostname);
+    } catch {
+        return false;
+    }
+}
+
 export function getAppUrl() {
+    if (process.env.VERCEL_ENV === "production") {
+        return PRODUCTION_SITE_URL;
+    }
+
+    // A localhost value can only be a local .env leaking into a deployment; skip it there.
     const configuredUrl = publicEnv.NEXT_PUBLIC_APP_URL?.trim();
-    if (configuredUrl) {
+    if (configuredUrl && !(process.env.VERCEL && isLocalUrl(configuredUrl))) {
         return configuredUrl.replace(/\/$/, "");
     }
 

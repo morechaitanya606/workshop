@@ -365,6 +365,58 @@ export async function loadPastWorkshops(
     return { data: [], total: 0, source: "error" };
 }
 
+export type CityWorkshopsResult = {
+    upcoming: Workshop[];
+    past: Workshop[];
+    source: WorkshopPageSource;
+};
+
+/** Approved workshops in one city for its /workshops/<city> landing page. */
+async function fetchCityWorkshops(cityName: string): Promise<CityWorkshopsResult> {
+    if (!isSupabaseServiceConfigured) {
+        return { upcoming: [], past: [], source: "error" };
+    }
+
+    try {
+        const serviceClient = createSupabaseServiceClient({ requestTimeoutMs: 5000 });
+        const today = getIstTodayIso();
+        const run = (includeApprovalFilter: boolean) => {
+            let dbQuery = serviceClient.from("workshops").select("*").ilike("city", cityName);
+            if (includeApprovalFilter) {
+                dbQuery = dbQuery.eq("approval_status", "approved");
+            }
+            return dbQuery.order("date", { ascending: true }).limit(200);
+        };
+
+        let { data, error } = await run(true);
+        if (error && isMissingApprovalStatusColumnError(error)) {
+            ({ data, error } = await run(false));
+        }
+
+        if (!error) {
+            const workshops = (data || []).map((row) => mapWorkshopRowToWorkshop(row));
+            return {
+                upcoming: workshops.filter((workshop) => workshop.date >= today),
+                past: workshops.filter((workshop) => workshop.date < today).reverse(),
+                source: "supabase",
+            };
+        }
+
+        Sentry.captureException(error, { tags: { layer: "web", route: "city_page" } });
+    } catch (error) {
+        Sentry.captureException(error, { tags: { layer: "web", route: "city_page" } });
+    }
+
+    return { upcoming: [], past: [], source: "error" };
+}
+
+export async function loadCityWorkshops(cityName: string): Promise<CityWorkshopsResult> {
+    return unstable_cache(() => fetchCityWorkshops(cityName), ["city-workshops", cityName], {
+        revalidate: 300,
+        tags: [WORKSHOPS_LIST_TAG],
+    })();
+}
+
 export type PlatformSettingsType = {
     service_fee?: number;
     hero_image_url?: string;
