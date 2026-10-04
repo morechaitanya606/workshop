@@ -2,9 +2,17 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Workshop } from "@/lib/data";
-import { getAbsoluteUrl } from "@/lib/env";
+import { getAbsoluteUrl, getAppUrl } from "@/lib/env";
 import { getIstTodayIso } from "@/lib/ist-date";
 import { serializeJsonLd } from "@/lib/json-ld";
+import {
+    breadcrumbJsonLd,
+    cityPagePath,
+    getSeoCityByName,
+    trimForDescription,
+    workshopEventJsonLd,
+    workshopSeoTitle,
+} from "@/lib/seo";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
 import { getPlatformSettings } from "@/lib/workshop-page-data";
@@ -82,15 +90,16 @@ export async function generateMetadata({
     const socialPreviewUrl = workshop.coverImage.startsWith("http")
         ? workshop.coverImage
         : getAbsoluteUrl(workshop.coverImage);
+    const description = trimForDescription(workshop.description);
     return {
-        title: `${workshop.title} | Only Workshops`,
-        description: workshop.description.substring(0, 160),
+        title: workshopSeoTitle(workshop),
+        description,
         alternates: {
             canonical: canonicalUrl,
         },
         openGraph: {
             title: workshop.title,
-            description: workshop.description.substring(0, 160),
+            description,
             url: canonicalUrl,
             type: "website",
             images: [{ url: socialPreviewUrl }],
@@ -98,7 +107,7 @@ export async function generateMetadata({
         twitter: {
             card: "summary_large_image",
             title: workshop.title,
-            description: workshop.description.substring(0, 160),
+            description,
             images: [socialPreviewUrl],
         },
     };
@@ -187,74 +196,32 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
         getPlatformSettings(),
     ]);
     const canonicalUrl = getAbsoluteUrl(`/workshop/${workshop.id}`);
-    const exploreUrl = getAbsoluteUrl("/explore");
     const socialPreviewUrl = workshop.coverImage.startsWith("http")
         ? workshop.coverImage
         : getAbsoluteUrl(workshop.coverImage);
 
-    const jsonLd = {
-        "@context": "https://schema.org",
-        "@type": "Event",
-        name: workshop.title,
-        description: workshop.description.substring(0, 300),
-        startDate: `${workshop.date}T${workshop.time || "10:00"}`,
-        location: {
-            "@type": "Place",
-            name: workshop.location,
-            address: {
-                "@type": "PostalAddress",
-                addressLocality: workshop.city,
-            },
-        },
-        image: socialPreviewUrl,
-        organizer: {
-            "@type": "Organization",
-            name: workshop.hostName,
-        },
-        offers: {
-            "@type": "Offer",
-            price: workshop.price,
-            priceCurrency: "INR",
-            availability:
-                workshop.seatsRemaining > 0
-                    ? "https://schema.org/InStock"
-                    : "https://schema.org/SoldOut",
-            url: canonicalUrl,
-        },
-        ...(workshop.rating > 0 && workshop.reviewCount > 0
-            ? {
-                  aggregateRating: {
-                      "@type": "AggregateRating",
-                      ratingValue: workshop.rating,
-                      reviewCount: workshop.reviewCount,
+    const jsonLd = workshopEventJsonLd(workshop, {
+        canonicalUrl,
+        imageUrl: socialPreviewUrl,
+        siteUrl: getAppUrl(),
+    });
+    // Mirrors the visible breadcrumb in WorkshopClient: Home > city > category > workshop.
+    const seoCity = getSeoCityByName(workshop.city);
+    const breadcrumb = breadcrumbJsonLd([
+        { name: "Home", url: getAbsoluteUrl("/") },
+        ...(seoCity ? [{ name: seoCity.name, url: getAbsoluteUrl(cityPagePath(seoCity)) }] : []),
+        ...(workshop.category
+            ? [
+                  {
+                      name: workshop.category,
+                      url: getAbsoluteUrl(
+                          `/explore?category=${encodeURIComponent(workshop.category)}`
+                      ),
                   },
-              }
-            : {}),
-    };
-    const breadcrumbJsonLd = {
-        "@context": "https://schema.org",
-        "@type": "BreadcrumbList",
-        itemListElement: [
-            {
-                "@type": "ListItem",
-                position: 1,
-                name: "Home",
-                item: getAbsoluteUrl("/"),
-            },
-            {
-                "@type": "ListItem",
-                position: 2,
-                name: "Explore",
-                item: exploreUrl,
-            },
-            {
-                "@type": "ListItem",
-                position: 3,
-                name: workshop.title,
-                item: canonicalUrl,
-            },
-        ],
-    };
+              ]
+            : []),
+        { name: workshop.title, url: canonicalUrl },
+    ]);
 
     return (
         <>
@@ -264,7 +231,7 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
             />
             <script
                 type="application/ld+json"
-                dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbJsonLd) }}
+                dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumb) }}
             />
             <WorkshopClient
                 workshop={workshop}

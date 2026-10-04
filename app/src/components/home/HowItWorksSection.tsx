@@ -14,8 +14,7 @@ const STEPS = [
     {
         icon: Search,
         title: "Discover",
-        description:
-            "Browse 50+ curated weekend workshops across cities — from pottery to mixology.",
+        description: "Browse curated hands-on workshops in Pune — from pottery to sourdough pizza.",
         gradient: "from-terracotta/10 to-orange-50",
         iconColor: "text-terracotta",
     },

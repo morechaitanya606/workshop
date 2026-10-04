@@ -7,6 +7,8 @@ import { getAbsoluteUrl } from "@/lib/env";
 const links = [
     { href: "/", label: "Home" },
     { href: "/explore", label: "Explore" },
+    { href: "/workshops/pune", label: "Workshops in Pune" },
+    { href: "/past-events", label: "Past Events" },
     { href: "/communities", label: "Communities" },
     { href: "/become-a-host", label: "Become a Host" },
     { href: "/list-your-space", label: "List Your Space" },

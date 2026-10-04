@@ -79,9 +79,9 @@ const chunkLoadRecoveryScript = `
 
 export const metadata: Metadata = {
     metadataBase: new URL(getAppUrl()),
-    title: "Only Workshops | Discover Creative Workshops Near You",
+    title: "Only Workshops | Creative Workshops & Events in Pune",
     description:
-        "Book curated creative workshops and experiences happening in your city. Pottery, painting, cooking, and more. A Better Weekend Awaits.",
+        "Book curated creative workshops and experiences in Pune: pottery, baking, cooking and more, with local makers. A Better Weekend Awaits.",
     keywords: [
         "workshops",
         "creative experiences",
