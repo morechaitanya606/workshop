@@ -8,8 +8,9 @@ import { loadExploreWorkshops } from "@/lib/workshop-page-data";
 import ExploreClient from "./ExploreClient";
 
 export const metadata: Metadata = {
-    title: "Explore Workshops | Only Workshops",
-    description: "Find your next creative adventure.",
+    title: "Explore Workshops in Pune | Only Workshops",
+    description:
+        "Browse upcoming creative workshops in Pune by date, price and category: pottery, baking, cooking and more. Filter, compare and book your seat online.",
     alternates: {
         canonical: getAbsoluteUrl("/explore"),
     },

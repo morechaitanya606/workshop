@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getAppUrl } from "@/lib/env";
+import { SEO_CITIES, cityPagePath } from "@/lib/seo";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
 import { getIstTodayIso } from "@/lib/ist-date";
@@ -42,6 +43,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         changeFrequency: path === "/" || path === "/explore" ? "daily" : "weekly",
         priority: path === "/" ? 1 : path === "/explore" ? 0.9 : 0.6,
     }));
+
+    for (const city of SEO_CITIES) {
+        staticEntries.push({
+            url: `${siteUrl}${cityPagePath(city)}`,
+            lastModified: staticLastModified,
+            changeFrequency: "daily",
+            priority: 0.9,
+        });
+    }
 
     // The special event page is only listed while it is enabled and not past its visible_until
     // date (IST); afterwards it should drop out instead of advertising an ended event.

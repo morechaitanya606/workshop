@@ -18,6 +18,7 @@ export default function Footer() {
         phone.value.replace(/^\+91/, "")
     ).join(" / ");
     const compactFooterLinks = [
+        { label: "Workshops in Pune", href: "/workshops/pune" },
         { label: "About Us", href: "/about" },
         { label: "Help Center", href: "/help" },
         { label: "Contact", href: "/contact" },
@@ -102,6 +103,7 @@ export default function Footer() {
                             </h4>
                             <ul className="space-y-3">
                                 {[
+                                    { label: "Workshops in Pune", href: "/workshops/pune" },
                                     { label: "About Us", href: "/about" },
                                     { label: "Careers", href: "/careers" },
                                     { label: "Become a Host", href: "/become-a-host" },

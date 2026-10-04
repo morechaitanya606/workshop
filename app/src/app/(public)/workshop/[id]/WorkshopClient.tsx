@@ -54,6 +54,7 @@ import {
     standardTransition,
 } from "@/lib/motion-presets";
 import type { PlatformSettingsType } from "@/lib/workshop-page-data";
+import { cityPagePath, getSeoCityByName } from "@/lib/seo";
 import WorkshopGallery from "./WorkshopGallery";
 import WorkshopBookingSidebar from "./WorkshopBookingSidebar";
 import WorkshopPastEventSidebar from "./WorkshopPastEventSidebar";
@@ -144,6 +145,7 @@ export default function WorkshopClient({
 }: WorkshopClientProps) {
     const router = useRouter();
     const prefersReducedMotion = useReducedMotion();
+    const seoCity = getSeoCityByName(workshop.city);
     const { user, session } = useAuth();
     const toast = useToast();
 
@@ -879,6 +881,17 @@ export default function WorkshopClient({
                             Home
                         </Link>
                         <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                        {seoCity && (
+                            <>
+                                <Link
+                                    href={cityPagePath(seoCity)}
+                                    className="inline-flex items-center hover:text-terracotta transition-colors"
+                                >
+                                    {seoCity.name}
+                                </Link>
+                                <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                            </>
+                        )}
                         <Link
                             href={`/explore?category=${encodeURIComponent(workshop.category)}`}
                             className="inline-flex items-center hover:text-terracotta transition-colors"
