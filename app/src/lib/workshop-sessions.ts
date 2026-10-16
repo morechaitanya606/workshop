@@ -170,7 +170,8 @@ export type SessionIssue = {
  */
 export function validateSessionList(
     sessions: Array<{ date: string; time: string }>,
-    now: Date = new Date()
+    now: Date = new Date(),
+    options: { allowPastSessions?: boolean } = {}
 ): SessionIssue[] {
     const issues: SessionIssue[] = [];
 
@@ -211,7 +212,7 @@ export function validateSessionList(
         }
         if (!dateOk || !time) return;
 
-        if (isSessionInPast(session.date, time, now)) {
+        if (!options.allowPastSessions && isSessionInPast(session.date, time, now)) {
             issues.push({
                 index,
                 field: "date",

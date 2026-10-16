@@ -5,12 +5,13 @@ import { handleApiError, parseBody } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { jsonError, requireAdminUser } from "@/lib/api-auth";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
-import { workshopCreateSchema } from "@/lib/validators";
+import { adminWorkshopCreateSchema } from "@/lib/validators";
 import {
     buildWorkshopInsertPayloads,
     mapWorkshopRowToWorkshop,
     sortWorkshopsBySession,
 } from "@/lib/workshop-utils";
+import { syncWorkshopLibrary } from "@/lib/workshop-library";
 import { isMissingColumnError, withoutNewColumns } from "@/lib/workshop-approval-compat";
 
 export async function GET(request: NextRequest) {
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     const parsed = await parseBody(
         request,
-        workshopCreateSchema,
+        adminWorkshopCreateSchema,
         "Invalid JSON payload.",
         "Workshop form validation failed."
     );
@@ -96,6 +97,9 @@ export async function POST(request: NextRequest) {
         }
 
         const workshops = sortWorkshopsBySession(data.map((row) => mapWorkshopRowToWorkshop(row)));
+
+        // Store the host and workshop once and link these sessions to them (never fails the request).
+        await syncWorkshopLibrary(serviceClient, payloads, auth.user.id);
 
         revalidatePath("/admin/workshops");
         for (const workshop of workshops) {

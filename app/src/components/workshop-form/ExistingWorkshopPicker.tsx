@@ -12,11 +12,18 @@ type ExistingWorkshopPickerProps = {
      * Authorisation is enforced by the endpoint behind it, not here.
      */
     loadWorkshops: () => Promise<Workshop[]>;
+    /**
+     * True when `loadWorkshops` already returns one entry per workshop (saved workshop templates),
+     * so the session-row de-duplication is skipped and dates read "last used".
+     */
+    unique?: boolean;
     onSelect: (workshop: Workshop) => void;
     /** Id of the workshop the form was last filled from, if any. */
     selectedId?: string | null;
     disabled?: boolean;
 };
+
+type PickerWorkshop = Workshop & { sessionCount?: number };
 
 /**
  * "Start from an existing workshop": a collapsible, searchable list (most recent first) that
@@ -27,6 +34,7 @@ export default function ExistingWorkshopPicker({
     onSelect,
     selectedId = null,
     disabled = false,
+    unique = false,
 }: ExistingWorkshopPickerProps) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -35,7 +43,10 @@ export default function ExistingWorkshopPicker({
     const [workshops, setWorkshops] = useState<Workshop[]>([]);
     const [query, setQuery] = useState("");
 
-    const reusable = useMemo(() => dedupeWorkshopsForReuse(workshops), [workshops]);
+    const reusable: PickerWorkshop[] = useMemo(
+        () => (unique ? workshops : dedupeWorkshopsForReuse(workshops)),
+        [workshops, unique]
+    );
     const visible = useMemo(() => {
         const needle = query.trim().toLowerCase();
         if (!needle) return reusable;
@@ -137,8 +148,9 @@ export default function ExistingWorkshopPicker({
                                         </span>
                                         <span className="block text-xs font-inter text-dark-muted">
                                             {workshop.category} &middot; {workshop.city} &middot;
-                                            last run {formatDate(workshop.date)}
-                                            {workshop.sessionCount > 1
+                                            {unique ? "last used" : "last run"}{" "}
+                                            {formatDate(workshop.date)}
+                                            {(workshop.sessionCount ?? 1) > 1
                                                 ? ` (${workshop.sessionCount} sessions)`
                                                 : ""}
                                         </span>

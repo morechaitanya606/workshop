@@ -6,6 +6,7 @@ import { requireSupabaseService } from "@/lib/api-helpers";
 import { assertRateLimit } from "@/lib/rate-limit";
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+vi.mock("@/lib/workshop-library", () => ({ syncWorkshopLibrary: vi.fn() }));
 vi.mock("@/lib/api-auth", async () => {
     const { NextResponse } = await import("next/server");
     return {
