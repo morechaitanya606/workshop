@@ -10,6 +10,7 @@ import {
     mapWorkshopRowToWorkshop,
     sortWorkshopsBySession,
 } from "@/lib/workshop-utils";
+import { syncWorkshopLibrary } from "@/lib/workshop-library";
 import {
     isMissingColumnError,
     isMissingApprovalStatusColumnError,
@@ -110,6 +111,9 @@ export async function POST(request: NextRequest) {
         }
 
         const workshops = sortWorkshopsBySession(data.map((row) => mapWorkshopRowToWorkshop(row)));
+
+        // Store the host and workshop once and link these sessions to them (never fails the request).
+        await syncWorkshopLibrary(serviceClient, payloads, auth.user.id);
 
         return NextResponse.json(
             {

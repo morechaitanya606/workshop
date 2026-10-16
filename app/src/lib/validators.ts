@@ -157,31 +157,44 @@ function resolveCreateSessions(value: {
     }));
 }
 
-export const workshopCreateSchema = workshopCreateBaseSchema
-    .superRefine((value, ctx) => {
-        const usingSessions = Array.isArray(value.sessions);
-        const sessions = resolveCreateSessions(value);
+/**
+ * `allowPastSessions` lets an admin back-fill workshops that already happened; hosts and every
+ * public path keep the strict "not in the past" rule.
+ */
+function buildWorkshopCreateSchema(allowPastSessions: boolean) {
+    return workshopCreateBaseSchema
+        .superRefine((value, ctx) => {
+            const usingSessions = Array.isArray(value.sessions);
+            const sessions = resolveCreateSessions(value);
 
-        for (const issue of validateSessionList(sessions)) {
-            let path: Array<string | number>;
-            if (usingSessions) {
-                path = issue.index === null ? ["sessions"] : ["sessions", issue.index, issue.field];
-            } else {
-                path = issue.field === "time" ? ["time"] : ["date"];
+            for (const issue of validateSessionList(sessions, new Date(), { allowPastSessions })) {
+                let path: Array<string | number>;
+                if (usingSessions) {
+                    path =
+                        issue.index === null
+                            ? ["sessions"]
+                            : ["sessions", issue.index, issue.field];
+                } else {
+                    path = issue.field === "time" ? ["time"] : ["date"];
+                }
+                ctx.addIssue({ code: "custom", message: issue.message, path });
             }
-            ctx.addIssue({ code: "custom", message: issue.message, path });
-        }
-    })
-    .transform((value) => {
-        const sessions = resolveCreateSessions(value);
-        // `date`/`time` mirror the first session so single-slot consumers keep working.
-        return {
-            ...value,
-            sessions,
-            date: sessions[0]?.date ?? "",
-            time: sessions[0]?.time ?? "",
-        };
-    });
+        })
+        .transform((value) => {
+            const sessions = resolveCreateSessions(value);
+            // `date`/`time` mirror the first session so single-slot consumers keep working.
+            return {
+                ...value,
+                sessions,
+                date: sessions[0]?.date ?? "",
+                time: sessions[0]?.time ?? "",
+            };
+        });
+}
+
+export const workshopCreateSchema = buildWorkshopCreateSchema(false);
+/** Admin-only: same as `workshopCreateSchema` but sessions may be in the past (back-filling). */
+export const adminWorkshopCreateSchema = buildWorkshopCreateSchema(true);
 
 export type WorkshopCreateInput = z.infer<typeof workshopCreateSchema>;
 

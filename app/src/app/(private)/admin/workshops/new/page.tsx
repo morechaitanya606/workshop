@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Crop, Loader2, Upload, X } from "lucide-react";
 import { useImageCropper } from "@/components/ImageCropper";
+import ExistingHostPicker from "@/components/workshop-form/ExistingHostPicker";
 import ExistingWorkshopPicker from "@/components/workshop-form/ExistingWorkshopPicker";
 import SessionSlotsEditor from "@/components/workshop-form/SessionSlotsEditor";
 import { categories, PAST_EVENTS_CATEGORY_ID, type Workshop } from "@/lib/data";
@@ -13,11 +14,13 @@ import AdminShell from "@/components/admin/AdminShell";
 import {
     createAdminWorkshop,
     getAdminWorkshop,
+    getAdminWorkshopLibrary,
     getAdminWorkshops,
     toApiErrorMessage,
     uploadMedia,
 } from "@/lib/api-client";
-import { workshopCreateSchema } from "@/lib/validators";
+import { adminWorkshopCreateSchema } from "@/lib/validators";
+import type { HostProfile } from "@/lib/workshop-library";
 import { getCategorySelectionState, mapWorkshopToFormPrefill } from "@/lib/workshop-utils";
 import {
     type SessionSlotForm,
@@ -174,10 +177,50 @@ function AdminCreateWorkshopForm() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fromWorkshopId, accessToken]);
 
+    // Saved workshop templates (one per workshop, all of them) when the library tables exist;
+    // otherwise fall back to the latest workshop rows.
+    const [usingLibrary, setUsingLibrary] = useState(false);
     const loadReusableWorkshops = async () => {
         if (!accessToken) throw new Error("Your session expired. Please log in again.");
+        try {
+            const library = await getAdminWorkshopLibrary(accessToken);
+            if (library.available) {
+                setUsingLibrary(true);
+                return library.templates;
+            }
+        } catch {
+            // Fall through to the plain workshop list.
+        }
+        setUsingLibrary(false);
         const result = await getAdminWorkshops(accessToken);
         return Array.isArray(result.data) ? result.data : [];
+    };
+
+    const loadSavedHosts = async (): Promise<HostProfile[]> => {
+        if (!accessToken) return [];
+        const library = await getAdminWorkshopLibrary(accessToken);
+        return library.available ? library.hosts : [];
+    };
+
+    const applyHost = (host: HostProfile) => {
+        setForm((prev) => ({
+            ...prev,
+            hostName: host.name,
+            hostBio: host.bio,
+            hostExperience: host.experience,
+            hostInstagram: host.socialLinks.instagram ?? "",
+            hostYoutube: host.socialLinks.youtube ?? "",
+            hostWebsite: host.socialLinks.website ?? "",
+        }));
+        setFieldErrors((prev) => ({
+            ...prev,
+            hostName: undefined,
+            hostBio: undefined,
+            hostExperience: undefined,
+            hostInstagram: undefined,
+            hostYoutube: undefined,
+            hostWebsite: undefined,
+        }));
     };
 
     const update = (field: keyof CreateWorkshopForm, value: string) => {
@@ -382,9 +425,12 @@ function AdminCreateWorkshopForm() {
 
         // Slot checks run on their own too, so past/duplicate slots are flagged together with
         // other field errors instead of only after everything else is fixed.
-        const slotCheckErrors = sessionIssuesToErrors(validateSessionList(payload.sessions));
+        // Admins may back-fill workshops that already happened, so past dates are allowed here.
+        const slotCheckErrors = sessionIssuesToErrors(
+            validateSessionList(payload.sessions, new Date(), { allowPastSessions: true })
+        );
 
-        const validation = workshopCreateSchema.safeParse(payload);
+        const validation = adminWorkshopCreateSchema.safeParse(payload);
         if (!validation.success || Object.keys(slotCheckErrors).length > 0) {
             const nextFieldErrors: Partial<Record<keyof CreateWorkshopForm, string>> = {};
             const issues = validation.success ? [] : validation.error.issues;
@@ -460,6 +506,7 @@ function AdminCreateWorkshopForm() {
                     onSelect={applyPrefill}
                     selectedId={prefillSource?.id}
                     disabled={saving}
+                    unique={usingLibrary}
                 />
             </div>
 
@@ -681,6 +728,7 @@ function AdminCreateWorkshopForm() {
                             defaultMaxSeats={form.maxSeats}
                             errors={slotErrors}
                             disabled={saving}
+                            allowPast
                         />
                     </div>
 
@@ -1051,6 +1099,12 @@ function AdminCreateWorkshopForm() {
                             Profile copy shown in workshop detail pages.
                         </p>
                     </div>
+
+                    <ExistingHostPicker
+                        loadHosts={loadSavedHosts}
+                        onSelect={applyHost}
+                        disabled={saving}
+                    />
 
                     <div>
                         <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">

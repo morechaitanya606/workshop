@@ -1016,6 +1016,7 @@ export type Database = {
                     host_experience: string | null;
                     host_id: string | null;
                     host_name: string;
+                    host_profile_id: string | null;
                     host_social_links: Json;
                     host_user_id: string | null;
                     id: string;
@@ -1032,6 +1033,7 @@ export type Database = {
                     review_count: number;
                     seats_remaining: number;
                     social_links: Json;
+                    template_id: string | null;
                     time: string;
                     title: string;
                     updated_at: string;
@@ -1060,6 +1062,7 @@ export type Database = {
                     host_experience?: string | null;
                     host_id?: string | null;
                     host_name: string;
+                    host_profile_id?: string | null;
                     host_social_links?: Json;
                     host_user_id?: string | null;
                     id: string;
@@ -1076,6 +1079,7 @@ export type Database = {
                     review_count?: number;
                     seats_remaining: number;
                     social_links?: Json;
+                    template_id?: string | null;
                     time: string;
                     title: string;
                     updated_at?: string;
@@ -1104,6 +1108,7 @@ export type Database = {
                     host_experience?: string | null;
                     host_id?: string | null;
                     host_name?: string;
+                    host_profile_id?: string | null;
                     host_social_links?: Json;
                     host_user_id?: string | null;
                     id?: string;
@@ -1120,6 +1125,7 @@ export type Database = {
                     review_count?: number;
                     seats_remaining?: number;
                     social_links?: Json;
+                    template_id?: string | null;
                     time?: string;
                     title?: string;
                     updated_at?: string;
@@ -1132,6 +1138,163 @@ export type Database = {
                         columns: ["host_id"];
                         isOneToOne: false;
                         referencedRelation: "hosts";
+                        referencedColumns: ["id"];
+                    },
+                    {
+                        foreignKeyName: "workshops_host_profile_id_fkey";
+                        columns: ["host_profile_id"];
+                        isOneToOne: false;
+                        referencedRelation: "host_profiles";
+                        referencedColumns: ["id"];
+                    },
+                    {
+                        foreignKeyName: "workshops_template_id_fkey";
+                        columns: ["template_id"];
+                        isOneToOne: false;
+                        referencedRelation: "workshop_templates";
+                        referencedColumns: ["id"];
+                    },
+                ];
+            };
+            host_profiles: {
+                Row: {
+                    avatar: string | null;
+                    bio: string;
+                    created_at: string;
+                    created_by: string | null;
+                    experience: string | null;
+                    id: string;
+                    name: string;
+                    name_key: string;
+                    social_links: Json;
+                    updated_at: string;
+                };
+                Insert: {
+                    avatar?: string | null;
+                    bio?: string;
+                    created_at?: string;
+                    created_by?: string | null;
+                    experience?: string | null;
+                    id?: string;
+                    name: string;
+                    name_key: string;
+                    social_links?: Json;
+                    updated_at?: string;
+                };
+                Update: {
+                    avatar?: string | null;
+                    bio?: string;
+                    created_at?: string;
+                    created_by?: string | null;
+                    experience?: string | null;
+                    id?: string;
+                    name?: string;
+                    name_key?: string;
+                    social_links?: Json;
+                    updated_at?: string;
+                };
+                Relationships: [];
+            };
+            workshop_templates: {
+                Row: {
+                    badge_labels: string[];
+                    category: string;
+                    city: string;
+                    cover_image: string;
+                    created_at: string;
+                    created_by: string | null;
+                    description: string;
+                    duration: string;
+                    early_bird_days_after_listing: number;
+                    early_bird_discount_type: string;
+                    early_bird_discount_value: number;
+                    early_bird_enabled: boolean;
+                    event_address: string | null;
+                    gallery_images: string[];
+                    host_profile_id: string | null;
+                    id: string;
+                    latitude: number | null;
+                    location: string;
+                    location_images: string[];
+                    longitude: number | null;
+                    materials_provided: string[];
+                    max_seats: number;
+                    price: number;
+                    social_links: Json;
+                    template_key: string;
+                    title: string;
+                    updated_at: string;
+                    video_url: string | null;
+                    what_you_learn: string[];
+                };
+                Insert: {
+                    badge_labels?: string[];
+                    category: string;
+                    city: string;
+                    cover_image: string;
+                    created_at?: string;
+                    created_by?: string | null;
+                    description: string;
+                    duration: string;
+                    early_bird_days_after_listing?: number;
+                    early_bird_discount_type?: string;
+                    early_bird_discount_value?: number;
+                    early_bird_enabled?: boolean;
+                    event_address?: string | null;
+                    gallery_images?: string[];
+                    host_profile_id?: string | null;
+                    id?: string;
+                    latitude?: number | null;
+                    location: string;
+                    location_images?: string[];
+                    longitude?: number | null;
+                    materials_provided?: string[];
+                    max_seats: number;
+                    price: number;
+                    social_links?: Json;
+                    template_key: string;
+                    title: string;
+                    updated_at?: string;
+                    video_url?: string | null;
+                    what_you_learn?: string[];
+                };
+                Update: {
+                    badge_labels?: string[];
+                    category?: string;
+                    city?: string;
+                    cover_image?: string;
+                    created_at?: string;
+                    created_by?: string | null;
+                    description?: string;
+                    duration?: string;
+                    early_bird_days_after_listing?: number;
+                    early_bird_discount_type?: string;
+                    early_bird_discount_value?: number;
+                    early_bird_enabled?: boolean;
+                    event_address?: string | null;
+                    gallery_images?: string[];
+                    host_profile_id?: string | null;
+                    id?: string;
+                    latitude?: number | null;
+                    location?: string;
+                    location_images?: string[];
+                    longitude?: number | null;
+                    materials_provided?: string[];
+                    max_seats?: number;
+                    price?: number;
+                    social_links?: Json;
+                    template_key?: string;
+                    title?: string;
+                    updated_at?: string;
+                    video_url?: string | null;
+                    what_you_learn?: string[];
+                };
+                Relationships: [
+                    {
+                        foreignKeyName: "workshop_templates_host_profile_id_fkey";
+                        columns: ["host_profile_id"];
+                        isOneToOne: false;
+                        referencedRelation: "host_profiles";
                         referencedColumns: ["id"];
                     },
                 ];
