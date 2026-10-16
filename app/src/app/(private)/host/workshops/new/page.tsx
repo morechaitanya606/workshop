@@ -10,12 +10,15 @@ import { categories, PAST_EVENTS_CATEGORY_ID, type Workshop } from "@/lib/data";
 import {
     createHostWorkshop,
     getHostWorkshop,
+    getHostWorkshopLibrary,
     getHostWorkshops,
     toApiErrorMessage,
     uploadMedia,
 } from "@/lib/api-client";
 import { workshopCreateSchema } from "@/lib/validators";
+import type { HostProfile } from "@/lib/workshop-library";
 import { useImageCropper } from "@/components/ImageCropper";
+import ExistingHostPicker from "@/components/workshop-form/ExistingHostPicker";
 import ExistingWorkshopPicker from "@/components/workshop-form/ExistingWorkshopPicker";
 import SessionSlotsEditor from "@/components/workshop-form/SessionSlotsEditor";
 import { getCategorySelectionState, mapWorkshopToFormPrefill } from "@/lib/workshop-utils";
@@ -257,10 +260,41 @@ function HostCreateWorkshopForm() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fromWorkshopId, accessToken]);
 
+    // Saved workshop templates (one per workshop) when the library tables exist; otherwise fall
+    // back to this host's workshop rows.
+    const [usingLibrary, setUsingLibrary] = useState(false);
     const loadReusableWorkshops = async () => {
         if (!accessToken) throw new Error("Your session expired. Please log in again.");
+        try {
+            const library = await getHostWorkshopLibrary(accessToken);
+            if (library.available) {
+                setUsingLibrary(true);
+                return library.templates;
+            }
+        } catch {
+            // Fall through to the plain workshop list.
+        }
+        setUsingLibrary(false);
         const result = await getHostWorkshops(accessToken);
         return Array.isArray(result.data) ? result.data : [];
+    };
+
+    const loadSavedHosts = async (): Promise<HostProfile[]> => {
+        if (!accessToken) return [];
+        const library = await getHostWorkshopLibrary(accessToken);
+        return library.available ? library.hosts : [];
+    };
+
+    const applyHost = (host: HostProfile) => {
+        setForm((prev) => ({
+            ...prev,
+            hostName: host.name,
+            hostBio: host.bio,
+            hostExperience: host.experience,
+            hostInstagram: host.socialLinks.instagram ?? "",
+            hostYoutube: host.socialLinks.youtube ?? "",
+            hostWebsite: host.socialLinks.website ?? "",
+        }));
     };
 
     const update = (field: keyof CreateWorkshopForm, value: string) => {
@@ -454,6 +488,7 @@ function HostCreateWorkshopForm() {
                     onSelect={applyPrefill}
                     selectedId={prefillSource?.id}
                     disabled={saving}
+                    unique={usingLibrary}
                 />
             </div>
 
@@ -989,6 +1024,11 @@ function HostCreateWorkshopForm() {
                     <SectionHeader
                         title="Host & Story"
                         description="Tell attendees who is leading the workshop."
+                    />
+                    <ExistingHostPicker
+                        loadHosts={loadSavedHosts}
+                        onSelect={applyHost}
+                        disabled={saving}
                     />
                     <div>
                         <label className="mb-2 block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">

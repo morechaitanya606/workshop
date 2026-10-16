@@ -22,9 +22,26 @@ export interface WhatsAppCommunityModalProps {
     /** Where the popup was opened from, for analytics only. */
     source?: string;
     workshopId?: string;
+    /**
+     * "sold_out" (default): the workshop is full. "notify": the visitor just turned on
+     * notifications, so the sold-out wording and the admin's sold-out message do not apply.
+     */
+    variant?: "sold_out" | "notify";
 }
 
-export function getCommunityModalCopy(hasLink: boolean, customMessage?: string | null) {
+export function getCommunityModalCopy(
+    hasLink: boolean,
+    customMessage?: string | null,
+    variant: "sold_out" | "notify" = "sold_out"
+) {
+    if (variant === "notify") {
+        return {
+            title: "You're on the list",
+            body: hasLink
+                ? "We will notify you about new workshops. Join our WhatsApp community to hear about new dates first."
+                : "We will notify you about new workshops. Follow us on Instagram or contact support to stay in the loop.",
+        };
+    }
     const trimmedMessage = customMessage?.trim();
     if (hasLink) {
         return {
@@ -49,6 +66,7 @@ export default function WhatsAppCommunityModal({
     message,
     source = "unknown",
     workshopId,
+    variant = "sold_out",
 }: WhatsAppCommunityModalProps) {
     const dialogRef = useRef<HTMLDivElement | null>(null);
     const primaryActionRef = useRef<HTMLElement | null>(null);
@@ -58,7 +76,7 @@ export default function WhatsAppCommunityModal({
     const descriptionId = useId();
 
     const safeUrl = sanitizeWhatsAppCommunityUrl(communityUrl);
-    const copy = getCommunityModalCopy(Boolean(safeUrl), message);
+    const copy = getCommunityModalCopy(Boolean(safeUrl), message, variant);
 
     useModalA11y({
         open,
