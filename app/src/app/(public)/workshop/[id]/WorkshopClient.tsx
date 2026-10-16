@@ -208,6 +208,10 @@ export default function WorkshopClient({
     const communityUrl = platformWideSettings.whatsapp_community_url;
     const communityMessage = platformWideSettings.whatsapp_community_message;
     const [showCommunityModal, setShowCommunityModal] = useState(false);
+    // Why the popup opened: "notify" after turning on notifications, otherwise sold out.
+    const [communityModalVariant, setCommunityModalVariant] = useState<"sold_out" | "notify">(
+        "sold_out"
+    );
     const galleryWrapperRef = useRef<HTMLDivElement | null>(null);
     const videoDialogRef = useRef<HTMLElement | null>(null);
 
@@ -701,6 +705,12 @@ export default function WorkshopClient({
                         : `Notification enabled. We will notify you when ${workshop.hostName} publishes the next event.`)
             );
             toast.success("Notification updated", "Your preference has been saved.");
+            // Only when notifications were just switched on, not when they were turned off.
+            if (result.subscriptions?.[mode]) {
+                setCommunityModalVariant("notify");
+                setShowCommunityModal(true);
+                trackEvent("notify_community_cta_shown", { workshopId: workshop.id, mode });
+            }
         } catch (error) {
             const message = toApiErrorMessage(error, "Unable to save notification preference.");
             setNotifyError(message);
@@ -1163,19 +1173,15 @@ export default function WorkshopClient({
                                 viewport={prefersReducedMotion ? undefined : revealViewport}
                                 className="space-y-6"
                             >
-                                <motion.div
-                                    variants={prefersReducedMotion ? undefined : fadeInUp}
-                                    transition={
-                                        prefersReducedMotion ? { duration: 0 } : quickTransition
-                                    }
-                                    className="card-section"
-                                >
+                                {/* Host info is shown immediately: no scroll-reveal animation. */}
+                                <div className="card-section">
                                     <div className="flex items-start gap-4">
                                         <div className="relative w-16 h-16 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-terracotta/20">
                                             <Image
                                                 src={workshop.hostAvatar}
                                                 alt={workshop.hostName}
                                                 fill
+                                                loading="eager"
                                                 className="object-cover"
                                             />
                                         </div>
@@ -1229,7 +1235,7 @@ export default function WorkshopClient({
                                             )}
                                         </div>
                                     </div>
-                                </motion.div>
+                                </div>
 
                                 <motion.div
                                     variants={prefersReducedMotion ? undefined : fadeInUp}
@@ -1732,10 +1738,16 @@ export default function WorkshopClient({
             {/* ═══ SOLD-OUT WHATSAPP COMMUNITY POPUP ═══ */}
             <WhatsAppCommunityModal
                 open={showCommunityModal}
-                onClose={() => setShowCommunityModal(false)}
+                onClose={() => {
+                    setShowCommunityModal(false);
+                    setCommunityModalVariant("sold_out");
+                }}
                 communityUrl={communityUrl}
                 message={communityMessage}
-                source="workshop_page"
+                variant={communityModalVariant}
+                source={
+                    communityModalVariant === "notify" ? "notify_subscription" : "workshop_page"
+                }
                 workshopId={workshop.id}
             />
 

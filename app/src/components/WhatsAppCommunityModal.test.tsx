@@ -209,4 +209,12 @@ describe("getCommunityModalCopy", () => {
         expect(getCommunityModalCopy(false).body).toMatch(/contact support/i);
         expect(getCommunityModalCopy(true).title).toBe("This workshop is full");
     });
+
+    it("uses notification wording, not the sold-out message, for the notify variant", () => {
+        const copy = getCommunityModalCopy(true, "All seats are taken", "notify");
+        expect(copy.title).not.toMatch(/full/i);
+        expect(copy.body).toMatch(/WhatsApp community/);
+        expect(copy.body).not.toMatch(/All seats are taken/);
+        expect(getCommunityModalCopy(false, null, "notify").body).not.toMatch(/WhatsApp/);
+    });
 });

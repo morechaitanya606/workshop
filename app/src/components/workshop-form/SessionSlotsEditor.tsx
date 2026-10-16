@@ -19,6 +19,8 @@ type SessionSlotsEditorProps = {
     /** Keys: `sessions` (list level) and `<index>.date|time|maxSeats`. */
     errors?: Record<string, string>;
     disabled?: boolean;
+    /** Admin back-fill: let the date picker select days that have already passed. */
+    allowPast?: boolean;
 };
 
 const inputClass =
@@ -36,6 +38,7 @@ export default function SessionSlotsEditor({
     defaultMaxSeats,
     errors = {},
     disabled = false,
+    allowPast = false,
 }: SessionSlotsEditorProps) {
     const [weeks, setWeeks] = useState("4");
     const todayIst = getTodayIstDate();
@@ -101,7 +104,7 @@ export default function SessionSlotsEditor({
                                 <input
                                     id={`${slot.key}-date`}
                                     type="date"
-                                    min={todayIst}
+                                    min={allowPast ? undefined : todayIst}
                                     value={slot.date}
                                     onChange={(e) => updateSlot(slot.key, "date", e.target.value)}
                                     className={inputClass}

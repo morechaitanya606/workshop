@@ -1,5 +1,6 @@
 import type { Workshop } from "@/lib/data";
 import type { SpecialPageSettings } from "@/lib/special-page";
+import type { HostProfile } from "@/lib/workshop-library";
 import type {
     CommunityCreateInput,
     CommunityJoinInput,
@@ -899,6 +900,26 @@ export type AdminWorkshopsResponse = {
 
 export function getAdminWorkshops(accessToken: string) {
     return apiRequest<AdminWorkshopsResponse>("/api/admin/workshops", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export type WorkshopLibraryResponse = {
+    available: boolean;
+    hosts: HostProfile[];
+    templates: Workshop[];
+};
+
+export function getAdminWorkshopLibrary(accessToken: string) {
+    return apiRequest<WorkshopLibraryResponse>("/api/admin/workshop-library", {
+        accessToken,
+        cache: "no-store",
+    });
+}
+
+export function getHostWorkshopLibrary(accessToken: string) {
+    return apiRequest<WorkshopLibraryResponse>("/api/host/workshop-library", {
         accessToken,
         cache: "no-store",
     });
