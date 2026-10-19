@@ -26,12 +26,6 @@ export const slowTransition: Transition = {
     ease: EASE_OUT,
 };
 
-export const slowBounce: Transition = {
-    duration: 3,
-    repeat: Infinity,
-    ease: "easeInOut",
-};
-
 export const routeEnterTransition: Transition = {
     duration: 0.32,
     ease: EASE_OUT,
@@ -42,34 +36,41 @@ export const routeExitTransition: Transition = {
     ease: EASE_IN,
 };
 
+/*
+ * Scroll reveals never start transparent. The "hidden" state is serialised into the server HTML
+ * as an inline style and only cleared once React has hydrated and the element is in view, so an
+ * `opacity: 0` here left phones looking at blank sections (and photos that had already loaded)
+ * for several seconds, or for good if a chunk failed. Content is therefore always visible and
+ * only settles into place with a small transform (see template.tsx for the same rule).
+ */
 export const fadeIn: Variants = {
-    hidden: { opacity: 0 },
+    hidden: { opacity: 1 },
     visible: { opacity: 1 },
 };
 
 export const fadeInUp: Variants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0 },
+    hidden: { y: 16 },
+    visible: { y: 0 },
 };
 
 export const scaleIn: Variants = {
-    hidden: { opacity: 0, scale: 0.95 },
-    visible: { opacity: 1, scale: 1 },
+    hidden: { scale: 0.97 },
+    visible: { scale: 1 },
 };
 
 export const cardReveal: Variants = {
-    hidden: { opacity: 0, y: 18, scale: 0.98 },
-    visible: { opacity: 1, y: 0, scale: 1 },
+    hidden: { y: 14, scale: 0.99 },
+    visible: { y: 0, scale: 1 },
 };
 
 export const slideInRight: Variants = {
-    hidden: { opacity: 0, x: 30 },
-    visible: { opacity: 1, x: 0 },
+    hidden: { x: 24 },
+    visible: { x: 0 },
 };
 
 export const slideInLeft: Variants = {
-    hidden: { opacity: 0, x: -30 },
-    visible: { opacity: 1, x: 0 },
+    hidden: { x: -24 },
+    visible: { x: 0 },
 };
 
 export const pageTransitionVariants: Variants = {
@@ -107,14 +108,14 @@ export const staggerRelaxed: Variants = {
     },
 };
 
+/**
+ * Reveal as soon as any part is on screen. A fraction (it was 0.18) can never be reached by a
+ * block taller than the viewport divided by that fraction -- e.g. a 4,500px grid on a phone --
+ * so such blocks never revealed at all.
+ */
 export const revealViewport: ViewportOptions = {
     once: true,
-    amount: 0.18,
-};
-
-export const reducedMotionFade: Variants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1 },
+    amount: "some",
 };
 
 const revealPresets: Record<RevealPreset, Variants> = {
@@ -144,23 +145,16 @@ export function useMotionProps(
     const delay = options?.delay ?? 0;
     const viewport = { ...revealViewport, ...(options?.viewport ?? {}) };
 
-    if (reduceMotion) {
-        return {
-            variants: reducedMotionFade,
-            initial: "hidden" as const,
-            ...(shouldUseWhileInView
-                ? { whileInView: "visible" as const, viewport }
-                : { animate: "visible" as const }),
-            transition: { duration: 0.3, delay },
-        };
-    }
-
+    // Same variants and triggers with reduced motion, just no duration. The preference is only
+    // known after hydration, and swapping the variants then (to an opacity-only set) left the
+    // element frozen in its server-rendered "hidden" state. MotionProvider's
+    // `<MotionConfig reducedMotion="user">` already makes transform changes instant.
     return {
         variants,
         initial: "hidden" as const,
         ...(shouldUseWhileInView
             ? { whileInView: "visible" as const, viewport }
             : { animate: "visible" as const }),
-        transition: { ...transition, delay },
+        transition: reduceMotion ? { duration: 0 } : { ...transition, delay },
     };
 }

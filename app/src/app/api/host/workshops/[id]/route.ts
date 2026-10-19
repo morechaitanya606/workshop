@@ -17,6 +17,10 @@ import {
     normalizeWorkshopImageUrlInput,
     normalizeWorkshopVideoUrlInput,
 } from "@/lib/workshop-media";
+import { mirrorImageFields } from "@/lib/image-mirror";
+
+// Pasted image links are copied into storage on save (see lib/image-mirror).
+export const maxDuration = 60;
 
 type Params = {
     params: Promise<{ id: string }>;
@@ -122,6 +126,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         }
 
         const input = parsed.data;
+        // Pasted Drive/Photos/Unsplash links are copied into our storage at full resolution.
+        await mirrorImageFields(input, ["coverImage", "galleryImages", "locationImages"]);
         const patch: TablesUpdate<"workshops"> = {};
 
         if (typeof input.title === "string") patch.title = input.title;

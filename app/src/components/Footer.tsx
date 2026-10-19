@@ -18,7 +18,6 @@ export default function Footer() {
         phone.value.replace(/^\+91/, "")
     ).join(" / ");
     const compactFooterLinks = [
-        { label: "Workshops in Pune", href: "/workshops/pune" },
         { label: "About Us", href: "/about" },
         { label: "Help Center", href: "/help" },
         { label: "Contact", href: "/contact" },
@@ -28,7 +27,7 @@ export default function Footer() {
     ];
 
     return (
-        <footer className="bg-cream-100 border-t border-clay/30 mt-20">
+        <footer className="bg-cream-100 border-t border-clay/30 md:mt-20">
             {showCompactMobileFooter ? (
                 <div className="md:hidden px-4 pb-6 pt-6">
                     <div className="mx-auto max-w-sm text-center">
@@ -71,8 +70,8 @@ export default function Footer() {
                                 </span>
                             </Link>
                             <p className="text-body-sm max-w-xs">
-                                Discover creative workshops across the city and make your weekends
-                                more meaningful.
+                                Discover creative workshops across Pune and make your weekends more
+                                meaningful.
                             </p>
                             <div className="mt-4 space-y-2">
                                 <Link
@@ -103,7 +102,6 @@ export default function Footer() {
                             </h4>
                             <ul className="space-y-3">
                                 {[
-                                    { label: "Workshops in Pune", href: "/workshops/pune" },
                                     { label: "About Us", href: "/about" },
                                     { label: "Careers", href: "/careers" },
                                     { label: "Become a Host", href: "/become-a-host" },
@@ -162,8 +160,10 @@ export default function Footer() {
 
                 {/* Bottom bar */}
                 <div className="border-t border-clay/30">
+                    {/* md:px-24 keeps the copyright and the links out from under "Back to top"
+                        (bottom-left) and the WhatsApp/surprise buttons (bottom-right). */}
                     <RevealGroup
-                        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-5 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0"
+                        className="max-w-7xl mx-auto px-4 sm:px-6 md:px-24 py-6 md:py-5 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0"
                         stagger={0.05}
                     >
                         <RevealItem className="sm:w-1/3">

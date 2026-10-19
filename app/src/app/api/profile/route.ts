@@ -6,6 +6,7 @@ import { parseBody } from "@/lib/api-route";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { profileUpdateSchema } from "@/lib/validators";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { mirrorImageFields } from "@/lib/image-mirror";
 
 type ProfilePayload = {
     fullName: string | null;
@@ -133,6 +134,9 @@ export async function PATCH(request: NextRequest) {
     if (!service.ok) {
         return service.response;
     }
+
+    // Pasted Drive/Photos/Unsplash links are copied into our storage at full resolution.
+    await mirrorImageFields(parsed.data, ["avatarUrl"]);
 
     const updates: {
         full_name?: string | null;

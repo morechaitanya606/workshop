@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, DM_Sans } from "next/font/google";
+import { Cormorant_Garamond, DM_Sans, Playfair_Display } from "next/font/google";
 import { getAbsoluteUrl } from "@/lib/env";
+import { getIstTodayIso } from "@/lib/ist-date";
 import { serializeJsonLd } from "@/lib/json-ld";
 import SummerRetreatClient from "./SummerRetreatClient";
 
@@ -13,8 +14,19 @@ const cormorant = Cormorant_Garamond({
     style: ["normal", "italic"],
     variable: "--font-cormorant",
 });
+// The root layout loads Playfair upright only; this page sets it in italic, so it loads the real
+// italic here (and overrides --font-playfair below) instead of the browser faking a slant.
+const playfair = Playfair_Display({
+    subsets: ["latin"],
+    display: "swap",
+    style: ["normal", "italic"],
+    variable: "--font-playfair",
+});
 
 const canonicalUrl = getAbsoluteUrl("/workshop/summer-family-retreat");
+/** Last day of the retreat (IST). After it the page stays reachable but leaves search results. */
+const RETREAT_LAST_DAY = "2026-05-10";
+const isRetreatOver = getIstTodayIso() > RETREAT_LAST_DAY;
 const ogImageUrl = getAbsoluteUrl("/images/summer-family-retreat-og.jpg");
 
 export const metadata: Metadata = {
@@ -41,6 +53,8 @@ export const metadata: Metadata = {
     alternates: {
         canonical: canonicalUrl,
     },
+    // An ended event should not keep ranking (or carry "Book today!" claims) in search.
+    ...(isRetreatOver ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
         title: "Top Pune Special Event for Parents and Child | Summer Retreat",
         description:
@@ -70,7 +84,7 @@ const eventStructuredData = {
     "@type": "Event",
     name: "Pune Special Event for Parents and Child: Summer Family Retreat",
     description:
-        "The ultimate Pune special event for parents and child. A curated family experience featuring drone making and cakesicle workshops for kids, plus exclusive cheese tasting and estate tours for parents at The Yellow Slice, Pirangut. Voted among the top trending events in Pune.",
+        "The ultimate Pune special event for parents and child. A curated family experience featuring drone making and cakesicle workshops for kids, plus exclusive cheese tasting and estate tours for parents at The Yellow Slice, Pirangut.",
     eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
     eventStatus: "https://schema.org/EventScheduled",
     startDate: "2026-05-09T17:00:00+05:30",
@@ -103,13 +117,15 @@ const eventStructuredData = {
 export default function SummerFamilyRetreatPage() {
     return (
         <>
-            <script
-                type="application/ld+json"
-                dangerouslySetInnerHTML={{
-                    __html: serializeJsonLd(eventStructuredData),
-                }}
-            />
-            <div className={`${dmSans.variable} ${cormorant.variable}`}>
+            {!isRetreatOver && (
+                <script
+                    type="application/ld+json"
+                    dangerouslySetInnerHTML={{
+                        __html: serializeJsonLd(eventStructuredData),
+                    }}
+                />
+            )}
+            <div className={`${dmSans.variable} ${cormorant.variable} ${playfair.variable}`}>
                 <SummerRetreatClient />
             </div>
         </>

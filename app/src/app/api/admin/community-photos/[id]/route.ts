@@ -7,6 +7,10 @@ import { requireSupabaseService } from "@/lib/api-helpers";
 import { isMissingCommunityPhotosTableError, mapCommunityPhotoRow } from "@/lib/community-photos";
 import { communityPhotoUpdateSchema } from "@/lib/validators";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { mirrorImageFields } from "@/lib/image-mirror";
+
+// Pasted image links are copied into storage on save (see lib/image-mirror).
+export const maxDuration = 60;
 
 type RouteContext = {
     params: Promise<{
@@ -40,6 +44,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     try {
+        // Pasted Drive/Photos/Unsplash links are copied into our storage at full resolution.
+        await mirrorImageFields(parsed.data, ["imageUrl"]);
         const updates = {
             ...(parsed.data.imageUrl !== undefined ? { image_url: parsed.data.imageUrl } : {}),
             ...(parsed.data.altText !== undefined ? { alt_text: parsed.data.altText } : {}),

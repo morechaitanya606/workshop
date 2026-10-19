@@ -1,23 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useId } from "react";
-import {
-    Calendar,
-    Clock,
-    Loader2,
-    MapPin,
-    RotateCcw,
-    ShieldCheck,
-    Star,
-    Tag,
-    Users,
-    X,
-} from "lucide-react";
-import { CANCELLATION_POLICY } from "@/lib/cancellation-policy";
+import { Calendar, Clock, Loader2, MapPin, ShieldCheck, Tag, Users, X } from "lucide-react";
 import type { Workshop } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { isWebUrl } from "@/lib/workshop-media";
 import type { AppliedCoupon } from "./types";
 
 export default function BookingOrderSummary({
@@ -58,7 +46,11 @@ export default function BookingOrderSummary({
     onRemoveCoupon: () => void;
 }) {
     const couponInputId = useId();
-    const locationLabel = workshop.eventAddress || `${workshop.location}, ${workshop.city}`;
+    // A pasted Maps link is not an address to print; show the venue and city instead.
+    const locationLabel =
+        workshop.eventAddress && !isWebUrl(workshop.eventAddress)
+            ? workshop.eventAddress
+            : `${workshop.location}, ${workshop.city}`;
     const guestLabel = `${guests} ${guests === 1 ? "guest" : "guests"}`;
 
     return (
@@ -81,21 +73,6 @@ export default function BookingOrderSummary({
                     <h4 className="font-playfair text-base font-semibold leading-tight text-dark">
                         {workshop.title}
                     </h4>
-                    {/* Never show a filled star beside "0" on the payment page. */}
-                    {workshop.reviewCount > 0 && (
-                        <div className="mt-1 flex items-center gap-1">
-                            <Star
-                                className="h-3 w-3 fill-terracotta text-terracotta"
-                                aria-hidden="true"
-                            />
-                            <span className="text-xs font-inter font-semibold text-dark">
-                                {workshop.rating}
-                            </span>
-                            <span className="text-xs font-inter text-dark-muted">
-                                ({workshop.reviewCount})
-                            </span>
-                        </div>
-                    )}
                 </div>
             </div>
 
@@ -177,6 +154,9 @@ export default function BookingOrderSummary({
                     </dd>
                 </div>
             </dl>
+            <p className="mt-1 text-right text-xs font-inter text-dark-muted">
+                All prices are inclusive of GST.
+            </p>
 
             {!appliedCoupon && (
                 <div className="mt-4 border-t border-clay/40 pt-4">
@@ -252,25 +232,6 @@ export default function BookingOrderSummary({
                         aria-hidden="true"
                     />
                     Secure payment via Razorpay
-                </li>
-                <li className="flex items-start gap-2.5">
-                    <RotateCcw
-                        className="mt-0.5 h-4 w-4 shrink-0 text-terracotta"
-                        aria-hidden="true"
-                    />
-                    <span>
-                        {CANCELLATION_POLICY.hostCancellationSummary} Otherwise bookings are
-                        generally non-refundable, and no cancellation within{" "}
-                        {CANCELLATION_POLICY.noCancellationCutoffHoursBeforeWorkshop}h of the start.{" "}
-                        <Link
-                            href="/cancellations"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-semibold text-terracotta underline-offset-2 hover:underline"
-                        >
-                            Cancellation policy
-                        </Link>
-                    </span>
                 </li>
             </ul>
         </div>

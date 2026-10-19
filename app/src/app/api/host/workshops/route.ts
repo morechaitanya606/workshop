@@ -17,6 +17,7 @@ import {
     withoutNewColumns,
     withoutApprovalStatus,
 } from "@/lib/workshop-approval-compat";
+import { mirrorImageFields } from "@/lib/image-mirror";
 
 export async function GET(request: NextRequest) {
     const auth = await requireHostOrAdmin(request);
@@ -78,6 +79,8 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+        // Pasted Drive/Photos/Unsplash links are copied into our storage at full resolution.
+        await mirrorImageFields(parsed.data, ["coverImage", "galleryImages", "locationImages"]);
         // One row per session, inserted in a single statement so the batch is all-or-nothing.
         const payloads = buildWorkshopInsertPayloads(parsed.data, auth.user.id, {
             approvalStatus: auth.role === "admin" ? "approved" : "pending",

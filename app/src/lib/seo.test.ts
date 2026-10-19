@@ -116,6 +116,18 @@ describe("workshopEventJsonLd", () => {
         expect(jsonLd.offers.availability).toBe("https://schema.org/SoldOut");
         expect("aggregateRating" in jsonLd).toBe(false);
     });
+
+    it("never sends a pasted Maps link as the street address", () => {
+        const withLink = workshopEventJsonLd(
+            { ...workshop, eventAddress: "https://maps.app.goo.gl/UXEiDjhdRibZegzu5" } as Workshop,
+            {
+                canonicalUrl: "https://www.onlyworkshops.com/workshop/pottery-1",
+                imageUrl: "https://www.onlyworkshops.com/cover.jpg",
+                siteUrl: "https://www.onlyworkshops.com",
+            }
+        );
+        expect(withLink.location.address.streetAddress).toBe("Clay Studio, Baner");
+    });
 });
 
 describe("siteJsonLd", () => {

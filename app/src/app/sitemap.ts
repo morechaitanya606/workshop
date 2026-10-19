@@ -10,11 +10,12 @@ import { getPlatformSettings } from "@/lib/workshop-page-data";
 // Without this the sitemap is rendered once at build time and never reflects new workshops.
 export const revalidate = 3600;
 
+// /blog and /press are left out while they are "coming soon" placeholders: thin pages in the
+// sitemap only dilute how Google rates the site. Add them back once they have real content.
 const STATIC_PATHS = [
     "/",
     "/explore",
     "/about",
-    "/blog",
     "/become-a-host",
     "/list-your-space",
     "/contact",
@@ -25,7 +26,6 @@ const STATIC_PATHS = [
     "/cancellations",
     "/legal/privacy",
     "/legal/terms",
-    "/press",
     "/past-events",
     "/sitemap",
 ];
@@ -33,25 +33,14 @@ const STATIC_PATHS = [
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const siteUrl = getAppUrl().replace(/\/$/, "");
     const now = new Date();
-    // Static pages carry no per-page timestamp, so they are stamped with the build/revalidate time
-    // rather than inventing a fresh date on every crawl for the dynamic ones below.
-    const staticLastModified = now;
-
+    // Static pages carry no real "last changed" date, so they get none. Stamping them with the
+    // regeneration time (every hour) taught Google to ignore lastmod for the whole sitemap,
+    // including the accurate workshop dates below.
     const staticEntries: MetadataRoute.Sitemap = STATIC_PATHS.map((path) => ({
         url: `${siteUrl}${path}`,
-        lastModified: staticLastModified,
         changeFrequency: path === "/" || path === "/explore" ? "daily" : "weekly",
         priority: path === "/" ? 1 : path === "/explore" ? 0.9 : 0.6,
     }));
-
-    for (const city of SEO_CITIES) {
-        staticEntries.push({
-            url: `${siteUrl}${cityPagePath(city)}`,
-            lastModified: staticLastModified,
-            changeFrequency: "daily",
-            priority: 0.9,
-        });
-    }
 
     // The special event page is only listed while it is enabled and not past its visible_until
     // date (IST); afterwards it should drop out instead of advertising an ended event.
@@ -59,7 +48,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (specialPage.enabled && getIstTodayIso(now) <= specialPage.visibleUntil) {
         staticEntries.push({
             url: `${siteUrl}${specialPage.path}`,
-            lastModified: staticLastModified,
             changeFrequency: "daily",
             priority: 0.95,
         });
@@ -111,6 +99,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         return date && !Number.isNaN(date.getTime()) ? date : undefined;
     };
 
+    // A city page changes when one of its workshops does, so it carries the newest workshop date.
+    const newestWorkshopUpdate = Array.from(workshopRows.values())
+        .map((value) => toLastModified(value))
+        .filter((date): date is Date => Boolean(date))
+        .reduce<Date | undefined>(
+            (newest, date) => (!newest || date > newest ? date : newest),
+            undefined
+        );
+    const cityEntries: MetadataRoute.Sitemap = SEO_CITIES.map((city) => ({
+        url: `${siteUrl}${cityPagePath(city)}`,
+        lastModified: newestWorkshopUpdate,
+        changeFrequency: "daily",
+        priority: 0.9,
+    }));
+
     const workshopEntries: MetadataRoute.Sitemap = Array.from(workshopRows).map(
         ([workshopId, updatedAt]) => ({
             url: `${siteUrl}/workshop/${workshopId}`,
@@ -129,5 +132,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         })
     );
 
-    return [...staticEntries, ...workshopEntries, ...communityEntries];
+    return [...staticEntries, ...cityEntries, ...workshopEntries, ...communityEntries];
 }

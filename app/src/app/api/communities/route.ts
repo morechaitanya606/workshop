@@ -15,6 +15,7 @@ import {
 } from "@/lib/community-api-errors";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { communityCreateSchema } from "@/lib/validators";
+import { mirrorImageFields } from "@/lib/image-mirror";
 
 export async function POST(request: NextRequest) {
     // The submission form lives under the (private) route group, so the UI already
@@ -67,6 +68,8 @@ export async function POST(request: NextRequest) {
     const serviceClient = createSupabaseServiceClient();
 
     try {
+        // Pasted Drive/Photos/Unsplash links are copied into our storage at full resolution.
+        await mirrorImageFields(parsed.data, ["coverImage"]);
         const slug = await generateUniqueCommunitySlug(serviceClient, parsed.data.title);
         const payload = buildCommunityInsertPayload(parsed.data, slug);
         const { data, error } = await serviceClient

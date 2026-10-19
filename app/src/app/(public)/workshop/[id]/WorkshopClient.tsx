@@ -1,13 +1,13 @@
 "use client";
 
-import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import {
-    Star,
     MapPin,
     Clock,
     Calendar,
@@ -28,24 +28,20 @@ import {
     addFavorite,
     createBookingHold,
     getFavorites,
-    getWorkshopFeedback,
-    getWorkshopPublicFeedback,
     getWorkshopNotifications,
     isApiClientError,
     removeFavorite,
-    submitWorkshopFeedback,
     toApiErrorMessage,
     updateWorkshopNotifications,
-    uploadMedia,
 } from "@/lib/api-client";
 import { addRecentlyViewed } from "@/lib/recently-viewed";
-import { formatCurrency, formatDate, formatTime, getInitials } from "@/lib/utils";
+import { formatCurrency, formatDate, formatTime } from "@/lib/utils";
 import { BOOKING_CUTOFF_HOURS, getWorkshopDateTime, isBookingClosedNow } from "@/lib/booking-time";
 import { useAuth } from "@/lib/auth-context";
 import { trackEvent } from "@/lib/analytics";
 import { usePlatformSettings } from "@/lib/platform-settings-context";
 import { useModalA11y } from "@/lib/use-modal-a11y";
-import { isSupportedWorkshopImageUrl } from "@/lib/workshop-media";
+import { googleMapsLinkOf, isSupportedWorkshopImageUrl, isWebUrl } from "@/lib/workshop-media";
 import {
     fadeInUp,
     quickTransition,
@@ -144,7 +140,7 @@ export default function WorkshopClient({
     todayIso,
 }: WorkshopClientProps) {
     const router = useRouter();
-    const prefersReducedMotion = useReducedMotion();
+    const prefersReducedMotion = usePrefersReducedMotion();
     const seoCity = getSeoCityByName(workshop.city);
     const { user, session } = useAuth();
     const toast = useToast();
@@ -171,36 +167,6 @@ export default function WorkshopClient({
     const [notifyMessage, setNotifyMessage] = useState<string | null>(null);
     const [notifyError, setNotifyError] = useState<string | null>(null);
     const [notifyLoadingMode, setNotifyLoadingMode] = useState<"similar" | "creator" | null>(null);
-    const [feedbackDraft, setFeedbackDraft] = useState("");
-    const [feedbackError, setFeedbackError] = useState<string | null>(null);
-    const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
-    const [feedbackLoading, setFeedbackLoading] = useState(false);
-    const [canLeaveFeedback, setCanLeaveFeedback] = useState(false);
-    const [userFeedback, setUserFeedback] = useState<{
-        rating: number | null;
-        comment: string;
-        photos: string[];
-        video_url: string | null;
-        created_at: string;
-        updated_at: string;
-    } | null>(null);
-    const [isEditingFeedback, setIsEditingFeedback] = useState(false);
-    const [feedbackRating, setFeedbackRating] = useState(5);
-    const [feedbackPhotos, setFeedbackPhotos] = useState<string[]>([]);
-    const [feedbackUploading, setFeedbackUploading] = useState(false);
-    const [publicFeedback, setPublicFeedback] = useState<
-        Array<{
-            id: string;
-            rating: number | null;
-            comment: string;
-            photos: string[];
-            createdAt: string;
-            userDisplayName: string;
-            avatarUrl?: string | null;
-        }>
-    >([]);
-    const [publicFeedbackLoading, setPublicFeedbackLoading] = useState(false);
-    const [publicFeedbackError, setPublicFeedbackError] = useState<string | null>(null);
 
     // Sold-out community popup. The link comes from platform settings (admin dashboard) via
     // the provider that the root layout fills from the cached server read.
@@ -344,14 +310,10 @@ export default function WorkshopClient({
 
     useEffect(() => {
         if (!isPastWorkshop) {
-            setCanLeaveFeedback(false);
-            setUserFeedback(null);
             return;
         }
         if (!accessToken) {
             setNotifyState({ similar: false, creator: false });
-            setCanLeaveFeedback(false);
-            setUserFeedback(null);
             return;
         }
         let cancelled = false;
@@ -365,25 +327,6 @@ export default function WorkshopClient({
                         similar: Boolean(notifyResult.subscriptions?.similar),
                         creator: Boolean(notifyResult.subscriptions?.creator),
                     });
-                }
-
-                try {
-                    const feedbackResult = await getWorkshopFeedback(workshop.id, accessToken);
-                    if (!cancelled) {
-                        setCanLeaveFeedback(Boolean(feedbackResult.canLeaveFeedback));
-                        setUserFeedback(feedbackResult.feedback || null);
-                        if (feedbackResult.feedback) {
-                            setFeedbackRating(feedbackResult.feedback.rating ?? 5);
-                            setFeedbackPhotos(feedbackResult.feedback.photos || []);
-                        } else {
-                            setFeedbackRating(5);
-                            setFeedbackPhotos([]);
-                        }
-                    }
-                } catch {
-                    if (!cancelled) {
-                        setCanLeaveFeedback(false);
-                    }
                 }
             } catch {
                 // Keep local state defaults if API load fails.
@@ -413,15 +356,6 @@ export default function WorkshopClient({
     }, [appliedCoupon, couponSubtotalSnapshot, subtotal]);
 
     useEffect(() => {
-        setFeedbackDraft("");
-        setFeedbackError(null);
-        setFeedbackMessage(null);
-        setIsEditingFeedback(false);
-        setFeedbackRating(5);
-        setFeedbackPhotos([]);
-    }, [workshop.id]);
-
-    useEffect(() => {
         if (isSoldOut) {
             setGuests(1);
             return;
@@ -449,7 +383,15 @@ export default function WorkshopClient({
         onClose: closeVideoModal,
     });
 
-    const locationQuery = [workshop.location, workshop.eventAddress, workshop.city]
+    // Admins sometimes paste a Google Maps share link as the address. It is not searchable text,
+    // so it is left out of the map query and used as the "Open" target instead.
+    const addressIsLink = isWebUrl(workshop.eventAddress);
+    const pastedMapsLink = googleMapsLinkOf(workshop.eventAddress);
+    const locationQuery = [
+        workshop.location,
+        addressIsLink ? "" : workshop.eventAddress,
+        workshop.city,
+    ]
         .map((part) => part?.trim())
         .filter(Boolean)
         .join(", ");
@@ -464,60 +406,13 @@ export default function WorkshopClient({
         : `https://www.google.com/maps?q=${encodedLocationQuery}&output=embed`;
     const mapOpenUrl = hasValidCoordinates
         ? `https://www.google.com/maps/search/?api=1&query=${workshop.latitude},${workshop.longitude}`
-        : `https://www.google.com/maps/search/?api=1&query=${encodedLocationQuery}`;
+        : (pastedMapsLink ??
+          `https://www.google.com/maps/search/?api=1&query=${encodedLocationQuery}`);
     const locationImages = (workshop.locationImages || []).filter((image) =>
         isSupportedWorkshopImageUrl(image)
     );
     const workshopPath = `/workshop/${workshop.id}`;
     const loginRedirectHref = `/auth/login?redirect=${encodeURIComponent(workshopPath)}`;
-    const MAX_FEEDBACK_PHOTOS = 4;
-
-    const loadPublicFeedback = useCallback(async () => {
-        setPublicFeedbackLoading(true);
-        setPublicFeedbackError(null);
-        try {
-            const result = await getWorkshopPublicFeedback(workshop.id, { limit: 8 });
-            setPublicFeedback(result.feedback || []);
-        } catch (error) {
-            setPublicFeedback([]);
-            setPublicFeedbackError(
-                toApiErrorMessage(error, "Unable to load workshop feedback right now.")
-            );
-        } finally {
-            setPublicFeedbackLoading(false);
-        }
-    }, [workshop.id]);
-
-    // A workshop with no reviews has nothing to fetch. This fired on every workshop page
-    // view regardless, costing two service-role queries to return an empty list.
-    // workshop.feedbackHighlight/feedbackAuthor exist on the type but are never populated by
-    // any mapper or DB column, so derive the highlight from the reviews already loaded here.
-    const topFeedback = useMemo(() => {
-        const withComment = publicFeedback.filter(
-            (item) => typeof item.rating === "number" && (item.comment || "").trim().length > 0
-        );
-        if (withComment.length === 0) return null;
-
-        const best = withComment.reduce((current, candidate) =>
-            (candidate.rating ?? 0) > (current.rating ?? 0) ? candidate : current
-        );
-
-        return {
-            highlight: best.comment.trim(),
-            author: best.userDisplayName,
-        };
-    }, [publicFeedback]);
-
-    useEffect(() => {
-        if (workshop.reviewCount <= 0) {
-            setPublicFeedback([]);
-            setPublicFeedbackLoading(false);
-            return;
-        }
-
-        void loadPublicFeedback();
-    }, [loadPublicFeedback, workshop.reviewCount]);
-
     const openCommunityModal = useCallback(
         (source: string) => {
             setShowCommunityModal(true);
@@ -720,111 +615,6 @@ export default function WorkshopClient({
         }
     };
 
-    const handleFeedbackSubmit = async () => {
-        setFeedbackError(null);
-        setFeedbackMessage(null);
-        if (!user) {
-            const redirectPath = encodeURIComponent(`/workshop/${workshop.id}`);
-            router.push(`/auth/login?redirect=${redirectPath}`);
-            toast.info("Log in required", "Please sign in to submit feedback.");
-            return;
-        }
-        if (!accessToken) {
-            const message = "Your session expired. Please log in again.";
-            setFeedbackError(message);
-            toast.error("Session expired", message);
-            return;
-        }
-        const trimmedFeedback = feedbackDraft.trim();
-        if (!trimmedFeedback) {
-            const message = "Please add feedback before submitting.";
-            setFeedbackError(message);
-            toast.info("Feedback required", message);
-            return;
-        }
-        setFeedbackLoading(true);
-        try {
-            const result = await submitWorkshopFeedback(workshop.id, accessToken, {
-                comment: trimmedFeedback,
-                rating: feedbackRating,
-                photos: feedbackPhotos,
-            });
-            setUserFeedback(result.feedback || null);
-            if (result.feedback) {
-                setFeedbackRating(result.feedback.rating ?? 5);
-                setFeedbackPhotos(result.feedback.photos || []);
-            }
-            setFeedbackDraft("");
-            setIsEditingFeedback(false);
-            trackEvent("feedback_submitted", {
-                workshopId: workshop.id,
-            });
-            setFeedbackMessage(result.message || "Thanks for sharing your feedback.");
-            toast.success("Feedback saved", "Thanks for sharing your experience.");
-            void loadPublicFeedback();
-        } catch (error) {
-            const message = toApiErrorMessage(error, "Unable to save feedback.");
-            setFeedbackError(message);
-            toast.error("Feedback not saved", message);
-        } finally {
-            setFeedbackLoading(false);
-        }
-    };
-
-    const handleStartFeedbackEdit = () => {
-        if (!userFeedback) return;
-        setFeedbackDraft(userFeedback.comment || "");
-        setFeedbackRating(userFeedback.rating ?? 5);
-        setFeedbackPhotos(userFeedback.photos || []);
-        setIsEditingFeedback(true);
-        setFeedbackMessage(null);
-        setFeedbackError(null);
-    };
-
-    const handleCancelFeedbackEdit = () => {
-        setIsEditingFeedback(false);
-        setFeedbackDraft("");
-        setFeedbackRating(userFeedback?.rating ?? 5);
-        setFeedbackPhotos(userFeedback?.photos || []);
-        setFeedbackMessage(null);
-        setFeedbackError(null);
-    };
-
-    const handleFeedbackPhotoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(event.target.files || []);
-        event.target.value = "";
-        if (!files.length) return;
-        if (!accessToken) {
-            setFeedbackError("Please log in to upload photos.");
-            return;
-        }
-        const remaining = Math.max(0, MAX_FEEDBACK_PHOTOS - feedbackPhotos.length);
-        if (remaining === 0) {
-            setFeedbackError(`You can upload up to ${MAX_FEEDBACK_PHOTOS} photos.`);
-            return;
-        }
-        const selected = files.slice(0, remaining);
-        setFeedbackUploading(true);
-        setFeedbackError(null);
-        try {
-            const uploads = await Promise.all(
-                selected.map(async (file) => {
-                    const result = await uploadMedia(accessToken, file);
-                    return String(result.url || "");
-                })
-            );
-            setFeedbackPhotos((prev) => [...prev, ...uploads.filter(Boolean)]);
-        } catch (error) {
-            setFeedbackError(toApiErrorMessage(error, "Unable to upload photos."));
-        } finally {
-            setFeedbackUploading(false);
-        }
-    };
-
-    const handleRemoveFeedbackPhoto = (index: number) => {
-        setFeedbackPhotos((prev) => prev.filter((_, i) => i !== index));
-    };
-
     const handleToggleFavorite = async () => {
         if (!user) {
             const redirectPath = encodeURIComponent(`/workshop/${workshop.id}`);
@@ -857,27 +647,17 @@ export default function WorkshopClient({
         }
     };
 
-    // Rows written before the rating column existed have rating = null. The rollup already
-    // excludes them from review_count, so rendering them would show "- / 5" beside five empty
-    // stars and contradict the count. Belt and braces: the API filters these too.
-    const ratedPublicFeedback = publicFeedback.filter((item) => typeof item.rating === "number");
-
-    const visiblePublicFeedback = userFeedback
-        ? ratedPublicFeedback.filter(
-              (item) =>
-                  item.comment !== userFeedback.comment ||
-                  item.createdAt !== userFeedback.created_at
-          )
-        : ratedPublicFeedback;
-
     return (
-        <div className="min-h-full pb-44 min-[900px]:pb-0">
+        // Room for the fixed booking bar (about 94px, sitting on the bottom nav, whose height
+        // <main> already reserves). It was a flat 176px, also on past workshops that have no
+        // bar, which left a large empty band under the footer on phones.
+        <div className={`min-h-full min-[900px]:pb-0 ${isPastWorkshop ? "" : "pb-24"}`}>
             <div className="pt-20 sm:pt-24">
                 <div className="section-padding mb-4">
                     <motion.nav
-                        variants={prefersReducedMotion ? undefined : fadeInUp}
-                        initial={prefersReducedMotion ? undefined : "hidden"}
-                        animate={prefersReducedMotion ? undefined : "visible"}
+                        variants={fadeInUp}
+                        initial={"hidden"}
+                        animate={"visible"}
                         transition={prefersReducedMotion ? { duration: 0 } : quickTransition}
                         aria-label="Breadcrumb"
                         className="flex items-center gap-2 text-sm font-inter text-dark-muted"
@@ -933,9 +713,9 @@ export default function WorkshopClient({
                             </div>
 
                             <motion.div
-                                variants={prefersReducedMotion ? undefined : fadeInUp}
-                                initial={prefersReducedMotion ? undefined : "hidden"}
-                                animate={prefersReducedMotion ? undefined : "visible"}
+                                variants={fadeInUp}
+                                initial={"hidden"}
+                                animate={"visible"}
                                 transition={
                                     prefersReducedMotion
                                         ? { duration: 0 }
@@ -950,35 +730,6 @@ export default function WorkshopClient({
                                 )}
                                 <h1 className="heading-lg font-inter mb-3">{workshop.title}</h1>
                                 <div className="flex flex-wrap items-center gap-4 text-sm font-inter text-dark-secondary">
-                                    {/* A workshop with no ratings must not render a filled star next
-                                        to "0" - that reads as a one-star review rather than "not
-                                        rated yet". Mirrors the guard in WorkshopCard. */}
-                                    <div className="flex items-center gap-1.5">
-                                        {workshop.reviewCount > 0 ? (
-                                            <>
-                                                <Star className="w-4 h-4 text-terracotta fill-terracotta" />
-                                                <span className="font-semibold">
-                                                    {workshop.rating}
-                                                </span>
-                                                <span className="text-dark-muted">
-                                                    ({workshop.reviewCount}{" "}
-                                                    {workshop.reviewCount === 1
-                                                        ? "review"
-                                                        : "reviews"}
-                                                    )
-                                                </span>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Star className="w-4 h-4 text-dark-muted" />
-                                                <span className="text-dark-muted">
-                                                    {isPastWorkshop
-                                                        ? "No reviews yet"
-                                                        : "Newly listed"}
-                                                </span>
-                                            </>
-                                        )}
-                                    </div>
                                     <div className="flex items-center gap-1.5">
                                         <MapPin className="w-4 h-4 text-dark-muted" />{" "}
                                         {workshop.location}, {workshop.city}
@@ -1011,7 +762,7 @@ export default function WorkshopClient({
                                                 {formatCurrency(currentPricePerGuest)}
                                             </span>
                                             <span className="text-xs font-inter text-dark-muted">
-                                                / person
+                                                / person, incl. GST
                                             </span>
                                         </div>
                                         {isEbEligible && (
@@ -1167,21 +918,116 @@ export default function WorkshopClient({
                             <hr className="my-8 border-clay/30" />
 
                             <motion.div
-                                variants={prefersReducedMotion ? undefined : staggerContainer}
-                                initial={prefersReducedMotion ? undefined : "hidden"}
-                                whileInView={prefersReducedMotion ? undefined : "visible"}
-                                viewport={prefersReducedMotion ? undefined : revealViewport}
+                                variants={staggerContainer}
+                                initial={"hidden"}
+                                whileInView={"visible"}
+                                viewport={revealViewport}
                                 className="space-y-6"
                             >
+                                <motion.div
+                                    variants={fadeInUp}
+                                    transition={
+                                        prefersReducedMotion ? { duration: 0 } : quickTransition
+                                    }
+                                    className="card-section"
+                                >
+                                    <span className="eyebrow-label">About</span>
+                                    <h2 className="heading-sm font-inter mb-4">
+                                        About this experience
+                                    </h2>
+                                    <div className="text-body whitespace-pre-line">
+                                        {workshop.description}
+                                    </div>
+                                </motion.div>
+
+                                <motion.div
+                                    variants={fadeInUp}
+                                    transition={
+                                        prefersReducedMotion ? { duration: 0 } : quickTransition
+                                    }
+                                    className="card-section"
+                                >
+                                    <span className="eyebrow-label">Learn</span>
+                                    <h2 className="heading-sm font-inter mb-4">
+                                        What you will learn
+                                    </h2>
+                                    <ul className="space-y-3">
+                                        {workshop.whatYouLearn.map((item, i) => (
+                                            <li
+                                                key={i}
+                                                className="flex items-start gap-3 text-body"
+                                            >
+                                                <Check className="w-5 h-5 text-terracotta flex-shrink-0 mt-0.5" />{" "}
+                                                {item}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </motion.div>
+
+                                <motion.div
+                                    variants={fadeInUp}
+                                    transition={
+                                        prefersReducedMotion ? { duration: 0 } : quickTransition
+                                    }
+                                    className="card-section"
+                                >
+                                    <span className="eyebrow-label">Included</span>
+                                    <h2 className="heading-sm font-inter mb-4">
+                                        {"What's included"}
+                                    </h2>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        {workshop.materialsProvided.map((item, i) => (
+                                            <div
+                                                key={i}
+                                                className="flex items-center gap-3 bg-cream-200/50 rounded-xl px-4 py-3"
+                                            >
+                                                <div className="w-8 h-8 bg-terracotta/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                    <Check className="w-4 h-4 text-terracotta" />
+                                                </div>
+                                                <span className="text-sm font-inter text-dark-secondary">
+                                                    {item}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </motion.div>
+
+                                <motion.div
+                                    variants={fadeInUp}
+                                    transition={
+                                        prefersReducedMotion ? { duration: 0 } : quickTransition
+                                    }
+                                    className="card-section"
+                                >
+                                    <span className="eyebrow-label">Snapshot</span>
+                                    <h2 className="heading-sm font-inter mb-4">What to expect</h2>
+                                    <div className="text-sm font-inter text-dark-secondary space-y-1.5">
+                                        <p>
+                                            No prior experience needed – this workshop is designed
+                                            for complete beginners as well as hobbyists.
+                                        </p>
+                                        <p>
+                                            Small group session in the city with all core materials
+                                            provided at the studio.
+                                        </p>
+                                        <p>
+                                            You&apos;ll leave with something you made and the basics
+                                            to continue at home.
+                                        </p>
+                                    </div>
+                                </motion.div>
+
                                 {/* Host info is shown immediately: no scroll-reveal animation. */}
                                 <div className="card-section">
                                     <div className="flex items-start gap-4">
                                         <div className="relative w-16 h-16 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-terracotta/20">
+                                            {/* sizes: a 64px circle. Without it `fill` asked for a
+                                                full-width (up to 1200px) image, eagerly. */}
                                             <Image
                                                 src={workshop.hostAvatar}
                                                 alt={workshop.hostName}
                                                 fill
-                                                loading="eager"
+                                                sizes="64px"
                                                 className="object-cover"
                                             />
                                         </div>
@@ -1238,100 +1084,7 @@ export default function WorkshopClient({
                                 </div>
 
                                 <motion.div
-                                    variants={prefersReducedMotion ? undefined : fadeInUp}
-                                    transition={
-                                        prefersReducedMotion ? { duration: 0 } : quickTransition
-                                    }
-                                    className="card-section"
-                                >
-                                    <span className="eyebrow-label">Snapshot</span>
-                                    <h2 className="heading-sm font-inter mb-4">What to expect</h2>
-                                    <div className="text-sm font-inter text-dark-secondary space-y-1.5">
-                                        <p>
-                                            No prior experience needed – this workshop is designed
-                                            for complete beginners as well as hobbyists.
-                                        </p>
-                                        <p>
-                                            Small group session in the city with all core materials
-                                            provided at the studio.
-                                        </p>
-                                        <p>
-                                            You&apos;ll leave with something you made and the basics
-                                            to continue at home.
-                                        </p>
-                                    </div>
-                                </motion.div>
-
-                                <motion.div
-                                    variants={prefersReducedMotion ? undefined : fadeInUp}
-                                    transition={
-                                        prefersReducedMotion ? { duration: 0 } : quickTransition
-                                    }
-                                    className="card-section"
-                                >
-                                    <span className="eyebrow-label">About</span>
-                                    <h2 className="heading-sm font-inter mb-4">
-                                        About this experience
-                                    </h2>
-                                    <div className="text-body whitespace-pre-line">
-                                        {workshop.description}
-                                    </div>
-                                </motion.div>
-
-                                <motion.div
-                                    variants={prefersReducedMotion ? undefined : fadeInUp}
-                                    transition={
-                                        prefersReducedMotion ? { duration: 0 } : quickTransition
-                                    }
-                                    className="card-section"
-                                >
-                                    <span className="eyebrow-label">Learn</span>
-                                    <h2 className="heading-sm font-inter mb-4">
-                                        What you will learn
-                                    </h2>
-                                    <ul className="space-y-3">
-                                        {workshop.whatYouLearn.map((item, i) => (
-                                            <li
-                                                key={i}
-                                                className="flex items-start gap-3 text-body"
-                                            >
-                                                <Check className="w-5 h-5 text-terracotta flex-shrink-0 mt-0.5" />{" "}
-                                                {item}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </motion.div>
-
-                                <motion.div
-                                    variants={prefersReducedMotion ? undefined : fadeInUp}
-                                    transition={
-                                        prefersReducedMotion ? { duration: 0 } : quickTransition
-                                    }
-                                    className="card-section"
-                                >
-                                    <span className="eyebrow-label">Included</span>
-                                    <h2 className="heading-sm font-inter mb-4">
-                                        {"What's included"}
-                                    </h2>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        {workshop.materialsProvided.map((item, i) => (
-                                            <div
-                                                key={i}
-                                                className="flex items-center gap-3 bg-cream-200/50 rounded-xl px-4 py-3"
-                                            >
-                                                <div className="w-8 h-8 bg-terracotta/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                    <Check className="w-4 h-4 text-terracotta" />
-                                                </div>
-                                                <span className="text-sm font-inter text-dark-secondary">
-                                                    {item}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </motion.div>
-
-                                <motion.div
-                                    variants={prefersReducedMotion ? undefined : fadeInUp}
+                                    variants={fadeInUp}
                                     transition={
                                         prefersReducedMotion ? { duration: 0 } : quickTransition
                                     }
@@ -1357,9 +1110,11 @@ export default function WorkshopClient({
                                                 </p>
                                                 <p className="text-xs font-inter text-dark-muted truncate">
                                                     {workshop.city} &bull;{" "}
-                                                    {workshop.eventAddress
+                                                    {workshop.eventAddress && !addressIsLink
                                                         ? workshop.eventAddress
-                                                        : "Exact address sent upon booking"}
+                                                        : addressIsLink
+                                                          ? "Directions on Google Maps"
+                                                          : "Exact address sent upon booking"}
                                                 </p>
                                             </div>
                                             <a
@@ -1395,112 +1150,12 @@ export default function WorkshopClient({
                                 </motion.div>
 
                                 <motion.div
-                                    variants={prefersReducedMotion ? undefined : fadeInUp}
+                                    variants={fadeInUp}
                                     transition={
                                         prefersReducedMotion ? { duration: 0 } : quickTransition
                                     }
                                 >
                                     <WorkshopFAQ />
-                                </motion.div>
-
-                                <motion.div
-                                    variants={prefersReducedMotion ? undefined : fadeInUp}
-                                    transition={
-                                        prefersReducedMotion ? { duration: 0 } : quickTransition
-                                    }
-                                    className="card-section"
-                                >
-                                    <span className="eyebrow-label">Reviews</span>
-                                    <h2 className="heading-sm font-inter mb-4">
-                                        Workshop feedback
-                                    </h2>
-                                    {publicFeedbackLoading ? (
-                                        <p className="text-sm font-inter text-dark-muted">
-                                            Loading feedback...
-                                        </p>
-                                    ) : publicFeedbackError ? (
-                                        <p className="text-sm font-inter text-red-600">
-                                            {publicFeedbackError}
-                                        </p>
-                                    ) : visiblePublicFeedback.length === 0 ? (
-                                        <p className="text-sm font-inter text-dark-muted">
-                                            No public feedback yet. Be the first to share your
-                                            experience.
-                                        </p>
-                                    ) : (
-                                        <div className="space-y-4">
-                                            {visiblePublicFeedback.map((item) => (
-                                                <div
-                                                    key={item.id}
-                                                    className="rounded-xl border border-clay/30 bg-cream-50 p-4"
-                                                >
-                                                    <div className="flex items-center justify-between gap-4">
-                                                        <div className="flex items-center gap-3 min-w-0">
-                                                            <div className="h-9 w-9 rounded-full bg-cream border border-clay/40 flex items-center justify-center text-xs font-inter font-semibold text-dark-secondary overflow-hidden">
-                                                                {item.avatarUrl ? (
-                                                                    <Image
-                                                                        src={item.avatarUrl}
-                                                                        alt={item.userDisplayName}
-                                                                        width={36}
-                                                                        height={36}
-                                                                        className="h-full w-full object-cover"
-                                                                    />
-                                                                ) : (
-                                                                    getInitials(
-                                                                        item.userDisplayName
-                                                                    )
-                                                                )}
-                                                            </div>
-                                                            <p className="text-sm font-inter font-semibold text-dark truncate">
-                                                                {item.userDisplayName}
-                                                            </p>
-                                                        </div>
-                                                        <span className="text-xs font-inter text-dark-muted whitespace-nowrap">
-                                                            {formatDate(item.createdAt)}
-                                                        </span>
-                                                    </div>
-                                                    <div className="mt-2 flex items-center gap-1">
-                                                        {Array.from({ length: 5 }).map(
-                                                            (_, index) => (
-                                                                <Star
-                                                                    key={index}
-                                                                    className={`w-3.5 h-3.5 ${
-                                                                        index < (item.rating ?? 0)
-                                                                            ? "text-terracotta fill-terracotta"
-                                                                            : "text-dark-muted/40"
-                                                                    }`}
-                                                                />
-                                                            )
-                                                        )}
-                                                        <span className="text-xs font-inter text-dark-muted ml-2">
-                                                            {item.rating ?? "—"} / 5
-                                                        </span>
-                                                    </div>
-                                                    <p className="mt-2 text-sm font-inter text-dark-secondary leading-relaxed">
-                                                        {item.comment}
-                                                    </p>
-                                                    {item.photos.length > 0 && (
-                                                        <div className="mt-3 grid grid-cols-3 gap-2">
-                                                            {item.photos.map((photo, index) => (
-                                                                <div
-                                                                    key={`${item.id}-photo-${index}`}
-                                                                    className="relative aspect-square overflow-hidden rounded-lg bg-cream-100 border border-clay/30"
-                                                                >
-                                                                    <Image
-                                                                        src={photo}
-                                                                        alt="Workshop feedback"
-                                                                        fill
-                                                                        className="object-cover"
-                                                                        sizes="96px"
-                                                                    />
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
                                 </motion.div>
                             </motion.div>
                         </div>
@@ -1513,35 +1168,11 @@ export default function WorkshopClient({
                                     formattedWorkshopTime={formattedWorkshopTime}
                                     workshopLocation={workshop.location}
                                     workshopCity={workshop.city}
-                                    workshopRating={workshop.rating}
-                                    workshopReviewCount={workshop.reviewCount}
-                                    feedbackHighlight={
-                                        topFeedback?.highlight ?? workshop.feedbackHighlight
-                                    }
-                                    feedbackAuthor={topFeedback?.author ?? workshop.feedbackAuthor}
                                     notifyState={notifyState}
                                     notifyLoadingMode={notifyLoadingMode}
                                     notifyMessage={notifyMessage}
                                     notifyError={notifyError}
                                     onPastNotify={handlePastNotify}
-                                    userFeedback={userFeedback}
-                                    isEditingFeedback={isEditingFeedback}
-                                    canLeaveFeedback={canLeaveFeedback}
-                                    feedbackDraft={feedbackDraft}
-                                    setFeedbackDraft={setFeedbackDraft}
-                                    feedbackRating={feedbackRating}
-                                    setFeedbackRating={setFeedbackRating}
-                                    feedbackPhotos={feedbackPhotos}
-                                    feedbackUploading={feedbackUploading}
-                                    feedbackLoading={feedbackLoading}
-                                    feedbackError={feedbackError}
-                                    feedbackMessage={feedbackMessage}
-                                    maxFeedbackPhotos={MAX_FEEDBACK_PHOTOS}
-                                    onStartFeedbackEdit={handleStartFeedbackEdit}
-                                    onCancelFeedbackEdit={handleCancelFeedbackEdit}
-                                    onFeedbackSubmit={handleFeedbackSubmit}
-                                    onFeedbackPhotoUpload={handleFeedbackPhotoUpload}
-                                    onRemoveFeedbackPhoto={handleRemoveFeedbackPhoto}
                                 />
                             ) : (
                                 <WorkshopBookingSidebar
@@ -1589,9 +1220,9 @@ export default function WorkshopClient({
             {isSoldOut && (
                 <div className="section-padding mt-8">
                     <motion.div
-                        variants={prefersReducedMotion ? undefined : fadeInUp}
-                        initial={prefersReducedMotion ? undefined : "hidden"}
-                        animate={prefersReducedMotion ? undefined : "visible"}
+                        variants={fadeInUp}
+                        initial={"hidden"}
+                        animate={"visible"}
                         transition={
                             prefersReducedMotion
                                 ? { duration: 0 }
@@ -1660,40 +1291,18 @@ export default function WorkshopClient({
                         formattedWorkshopTime={formattedWorkshopTime}
                         workshopLocation={workshop.location}
                         workshopCity={workshop.city}
-                        workshopRating={workshop.rating}
-                        workshopReviewCount={workshop.reviewCount}
-                        feedbackHighlight={topFeedback?.highlight ?? workshop.feedbackHighlight}
-                        feedbackAuthor={topFeedback?.author ?? workshop.feedbackAuthor}
                         notifyState={notifyState}
                         notifyLoadingMode={notifyLoadingMode}
                         notifyMessage={notifyMessage}
                         notifyError={notifyError}
                         onPastNotify={handlePastNotify}
-                        userFeedback={userFeedback}
-                        isEditingFeedback={isEditingFeedback}
-                        canLeaveFeedback={canLeaveFeedback}
-                        feedbackDraft={feedbackDraft}
-                        setFeedbackDraft={setFeedbackDraft}
-                        feedbackRating={feedbackRating}
-                        setFeedbackRating={setFeedbackRating}
-                        feedbackPhotos={feedbackPhotos}
-                        feedbackUploading={feedbackUploading}
-                        feedbackLoading={feedbackLoading}
-                        feedbackError={feedbackError}
-                        feedbackMessage={feedbackMessage}
-                        maxFeedbackPhotos={MAX_FEEDBACK_PHOTOS}
-                        onStartFeedbackEdit={handleStartFeedbackEdit}
-                        onCancelFeedbackEdit={handleCancelFeedbackEdit}
-                        onFeedbackSubmit={handleFeedbackSubmit}
-                        onFeedbackPhotoUpload={handleFeedbackPhotoUpload}
-                        onRemoveFeedbackPhoto={handleRemoveFeedbackPhoto}
                     />
                 </div>
             )}
 
             {/* ═══ RELATED WORKSHOPS SECTION ═══ */}
             {similarWorkshops && similarWorkshops.length > 0 && (
-                <section className="section-padding py-16 lg:py-24 bg-cream-50">
+                <section className="section-padding pt-16 pb-8 md:pb-16 lg:py-24 bg-cream-50">
                     <div className="max-w-[1200px] mx-auto">
                         <div className="flex items-center justify-between mb-8 sm:mb-12">
                             <div>

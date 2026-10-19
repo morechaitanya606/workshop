@@ -3,17 +3,25 @@ import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { loadPublicCommunities } from "@/lib/community-page-data";
 import { getAbsoluteUrl } from "@/lib/env";
+import { DEFAULT_OG_IMAGES } from "@/lib/seo";
 import { getIstTodayIso } from "@/lib/ist-date";
 import { loadExploreWorkshops } from "@/lib/workshop-page-data";
 import ExploreClient from "./ExploreClient";
 
+const title = "Explore Workshops in Pune | Only Workshops";
+const description =
+    "Browse upcoming creative workshops in Pune by date, price and category: pottery, baking, cooking and more. Filter, compare and book your seat online.";
+const canonical = getAbsoluteUrl("/explore");
+
 export const metadata: Metadata = {
-    title: "Explore Workshops in Pune | Only Workshops",
-    description:
-        "Browse upcoming creative workshops in Pune by date, price and category: pottery, baking, cooking and more. Filter, compare and book your seat online.",
+    title,
+    description,
     alternates: {
-        canonical: getAbsoluteUrl("/explore"),
+        canonical,
     },
+    // Own social preview (WhatsApp, Instagram links) instead of the generic site one.
+    openGraph: { title, description, url: canonical, type: "website", images: DEFAULT_OG_IMAGES },
+    twitter: { card: "summary_large_image", title, description },
 };
 
 export default async function ExplorePage({

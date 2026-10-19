@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import { Calendar, ChevronRight, Loader2, Minus, Plus, Shield, Tag, X } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { BOOKING_CUTOFF_HOURS } from "@/lib/booking-time";
@@ -78,13 +79,13 @@ export default function WorkshopBookingSidebar({
     onBooking,
     onShowCommunity,
 }: WorkshopBookingSidebarProps) {
-    const prefersReducedMotion = useReducedMotion();
+    const prefersReducedMotion = usePrefersReducedMotion();
 
     return (
         <motion.div
-            variants={prefersReducedMotion ? undefined : slideInRight}
-            initial={prefersReducedMotion ? undefined : "hidden"}
-            animate={prefersReducedMotion ? undefined : "visible"}
+            variants={slideInRight}
+            initial={"hidden"}
+            animate={"visible"}
             transition={
                 prefersReducedMotion ? { duration: 0 } : { ...standardTransition, delay: 0.3 }
             }
@@ -112,6 +113,9 @@ export default function WorkshopBookingSidebar({
                             </span>
                             <span className="text-sm font-inter text-dark-muted">/ person</span>
                         </div>
+                        <p className="mt-0.5 text-[11px] font-inter text-dark-muted">
+                            Inclusive of GST
+                        </p>
                     </div>
                 </div>
                 {isSoldOut ? (
@@ -217,6 +221,9 @@ export default function WorkshopBookingSidebar({
                         <span className="text-dark">Total</span>
                         <span className="text-dark">{formatCurrency(total)}</span>
                     </div>
+                    <p className="text-right text-[11px] font-inter text-dark-muted">
+                        Inclusive of GST
+                    </p>
                 </div>
             )}
 

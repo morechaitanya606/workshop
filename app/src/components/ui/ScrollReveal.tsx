@@ -18,7 +18,8 @@ interface ScrollRevealProps {
     transition?: Transition;
     delay?: number;
     once?: boolean;
-    amount?: number;
+    /** Share of the block that must be on screen; "some" (the default) means any part of it. */
+    amount?: number | "some" | "all";
 }
 
 export default function ScrollReveal({
@@ -29,7 +30,7 @@ export default function ScrollReveal({
     transition = standardTransition,
     delay = 0,
     once = true,
-    amount = 0.18,
+    amount = "some",
 }: ScrollRevealProps) {
     const shouldReduceMotion = usePrefersReducedMotion();
     const resolvedVariants = variants === fadeInUp ? getRevealVariants(preset) : variants;
