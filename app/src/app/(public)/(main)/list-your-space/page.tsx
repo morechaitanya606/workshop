@@ -109,7 +109,7 @@ export default function ListYourSpacePage() {
     return (
         <div className="min-h-full bg-cream selection:bg-terracotta/20 selection:text-dark">
             {/* Hero Section */}
-            <section className="pt-32 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto flex flex-col items-center text-center">
+            <section className="pt-32 pb-8 md:pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto flex flex-col items-center text-center">
                 <ScrollReveal className="flex flex-col items-center text-center" preset="fade-up">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-clay/10 text-terracotta font-inter text-sm font-semibold mb-6">
                         <MapPin className="w-4 h-4" />

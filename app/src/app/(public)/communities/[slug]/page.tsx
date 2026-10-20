@@ -103,7 +103,7 @@ export default async function CommunityDetailPage({
 
     return (
         <div className="min-h-full bg-cream text-dark">
-            <section className="section-padding pt-28 pb-16">
+            <section className="section-padding pt-28 pb-8 md:pb-16">
                 <div className="mx-auto max-w-6xl">
                     <Link
                         href="/communities"
@@ -255,7 +255,7 @@ export default async function CommunityDetailPage({
 
             {/* Similar Communities */}
             {similarCommunities.length > 0 && (
-                <section className="section-padding pb-16">
+                <section className="section-padding pb-8 md:pb-16">
                     <div className="mx-auto max-w-6xl">
                         <div className="mb-5 flex items-end justify-between">
                             <div>

@@ -44,8 +44,9 @@ export default function WorkshopMobileBookingBar({
     if (isPastWorkshop) return null;
 
     const bar = (
-        <div className="fixed inset-x-0 bottom-16 z-40 md:bottom-0 min-[900px]:hidden">
-            <div className="bg-white/95 backdrop-blur-xl border-t border-clay/30 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] px-4 py-3">
+        // Sits exactly on top of the bottom nav (bottom-16 was 4px short of its 68px).
+        <div className="fixed inset-x-0 bottom-[var(--mobile-nav-height)] z-40 min-[900px]:hidden">
+            <div className="bg-white/95 border-t border-clay/30 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] px-4 py-3">
                 <div className="flex items-center justify-between gap-4 max-w-lg mx-auto">
                     <div className="min-w-0 flex-1">
                         {isEbEligible && (
@@ -56,7 +57,9 @@ export default function WorkshopMobileBookingBar({
                         <span className="font-playfair text-lg font-bold text-dark">
                             {formatCurrency(currentPricePerGuest)}
                         </span>
-                        <span className="text-xs font-inter text-dark-muted ml-1">/ person</span>
+                        <span className="text-xs font-inter text-dark-muted ml-1">
+                            / person, incl. GST
+                        </span>
                         <p className="mt-1 text-[11px] font-inter text-dark-muted">
                             {formatDate(workshopDate)} &bull; {formattedWorkshopTime}
                         </p>

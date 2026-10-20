@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useId, useState, type ReactNode } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ChevronUp, Loader2, Lock } from "lucide-react";
+import { ChevronDown, Loader2, Lock } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { BOOKING_DETAILS_FORM_ID } from "./BookingGuestForm";
 import { HoldTimerChip } from "./BookingHoldTimer";
 
+/** Id of the order summary card that the page shows inline on phones and tablets. */
+export const MOBILE_SUMMARY_ID = "mobile-order-summary";
+
 /**
- * Bottom bar for screens without the sticky side summary (below `lg`).
- * Collapsed: total, time left and the main button. Expanded: the full order summary slides up
- * above it. It respects the home-indicator safe area.
+ * Bottom bar for screens without the sticky side summary (below `lg`): total, time left and the
+ * main button. The full order summary is a card on the page itself (it used to hide in a sheet
+ * behind this bar, which most visitors never opened); tapping the total scrolls to it.
+ * It respects the home-indicator safe area.
  */
 export default function BookingMobileBar({
     total,
@@ -24,7 +26,6 @@ export default function BookingMobileBar({
     submitting,
     awaitingConfirmation,
     onPay,
-    children,
 }: {
     total: number;
     guests: number;
@@ -39,21 +40,12 @@ export default function BookingMobileBar({
     submitting: boolean;
     awaitingConfirmation: boolean;
     onPay: () => void;
-    /** The order summary shown when expanded. */
-    children: ReactNode;
 }) {
-    const [open, setOpen] = useState(false);
-    const reduceMotion = Boolean(useReducedMotion());
-    const sheetId = useId();
-
-    useEffect(() => {
-        if (!open) return;
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") setOpen(false);
-        };
-        window.addEventListener("keydown", onKeyDown);
-        return () => window.removeEventListener("keydown", onKeyDown);
-    }, [open]);
+    const showSummary = () => {
+        document
+            .getElementById(MOBILE_SUMMARY_ID)
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
 
     const buttonClass =
         "btn-primary min-w-0 flex-1 !px-4 !py-3 disabled:cursor-not-allowed disabled:opacity-50";
@@ -84,70 +76,32 @@ export default function BookingMobileBar({
 
     return (
         <>
-            <AnimatePresence>
-                {open && (
-                    <motion.button
-                        type="button"
-                        aria-label="Close order summary"
-                        tabIndex={-1}
-                        initial={reduceMotion ? false : { opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
-                        transition={{ duration: reduceMotion ? 0 : 0.2 }}
-                        onClick={() => setOpen(false)}
-                        className="fixed inset-0 z-30 bg-dark-text/30 lg:hidden"
-                    />
-                )}
-            </AnimatePresence>
-
             <div className="fixed inset-x-0 bottom-0 z-40 border-t border-clay/60 bg-white shadow-[0_-8px_30px_-12px_rgba(0,0,0,0.18)] lg:hidden">
-                <AnimatePresence initial={false}>
-                    {open && (
-                        <motion.div
-                            id={sheetId}
-                            key="sheet"
-                            initial={reduceMotion ? false : { height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
-                            transition={{
-                                duration: reduceMotion ? 0 : 0.28,
-                                ease: [0.22, 1, 0.36, 1],
-                            }}
-                            className="overflow-hidden"
-                        >
-                            <div className="max-h-[62dvh] overflow-y-auto overscroll-contain border-b border-clay/40 px-4 pb-4 pt-5">
-                                {children}
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
                 <div className="flex items-center gap-3 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
                     <button
                         type="button"
-                        onClick={() => setOpen((value) => !value)}
-                        aria-expanded={open}
-                        aria-controls={sheetId}
+                        onClick={showSummary}
+                        aria-controls={MOBILE_SUMMARY_ID}
                         className="flex min-w-0 flex-1 items-center gap-2 rounded-xl py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                     >
                         <span className="min-w-0">
-                            <span className="block text-[11px] font-inter font-semibold uppercase tracking-wide text-dark-muted">
+                            <span className="block whitespace-nowrap text-[11px] font-inter font-semibold uppercase tracking-wide text-dark-muted">
                                 Total &middot; {guests} {guests === 1 ? "guest" : "guests"}
                             </span>
                             <span className="flex items-center gap-2">
-                                <span className="font-playfair text-xl font-medium leading-tight text-dark">
+                                <span className="whitespace-nowrap font-playfair text-xl font-medium leading-tight text-dark">
                                     {formatCurrency(total)}
+                                </span>
+                                <span className="whitespace-nowrap text-[10px] font-inter text-dark-muted">
+                                    incl. GST
                                 </span>
                                 <HoldTimerChip remainingMs={holdRemainingMs} />
                             </span>
                         </span>
-                        <ChevronUp
-                            aria-hidden="true"
-                            className={`h-5 w-5 shrink-0 text-dark-muted transition-transform ${
-                                open ? "rotate-180" : ""
-                            }`}
-                        />
-                        <span className="sr-only">{open ? "Hide" : "Show"} order summary</span>
+                        <span className="ml-auto inline-flex shrink-0 items-center gap-0.5 text-[11px] font-inter font-semibold text-terracotta">
+                            Summary
+                            <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 -rotate-180" />
+                        </span>
                     </button>
 
                     {mode === "details" ? (
@@ -155,7 +109,6 @@ export default function BookingMobileBar({
                             type="submit"
                             form={BOOKING_DETAILS_FORM_ID}
                             disabled={disabled}
-                            onClick={() => setOpen(false)}
                             className={buttonClass}
                         >
                             {buttonContent}
@@ -163,10 +116,7 @@ export default function BookingMobileBar({
                     ) : (
                         <button
                             type="button"
-                            onClick={() => {
-                                setOpen(false);
-                                onPay();
-                            }}
+                            onClick={onPay}
                             disabled={disabled}
                             className={buttonClass}
                         >

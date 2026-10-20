@@ -33,7 +33,7 @@ export default function CommunitySpotlightCard({
                 style={buildBackgroundStyle(community.coverImage)}
             >
                 <div className="flex items-start justify-between gap-3">
-                    <span className="rounded-full border border-white/25 bg-white/12 px-2.5 py-1 text-[10px] font-inter font-bold uppercase tracking-[0.18em] text-white/90 backdrop-blur-sm sm:px-3 sm:text-[11px] sm:tracking-[0.24em]">
+                    <span className="rounded-full border border-white/25 bg-white/15 px-2.5 py-1 text-[10px] font-inter font-bold uppercase tracking-[0.18em] text-white/90 backdrop-blur-sm sm:px-3 sm:text-[11px] sm:tracking-[0.24em]">
                         {community.category}
                     </span>
                     <ArrowUpRight className="h-4 w-4 text-white/90 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 sm:h-5 sm:w-5" />
@@ -44,10 +44,10 @@ export default function CommunitySpotlightCard({
                         {community.title}
                     </h3>
                     <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-inter text-white/90 sm:mt-3 sm:gap-2 sm:text-xs">
-                        <span className="rounded-full bg-white/12 px-2.5 py-1 backdrop-blur-sm sm:px-3">
+                        <span className="rounded-full bg-white/15 px-2.5 py-1 backdrop-blur-sm sm:px-3">
                             {community.meetingFormat}
                         </span>
-                        <span className="rounded-full bg-white/12 px-2.5 py-1 backdrop-blur-sm sm:px-3">
+                        <span className="rounded-full bg-white/15 px-2.5 py-1 backdrop-blur-sm sm:px-3">
                             {community.city}
                         </span>
                     </div>

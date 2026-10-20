@@ -7,6 +7,7 @@ import type { Json } from "@/lib/database.types";
 import { PLATFORM_SETTINGS_TAG } from "@/lib/cached-reads";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { pickPublicSettings, validateSettingsPatch } from "@/lib/platform-settings-schema";
+import { mirrorImageFields } from "@/lib/image-mirror";
 
 export async function GET(request: NextRequest) {
     const limit = await assertRateLimit({
@@ -76,6 +77,17 @@ export async function PATCH(request: NextRequest) {
     }
 
     try {
+        // Pasted Drive/Photos/Unsplash links are copied into our storage at full resolution.
+        await mirrorImageFields(parsed.values, ["hero_image_url"]);
+        const partners = parsed.values.cafe_partners;
+        if (Array.isArray(partners)) {
+            for (const partner of partners) {
+                if (partner && typeof partner === "object" && !Array.isArray(partner)) {
+                    await mirrorImageFields(partner, ["logo_url"]);
+                }
+            }
+        }
+
         const supabase = createSupabaseServiceClient();
 
         const updatedAt = new Date().toISOString();

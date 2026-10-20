@@ -19,10 +19,11 @@ const inter = Inter({
     variable: "--font-inter",
 });
 
+// Upright only: the italic files were preloaded on every page, but only the summer retreat page
+// sets Playfair in italic, and it loads its own copy with the italic.
 const playfair = Playfair_Display({
     subsets: ["latin"],
     display: "swap",
-    style: ["normal", "italic"],
     variable: "--font-playfair",
 });
 

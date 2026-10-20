@@ -2,8 +2,6 @@
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
-    CalendarDays,
-    Gift,
     ImageIcon,
     IndianRupee,
     Loader2,
@@ -430,7 +428,6 @@ export default function AdminSettingsPage() {
 
     const serviceFee = Number(settings.service_fee ?? DEFAULT_SERVICE_FEE);
     const activeCoupons = coupons.filter((coupon) => coupon.is_active).length;
-    const specialPageStatus = specialPageForm.enabled ? "Active" : "Disabled";
     const communityUrlCheck = validateWhatsAppCommunityUrl(communityUrlInput);
     const communityMessageCheck = validateWhatsAppCommunityMessage(communityMessageInput);
     const communityUrlError = communityUrlCheck.ok ? null : communityUrlCheck.error;
@@ -474,16 +471,11 @@ export default function AdminSettingsPage() {
                 </div>
             ) : (
                 <div className="space-y-8">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                         <Stat
                             label="Service Fee"
                             value={formatCurrency(serviceFee)}
                             icon={<IndianRupee className="h-5 w-5 text-terracotta" />}
-                        />
-                        <Stat
-                            label="Special Page"
-                            value={specialPageStatus}
-                            icon={<Gift className="h-5 w-5 text-terracotta" />}
                         />
                         <Stat
                             label="Coupon Codes"
@@ -703,151 +695,6 @@ export default function AdminSettingsPage() {
                                             />
                                         </div>
                                     )}
-                                </div>
-                            </section>
-
-                            <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-soft">
-                                <div className="flex items-start justify-between gap-4">
-                                    <div>
-                                        <h2 className="flex items-center gap-2 text-lg font-playfair font-bold text-dark">
-                                            <Gift className="h-5 w-5 text-terracotta" />
-                                            Special Page
-                                        </h2>
-                                        <p className="mt-1 text-sm font-inter text-dark-muted">
-                                            Control the homepage banner and floating surprise box.
-                                        </p>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            setSpecialPageForm((prev) => ({
-                                                ...prev,
-                                                enabled: !prev.enabled,
-                                            }))
-                                        }
-                                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                            specialPageForm.enabled
-                                                ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                                        }`}
-                                    >
-                                        {specialPageForm.enabled ? "Enabled" : "Disabled"}
-                                        {specialPageForm.enabled ? (
-                                            <ToggleRight className="h-4 w-4" />
-                                        ) : (
-                                            <ToggleLeft className="h-4 w-4" />
-                                        )}
-                                    </button>
-                                </div>
-
-                                <div className="mt-6 space-y-4">
-                                    <div>
-                                        <label className="mb-1 block text-xs font-inter font-semibold text-dark-muted">
-                                            Page Path
-                                        </label>
-                                        <input
-                                            type="text"
-                                            placeholder="/workshop/summer-family-retreat"
-                                            value={specialPageForm.path}
-                                            onChange={(event) =>
-                                                setSpecialPageForm((prev) => ({
-                                                    ...prev,
-                                                    path: event.target.value,
-                                                }))
-                                            }
-                                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="mb-1 block text-xs font-inter font-semibold text-dark-muted">
-                                            Badge Label
-                                        </label>
-                                        <input
-                                            type="text"
-                                            placeholder="Special Event"
-                                            value={specialPageForm.badge}
-                                            onChange={(event) =>
-                                                setSpecialPageForm((prev) => ({
-                                                    ...prev,
-                                                    badge: event.target.value,
-                                                }))
-                                            }
-                                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="mb-1 block text-xs font-inter font-semibold text-dark-muted">
-                                            Page Title
-                                        </label>
-                                        <input
-                                            type="text"
-                                            placeholder="Summer Family Retreat"
-                                            value={specialPageForm.title}
-                                            onChange={(event) =>
-                                                setSpecialPageForm((prev) => ({
-                                                    ...prev,
-                                                    title: event.target.value,
-                                                }))
-                                            }
-                                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="mb-1 block text-xs font-inter font-semibold text-dark-muted">
-                                            Call To Action
-                                        </label>
-                                        <input
-                                            type="text"
-                                            placeholder="Discover More"
-                                            value={specialPageForm.ctaLabel}
-                                            onChange={(event) =>
-                                                setSpecialPageForm((prev) => ({
-                                                    ...prev,
-                                                    ctaLabel: event.target.value,
-                                                }))
-                                            }
-                                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="mb-1 flex items-center gap-1.5 text-xs font-inter font-semibold text-dark-muted">
-                                            <CalendarDays className="h-3.5 w-3.5" />
-                                            Visible Until
-                                        </label>
-                                        <input
-                                            type="date"
-                                            value={specialPageForm.visibleUntil}
-                                            onChange={(event) =>
-                                                setSpecialPageForm((prev) => ({
-                                                    ...prev,
-                                                    visibleUntil: event.target.value,
-                                                }))
-                                            }
-                                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="mb-1 block text-xs font-inter font-semibold text-dark-muted">
-                                            Description
-                                        </label>
-                                        <textarea
-                                            rows={4}
-                                            placeholder="Describe the special page that should be promoted on the homepage and in the floating surprise box."
-                                            value={specialPageForm.description}
-                                            onChange={(event) =>
-                                                setSpecialPageForm((prev) => ({
-                                                    ...prev,
-                                                    description: event.target.value,
-                                                }))
-                                            }
-                                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
-                                        />
-                                    </div>
                                 </div>
                             </section>
 

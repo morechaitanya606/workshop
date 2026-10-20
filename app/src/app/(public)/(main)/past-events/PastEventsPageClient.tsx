@@ -9,6 +9,7 @@ import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import { ArrowLeft, Calendar, MapPin, ChevronLeft, ChevronRight, Camera, Info } from "lucide-react";
 import Footer from "@/components/Footer";
 import { Dialog } from "@/components/ui/dialog";
+import { LIGHTBOX_IMAGE_SIZES, PreloadImages } from "@/components/ui/LightboxPreload";
 import type { Workshop } from "@/lib/data";
 import { formatDate } from "@/lib/utils";
 import { loadMorePastEvents } from "./actions";
@@ -16,10 +17,15 @@ import {
     fadeInUp,
     quickTransition,
     standardTransition,
-    staggerContainer,
     revealViewport,
     useMotionProps,
 } from "@/lib/motion-presets";
+
+/** Visible from the first paint; only settles 24px upwards once in view. */
+const cardRevealVariants = {
+    hidden: { y: 24 },
+    visible: { y: 0 },
+};
 
 interface LightboxState {
     workshopIndex: number;
@@ -82,6 +88,19 @@ export default function PastEventsPageClient({
 
     const currentWorkshop = lightbox !== null ? workshops[lightbox.workshopIndex] : null;
     const currentPhotos = currentWorkshop?.galleryImages ?? [];
+
+    // While the lightbox is open, warm its neighbours so Next/Previous are instant. A Set, because
+    // with two photos "next" and "previous" are the same one (duplicate React keys otherwise).
+    const preloadSrcs: string[] = [];
+    if (lightbox !== null && currentPhotos.length > 1) {
+        const count = currentPhotos.length;
+        const neighbours = new Set([
+            (lightbox.photoIndex + 1) % count,
+            (lightbox.photoIndex - 1 + count) % count,
+        ]);
+        neighbours.delete(lightbox.photoIndex);
+        preloadSrcs.push(...[...neighbours].map((index) => currentPhotos[index]));
+    }
 
     const openLightbox = (workshopIdx: number, photoIdx: number) => {
         setLightbox({ workshopIndex: workshopIdx, photoIndex: photoIdx });
@@ -149,7 +168,7 @@ export default function PastEventsPageClient({
             </section>
 
             {/* Events grid */}
-            <section className="section-padding pb-16">
+            <section className="section-padding pb-8 md:pb-16">
                 <div className="max-w-7xl mx-auto">
                     {workshops.length === 0 ? (
                         <div className="text-center py-20">
@@ -166,24 +185,16 @@ export default function PastEventsPageClient({
                             </Link>
                         </div>
                     ) : (
-                        <motion.div
-                            variants={shouldReduceMotion ? undefined : staggerContainer}
-                            initial={shouldReduceMotion ? undefined : "hidden"}
-                            whileInView={shouldReduceMotion ? undefined : "visible"}
-                            viewport={shouldReduceMotion ? undefined : revealViewport}
-                            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
-                        >
+                        // Each card reveals on its own: one observer on the whole grid needed a
+                        // share of a ~4,500px block on screen at once, which a phone never shows.
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                             {workshops.map((workshop, wIdx) => (
                                 <motion.div
                                     key={workshop.id}
-                                    variants={
-                                        shouldReduceMotion
-                                            ? undefined
-                                            : {
-                                                  hidden: { opacity: 0, y: 24 },
-                                                  visible: { opacity: 1, y: 0 },
-                                              }
-                                    }
+                                    variants={cardRevealVariants}
+                                    initial={"hidden"}
+                                    whileInView={"visible"}
+                                    viewport={revealViewport}
                                     transition={
                                         shouldReduceMotion ? { duration: 0 } : quickTransition
                                     }
@@ -192,7 +203,7 @@ export default function PastEventsPageClient({
                                     {/* Cover image */}
                                     <Link
                                         href={`/workshop/${workshop.id}`}
-                                        className="block relative aspect-[16/10] overflow-hidden"
+                                        className="block relative aspect-[16/10] overflow-hidden bg-cream-100"
                                     >
                                         <Image
                                             src={workshop.coverImage}
@@ -200,12 +211,14 @@ export default function PastEventsPageClient({
                                             fill
                                             className="object-cover image-hover-zoom"
                                             sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                                            loading="lazy"
+                                            // The first cover is the largest thing above the fold.
+                                            priority={wIdx === 0}
+                                            loading={wIdx === 0 ? undefined : "lazy"}
                                             quality={75}
                                         />
                                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
                                         <div className="absolute bottom-0 left-0 right-0 p-5">
-                                            <span className="inline-block bg-terracotta/90 backdrop-blur-sm text-white text-[10px] font-inter font-bold uppercase tracking-wider px-2.5 py-1 rounded-full mb-2">
+                                            <span className="inline-block bg-terracotta/90 text-white text-[10px] font-inter font-bold uppercase tracking-wider px-2.5 py-1 rounded-full mb-2">
                                                 {workshop.category}
                                             </span>
                                             <h3 className="font-inter text-lg font-bold text-white leading-tight line-clamp-2">
@@ -224,15 +237,6 @@ export default function PastEventsPageClient({
                                             <MapPin className="w-3.5 h-3.5" />
                                             {workshop.location}
                                         </span>
-                                        {workshop.rating > 0 && (
-                                            <span className="ml-auto font-semibold text-dark">
-                                                ★ {workshop.rating}
-                                                <span className="font-normal text-dark-muted">
-                                                    {" "}
-                                                    ({workshop.reviewCount})
-                                                </span>
-                                            </span>
-                                        )}
                                     </div>
 
                                     {/* Photo gallery grid */}
@@ -253,7 +257,7 @@ export default function PastEventsPageClient({
                                                                 onClick={() =>
                                                                     openLightbox(wIdx, pIdx)
                                                                 }
-                                                                className="relative aspect-square rounded-xl overflow-hidden cursor-zoom-in group/thumb"
+                                                                className="relative aspect-square rounded-xl overflow-hidden bg-cream-100 cursor-zoom-in group/thumb"
                                                                 aria-label={`View photo ${pIdx + 1} from ${workshop.title}`}
                                                             >
                                                                 <Image
@@ -289,7 +293,7 @@ export default function PastEventsPageClient({
                                         )}
                                 </motion.div>
                             ))}
-                        </motion.div>
+                        </div>
                     )}
 
                     {workshops.length > 0 && (hasMore || loadMoreError) && (
@@ -311,6 +315,8 @@ export default function PastEventsPageClient({
                     )}
                 </div>
             </section>
+
+            {lightbox !== null && <PreloadImages srcs={preloadSrcs} sizes={LIGHTBOX_IMAGE_SIZES} />}
 
             {/* Lightbox Dialog */}
             <Dialog
@@ -334,7 +340,8 @@ export default function PastEventsPageClient({
                                 alt={`${currentWorkshop?.title} photo ${lightbox.photoIndex + 1}`}
                                 fill
                                 className="object-contain"
-                                sizes="(max-width: 640px) 92vw, (max-width: 1024px) 88vw, 1100px"
+                                sizes={LIGHTBOX_IMAGE_SIZES}
+                                priority
                             />
 
                             {currentPhotos.length > 1 && (
@@ -342,7 +349,7 @@ export default function PastEventsPageClient({
                                     <button
                                         type="button"
                                         onClick={() => navigatePhoto("prev")}
-                                        className="absolute left-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/92 text-dark shadow-lg transition-colors hover:bg-white sm:left-4"
+                                        className="absolute left-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-dark shadow-lg transition-colors hover:bg-white sm:left-4"
                                         aria-label="Previous photo"
                                     >
                                         <ChevronLeft className="h-5 w-5" />
@@ -350,7 +357,7 @@ export default function PastEventsPageClient({
                                     <button
                                         type="button"
                                         onClick={() => navigatePhoto("next")}
-                                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/92 text-dark shadow-lg transition-colors hover:bg-white sm:right-4"
+                                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-dark shadow-lg transition-colors hover:bg-white sm:right-4"
                                         aria-label="Next photo"
                                     >
                                         <ChevronRight className="h-5 w-5" />

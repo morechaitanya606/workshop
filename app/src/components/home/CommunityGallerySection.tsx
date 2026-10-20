@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { CommunityPhoto } from "@/lib/community-photos";
 import { Dialog } from "@/components/ui/dialog";
+import { LIGHTBOX_IMAGE_SIZES, PreloadImages } from "@/components/ui/LightboxPreload";
 import {
     fadeIn,
     quickTransition,
@@ -14,6 +15,18 @@ import {
     useMotionProps,
 } from "@/lib/motion-presets";
 import { SectionHeader } from "@/components/home/HomeSectionShared";
+
+/**
+ * Fixed tile shapes for the masonry columns. With `h-auto` each photo took its own height once it
+ * loaded, so the columns re-balanced and photos jumped while the visitor scrolled past.
+ */
+const TILE_ASPECTS = ["aspect-[4/5]", "aspect-[8/7]", "aspect-square"] as const;
+
+/** Visible from the first paint; only settles to full size once in view. */
+const tileRevealVariants = {
+    hidden: { scale: 0.97 },
+    visible: { scale: 1 },
+};
 
 export default function CommunityGallerySection({
     shouldReduceMotion,
@@ -32,6 +45,16 @@ export default function CommunityGallerySection({
         return null;
     }
 
+    // While the lightbox is open, warm its neighbours so Next/Previous are instant.
+    const count = visiblePhotos.length;
+    const preloadIndexes = new Set<number>();
+    if (activeGalleryIndex !== null) {
+        preloadIndexes.add((activeGalleryIndex + 1) % count);
+        preloadIndexes.add((activeGalleryIndex - 1 + count) % count);
+        preloadIndexes.delete(activeGalleryIndex);
+    }
+    const preloadSrcs = [...preloadIndexes].map((index) => visiblePhotos[index].imageUrl);
+
     return (
         <>
             <section className={sectionClassName || "section-padding mt-24 sm:mt-20"}>
@@ -44,10 +67,10 @@ export default function CommunityGallerySection({
                 />
                 <motion.div
                     {...galleryMotionProps}
-                    variants={shouldReduceMotion ? undefined : staggerContainer}
-                    initial={shouldReduceMotion ? undefined : "hidden"}
-                    whileInView={shouldReduceMotion ? undefined : "visible"}
-                    viewport={shouldReduceMotion ? undefined : revealViewport}
+                    variants={staggerContainer}
+                    initial={"hidden"}
+                    whileInView={"visible"}
+                    viewport={revealViewport}
                     className="columns-2 sm:columns-3 lg:columns-4 gap-3 sm:gap-4"
                 >
                     {visiblePhotos.map((photo, index) => (
@@ -56,25 +79,17 @@ export default function CommunityGallerySection({
                             type="button"
                             onClick={() => setActiveGalleryIndex(index)}
                             aria-label={`Open community photo ${index + 1}`}
-                            variants={
-                                shouldReduceMotion
-                                    ? undefined
-                                    : {
-                                          hidden: { opacity: 0, scale: 0.9 },
-                                          visible: { opacity: 1, scale: 1 },
-                                      }
-                            }
+                            variants={tileRevealVariants}
                             transition={shouldReduceMotion ? { duration: 0 } : quickTransition}
-                            className={`relative mb-3 sm:mb-4 rounded-xl overflow-hidden group break-inside-avoid cursor-zoom-in hover-lift ${
+                            className={`relative block w-full ${TILE_ASPECTS[index % TILE_ASPECTS.length]} mb-3 sm:mb-4 rounded-xl overflow-hidden bg-cream-100 group break-inside-avoid cursor-zoom-in hover-lift ${
                                 index >= 8 ? "hidden sm:block" : ""
                             }`}
                         >
                             <Image
                                 src={photo.imageUrl}
                                 alt={photo.altText || `Community workshop ${index + 1}`}
-                                width={400}
-                                height={index % 3 === 0 ? 500 : index % 3 === 1 ? 350 : 400}
-                                className="w-full h-auto object-cover image-hover-zoom"
+                                fill
+                                className="object-cover image-hover-zoom"
                                 sizes="(max-width: 640px) 48vw, (max-width: 1024px) 31vw, (max-width: 1440px) 23vw, 320px"
                                 loading="lazy"
                                 quality={70}
@@ -88,6 +103,10 @@ export default function CommunityGallerySection({
                     ))}
                 </motion.div>
             </section>
+
+            {activeGalleryIndex !== null && (
+                <PreloadImages srcs={preloadSrcs} sizes={LIGHTBOX_IMAGE_SIZES} />
+            )}
 
             <Dialog
                 open={activeGalleryIndex !== null}
@@ -115,7 +134,8 @@ export default function CommunityGallerySection({
                                 }
                                 fill
                                 className="object-contain"
-                                sizes="(max-width: 640px) 92vw, (max-width: 1024px) 88vw, 1100px"
+                                sizes={LIGHTBOX_IMAGE_SIZES}
+                                priority
                             />
 
                             {visiblePhotos.length > 1 && (
@@ -130,7 +150,7 @@ export default function CommunityGallerySection({
                                                     : prev - 1;
                                             })
                                         }
-                                        className="absolute left-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/92 text-dark shadow-lg transition-colors hover:bg-white sm:left-4"
+                                        className="absolute left-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-dark shadow-lg transition-colors hover:bg-white sm:left-4"
                                         aria-label="Previous photo"
                                     >
                                         <ChevronLeft className="h-5 w-5" />
@@ -145,7 +165,7 @@ export default function CommunityGallerySection({
                                                     : prev + 1;
                                             })
                                         }
-                                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/92 text-dark shadow-lg transition-colors hover:bg-white sm:right-4"
+                                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-dark shadow-lg transition-colors hover:bg-white sm:right-4"
                                         aria-label="Next photo"
                                     >
                                         <ChevronRight className="h-5 w-5" />

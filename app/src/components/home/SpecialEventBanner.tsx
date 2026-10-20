@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import { ArrowRight, CalendarDays, Gift, Sparkles } from "lucide-react";
 
 import { usePlatformSettings } from "@/lib/platform-settings-context";
@@ -13,7 +12,8 @@ import {
 } from "@/lib/special-page";
 
 export default function SpecialEventBanner() {
-    const shouldReduceMotion = usePrefersReducedMotion();
+    // Reduced motion needs no branch here: MotionConfig reducedMotion="user" makes these
+    // transform-only reveals instant.
     const { settings, loading } = usePlatformSettings();
 
     if (loading || !isSpecialPageActive(settings.special_page)) {
@@ -25,8 +25,8 @@ export default function SpecialEventBanner() {
     return (
         <section className="section-padding mt-6 sm:mt-10">
             <motion.div
-                initial={shouldReduceMotion ? undefined : { opacity: 0, y: 30 }}
-                whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+                initial={{ y: 30 }}
+                whileInView={{ y: 0 }}
                 viewport={{ once: true, margin: "-60px" }}
                 transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
                 className="relative overflow-hidden rounded-3xl border border-amber-200/60 shadow-[0_8px_40px_rgba(245,166,35,0.12)]"
@@ -48,8 +48,8 @@ export default function SpecialEventBanner() {
 
                 <div className="relative z-10 flex flex-col gap-6 p-6 sm:p-8 md:flex-row md:items-center md:gap-10 md:p-10">
                     <motion.div
-                        initial={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
-                        whileInView={shouldReduceMotion ? undefined : { opacity: 1, scale: 1 }}
+                        initial={{ scale: 0.95 }}
+                        whileInView={{ scale: 1 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.5, delay: 0.2 }}
                         className="flex shrink-0 items-center gap-4 self-start rounded-3xl border border-amber-200/80 bg-white/80 px-5 py-4 shadow-md"
@@ -69,8 +69,8 @@ export default function SpecialEventBanner() {
 
                     <div className="min-w-0 flex-1 text-center md:text-left">
                         <motion.div
-                            initial={shouldReduceMotion ? undefined : { opacity: 0, y: 10 }}
-                            whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+                            initial={{ y: 10 }}
+                            whileInView={{ y: 0 }}
                             viewport={{ once: true }}
                             transition={{ duration: 0.5, delay: 0.3 }}
                         >
@@ -83,8 +83,8 @@ export default function SpecialEventBanner() {
                         </motion.div>
 
                         <motion.h3
-                            initial={shouldReduceMotion ? undefined : { opacity: 0, y: 10 }}
-                            whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+                            initial={{ y: 10 }}
+                            whileInView={{ y: 0 }}
                             viewport={{ once: true }}
                             transition={{ duration: 0.5, delay: 0.4 }}
                             className="mb-2 font-playfair text-2xl font-bold leading-tight text-amber-950 sm:text-3xl md:text-[2rem]"
@@ -93,8 +93,8 @@ export default function SpecialEventBanner() {
                         </motion.h3>
 
                         <motion.p
-                            initial={shouldReduceMotion ? undefined : { opacity: 0, y: 10 }}
-                            whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+                            initial={{ y: 10 }}
+                            whileInView={{ y: 0 }}
                             viewport={{ once: true }}
                             transition={{ duration: 0.5, delay: 0.5 }}
                             className="mb-4 max-w-2xl text-sm font-inter text-amber-900/70 sm:text-base"
@@ -103,8 +103,8 @@ export default function SpecialEventBanner() {
                         </motion.p>
 
                         <motion.div
-                            initial={shouldReduceMotion ? undefined : { opacity: 0, y: 10 }}
-                            whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+                            initial={{ y: 10 }}
+                            whileInView={{ y: 0 }}
                             viewport={{ once: true }}
                             transition={{ duration: 0.5, delay: 0.55 }}
                             className="mb-5 flex flex-wrap items-center justify-center gap-3 md:justify-start"
@@ -120,8 +120,8 @@ export default function SpecialEventBanner() {
                         </motion.div>
 
                         <motion.div
-                            initial={shouldReduceMotion ? undefined : { opacity: 0, y: 10 }}
-                            whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+                            initial={{ y: 10 }}
+                            whileInView={{ y: 0 }}
                             viewport={{ once: true }}
                             transition={{ duration: 0.5, delay: 0.65 }}
                         >
