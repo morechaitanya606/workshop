@@ -101,7 +101,7 @@ export default function ProfileSettingsPanel({
                         disabled={profileLoading}
                     />
                     <p className="text-xs text-dark/50 mt-2">
-                        This name appears on your public workshop reviews.
+                        This name appears on your bookings and tickets.
                     </p>
                 </div>
 

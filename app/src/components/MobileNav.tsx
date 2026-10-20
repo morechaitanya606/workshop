@@ -21,7 +21,7 @@ export default function MobileNav() {
     ];
 
     return (
-        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-t border-gray-100 md:hidden safe-area-bottom">
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 border-t border-gray-100 md:hidden safe-area-bottom">
             <div
                 className="grid gap-1 px-2 py-2"
                 style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}

@@ -102,7 +102,7 @@ export default function ExploreToolbarSection({
 
             <motion.div
                 {...filterBarMotionProps}
-                className="sticky top-[72px] z-30 mt-6 flex flex-col lg:flex-row gap-3 bg-cream/95 backdrop-blur-xl py-3 -mx-4 px-4 sm:-mx-6 sm:px-6 border-b border-clay/20"
+                className="sticky top-[72px] z-30 mt-6 flex flex-col lg:flex-row gap-3 bg-cream/95 py-3 -mx-4 px-4 sm:-mx-6 sm:px-6 border-b border-clay/20"
             >
                 <div className="flex-1 flex items-center gap-3 bg-white rounded-xl px-4 py-3 shadow-soft border border-gray-100">
                     <Search className="w-5 h-5 text-dark-muted flex-shrink-0" />
@@ -126,13 +126,15 @@ export default function ExploreToolbarSection({
                     )}
                 </div>
 
+                {/* On a 375px phone the three controls did not fit and the row pushed the page wider
+                    than the screen: the sort menu now gives up width (min-w-0) instead. */}
                 <div className="flex items-center gap-3">
                     <button
                         type="button"
                         onClick={onToggleFilters}
                         aria-expanded={showFilters}
                         aria-controls="explore-filters-panel"
-                        className={`flex items-center gap-2 px-5 py-3 rounded-xl border text-sm font-inter font-medium transition-all duration-300 ${
+                        className={`flex shrink-0 items-center gap-2 px-4 sm:px-5 py-3 rounded-xl border text-sm font-inter font-medium transition-all duration-300 ${
                             showFilters
                                 ? "bg-terracotta text-white border-terracotta"
                                 : "bg-white text-dark border-gray-200 hover:border-terracotta/40 hover:text-terracotta"
@@ -149,7 +151,7 @@ export default function ExploreToolbarSection({
                         aria-label="Sort workshops by"
                         value={sort}
                         onChange={(event) => onSortChange(event.target.value as SortOption)}
-                        className="bg-white border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
+                        className="min-w-0 flex-1 lg:flex-none bg-white border border-gray-200 rounded-xl px-3 py-3 text-sm font-inter text-dark outline-none"
                     >
                         {sortOptions.map((option) => (
                             <option key={option.value} value={option.value}>
@@ -161,7 +163,7 @@ export default function ExploreToolbarSection({
                     <button
                         type="button"
                         onClick={onSearch}
-                        className="btn-primary !py-3 !px-6 text-sm"
+                        className="btn-primary shrink-0 !py-3 !px-5 sm:!px-6 text-sm"
                     >
                         Search
                     </button>

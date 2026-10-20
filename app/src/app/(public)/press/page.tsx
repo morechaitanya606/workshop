@@ -9,6 +9,8 @@ export const metadata: Metadata = {
     alternates: {
         canonical: getAbsoluteUrl("/press"),
     },
+    // A "coming soon" placeholder: keep it out of search results until it has real content.
+    robots: { index: false, follow: true },
 };
 
 export default function PressPage() {

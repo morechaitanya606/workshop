@@ -149,8 +149,9 @@ export default function Navbar() {
         <>
             <motion.header
                 // Same unit both ways: animating between "%" and px makes framer-motion convert
-                // units and apply the reveal late.
-                initial={{ y: "-100%" }}
+                // units and apply the reveal late. `initial={false}` keeps the bar in the server
+                // HTML: a slide-in from "-100%" left phones without a header until hydration.
+                initial={false}
                 animate={{ y: isHeaderHidden ? "-100%" : "0%" }}
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                 // A keyboard user tabbing into a hidden bar gets it back.
@@ -159,13 +160,14 @@ export default function Navbar() {
                     setIsHidden(false);
                 }}
                 // No transition on transform: framer-motion drives it, and a CSS transition on
-                // top would lag every frame.
+                // top would lag every frame. The bar is see-through on purpose (frosted blur, no
+                // background colour): that is the intended look.
                 className={`fixed top-0 left-0 right-0 z-[80] border-b border-black/5 transition-[background-color,box-shadow,padding] duration-300 ${
                     isScrolled
-                        ? "bg-cream/96 backdrop-blur-xl shadow-soft py-1.5"
+                        ? "backdrop-blur-xl shadow-soft py-1.5"
                         : isHomePage
-                          ? "bg-cream/88 backdrop-blur-lg shadow-[0_10px_30px_-22px_rgba(0,0,0,0.5)] py-2"
-                          : "bg-cream/92 backdrop-blur-lg shadow-soft py-2"
+                          ? "backdrop-blur-lg shadow-[0_10px_30px_-22px_rgba(0,0,0,0.5)] py-2"
+                          : "backdrop-blur-lg shadow-soft py-2"
                 }`}
             >
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

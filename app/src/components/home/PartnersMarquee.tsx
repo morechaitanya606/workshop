@@ -24,7 +24,7 @@ export default function PartnersMarquee({
                     Our Cafe/ Studio Partners
                 </h2>
                 <p className="text-body text-dark-muted max-w-2xl mx-auto">
-                    We host our experiences at the finest cafes across the city.
+                    We host our experiences at the finest cafes across Pune.
                 </p>
             </div>
 

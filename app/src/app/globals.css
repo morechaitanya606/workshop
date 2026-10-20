@@ -37,7 +37,9 @@
         --radius-lg: 1rem;
         --radius-xl: 1.5rem;
         --radius-full: 9999px;
-        --mobile-nav-height: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+        /* Height of the fixed bottom nav (MobileNav): 68px plus the iPhone home-bar inset. The
+           page reserves exactly this much below the footer, so nothing is left empty. */
+        --mobile-nav-height: calc(4.25rem + env(safe-area-inset-bottom, 0px));
         --floating-edge-offset: 1rem;
         --floating-stack-gap: 0.875rem;
         --floating-launcher-size: 3.5rem;
@@ -46,6 +48,16 @@
             var(--floating-support-bottom) + var(--floating-launcher-size) +
                 var(--floating-stack-gap)
         );
+    }
+
+    /* MobileNav is `md:hidden`, so from 768px on the page reserves nothing for it. The
+       WhatsApp/surprise launchers keep their old height until lg, though: /booking's fixed
+       checkout bar (4.75rem, `lg:hidden`) is still at the bottom there. */
+    @media screen and (min-width: 768px) {
+        :root {
+            --mobile-nav-height: 0px;
+            --floating-support-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px) + 0.875rem);
+        }
     }
 
     @media screen and (min-width: 1024px) {
@@ -66,6 +78,11 @@
         margin: 0;
         padding: 0;
         box-sizing: border-box;
+    }
+
+    /* Keeps the bottom nav's buttons clear of the iPhone home bar. */
+    .safe-area-bottom {
+        padding-bottom: env(safe-area-inset-bottom, 0px);
     }
 
     html {
@@ -437,25 +454,11 @@
         animation: toastProgress linear forwards;
     }
 
-    /* Hero gradient mesh */
-    @keyframes gradientMesh {
-        0% {
-            background-position: 0% 50%;
-        }
-        25% {
-            background-position: 50% 0%;
-        }
-        50% {
-            background-position: 100% 50%;
-        }
-        75% {
-            background-position: 50% 100%;
-        }
-        100% {
-            background-position: 0% 50%;
-        }
-    }
-
+    /*
+     * Hero gradient mesh. Static on purpose: animating background-position repaints the whole
+     * full-screen hero (over a playing video) on every frame, forever, which kept phones too busy
+     * to scroll smoothly.
+     */
     .hero-gradient-mesh {
         background:
             radial-gradient(ellipse at 20% 50%, rgba(199, 107, 79, 0.4) 0%, transparent 50%),
@@ -463,7 +466,22 @@
             radial-gradient(ellipse at 40% 80%, rgba(216, 132, 94, 0.35) 0%, transparent 50%),
             radial-gradient(ellipse at 70% 60%, rgba(199, 107, 79, 0.25) 0%, transparent 40%);
         background-size: 200% 200%;
-        animation: gradientMesh 20s ease-in-out infinite;
+        background-position: 0% 50%;
+    }
+
+    /* "Scroll down" cue: a transform-only loop, so it runs on the compositor, not in JS. */
+    @keyframes scroll-cue {
+        0%,
+        100% {
+            transform: translateY(0);
+        }
+        50% {
+            transform: translateY(8px);
+        }
+    }
+
+    .scroll-cue {
+        animation: scroll-cue 3s ease-in-out infinite;
     }
 
     /* Heart pop animation */
@@ -521,6 +539,25 @@
 
     .past-events-marquee-track:hover {
         animation-play-state: paused;
+    }
+
+    .moments-marquee-track {
+        animation: past-events-marquee 90s linear infinite;
+        will-change: transform;
+    }
+
+    .moments-marquee-track-reverse {
+        animation-direction: reverse;
+    }
+
+    .moments-marquee-track:hover {
+        animation-play-state: paused;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .moments-marquee-track {
+            animation: none;
+        }
     }
 
     .floating-nav-item {
@@ -586,8 +623,11 @@
         text-wrap: balance;
     }
 
+    /* A fixed glow: the old pulsing text-shadow repainted the large hero headline every frame. */
     .text-glow-soft {
-        @apply animate-text-glow;
+        text-shadow:
+            0 0 10px rgba(199, 107, 79, 0.45),
+            0 0 24px rgba(245, 228, 138, 0.35);
     }
 
     .mask-fade-bottom {

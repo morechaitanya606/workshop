@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
@@ -11,11 +12,12 @@ import Footer from "@/components/Footer";
 import SeatMap from "@/components/booking/SeatMap";
 import { useToast } from "@/components/ToastProvider";
 import { parseDurationToMinutes, type CalendarEventData } from "@/lib/calendar";
+import { googleMapsLinkOf, isWebUrl } from "@/lib/workshop-media";
 import BookingConfirmation from "./BookingConfirmation";
-import BookingGuestForm from "./BookingGuestForm";
+import BookingGuestForm, { BookingContinueButton } from "./BookingGuestForm";
 import BookingHoldTimer, { HoldTimerChip } from "./BookingHoldTimer";
 import BookingLoadingState from "./BookingLoadingState";
-import BookingMobileBar from "./BookingMobileBar";
+import BookingMobileBar, { MOBILE_SUMMARY_ID } from "./BookingMobileBar";
 import BookingOrderSummary from "./BookingOrderSummary";
 import BookingReview from "./BookingReview";
 import BookingStepIndicator from "./BookingStepIndicator";
@@ -169,12 +171,18 @@ function BookingContent() {
         const bookingWorkshopDate = confirmedBooking?.workshop?.date || workshop.date;
         const bookingWorkshopTime = confirmedBooking?.workshop?.time || workshop.time;
         const bookingCover = confirmedBooking?.workshop?.cover_image || workshop.coverImage;
-        const locationDetails = workshop.eventAddress
+        // A pasted Google Maps link is not an address: print the venue and city, and put the
+        // link in the calendar notes where it stays clickable for directions.
+        const hasTextAddress = Boolean(workshop.eventAddress) && !isWebUrl(workshop.eventAddress);
+        const directionsLink = googleMapsLinkOf(workshop.eventAddress);
+        const locationDetails = hasTextAddress
             ? `${workshop.eventAddress}, ${workshop.city}`
             : `${workshop.location}, ${workshop.city}`;
         const calendarData: CalendarEventData = {
             title: bookingWorkshopTitle,
-            description: workshop.description,
+            description: directionsLink
+                ? `${workshop.description}\n\nDirections: ${directionsLink}`
+                : workshop.description,
             location: locationDetails,
             startDate: bookingWorkshopDate,
             startTime: bookingWorkshopTime,
@@ -182,9 +190,7 @@ function BookingContent() {
         };
 
         const attendeeName = `${formData.firstName} ${formData.lastName}`.trim() || "Guest";
-        const bookingLocation = workshop.eventAddress
-            ? `${workshop.eventAddress}, ${workshop.city}`
-            : `${workshop.location}, ${workshop.city}`;
+        const bookingLocation = locationDetails;
 
         return (
             <>
@@ -309,9 +315,11 @@ function BookingContent() {
     return (
         <>
             {razorpayScript}
-            <main className="min-h-screen bg-cream">
+            {/* The fixed checkout bar (below lg) is reserved under the footer, not above it:
+                176px above the footer left an empty band and the bar still hid the footer. */}
+            <main className="min-h-screen bg-cream pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
                 <Navbar />
-                <div className="pt-24 pb-44 section-padding lg:pb-16">
+                <div className="pt-24 pb-8 md:pb-16 section-padding">
                     <div className="mx-auto max-w-6xl">
                         <Link
                             href={`/workshop/${workshop.id}`}
@@ -360,8 +368,65 @@ function BookingContent() {
                                 tabIndex={-1}
                                 className="min-w-0 space-y-6 outline-none"
                             >
+                                {/* Phones and tablets have no side column: the full order
+                                    summary is the first card, so the workshop, date, price
+                                    breakdown and total are always in view. The bottom bar's
+                                    total scrolls back up to it. */}
+                                <section
+                                    id={MOBILE_SUMMARY_ID}
+                                    aria-label="Order summary"
+                                    className={`card-section !p-4 sm:!p-6 scroll-mt-24 lg:hidden ${
+                                        submitting ? "pointer-events-none opacity-50" : ""
+                                    }`}
+                                >
+                                    {summary}
+                                </section>
                                 {view === "details" ? (
                                     <>
+                                        {/* Host first, then your details, then the table/seat picker. */}
+                                        <div className="card-section !p-4 sm:!p-6">
+                                            <div className="flex items-start gap-4">
+                                                <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full ring-2 ring-terracotta/20">
+                                                    <Image
+                                                        src={workshop.hostAvatar}
+                                                        alt={workshop.hostName}
+                                                        fill
+                                                        sizes="56px"
+                                                        className="object-cover"
+                                                    />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-[11px] font-inter font-bold uppercase tracking-wider text-dark-muted">
+                                                        Your host
+                                                    </p>
+                                                    <p className="font-playfair text-lg font-semibold text-dark">
+                                                        {workshop.hostName}
+                                                    </p>
+                                                    {workshop.hostExperience && (
+                                                        <p className="text-xs font-inter font-semibold text-terracotta">
+                                                            {workshop.hostExperience}
+                                                        </p>
+                                                    )}
+                                                    {workshop.hostBio && (
+                                                        <p className="mt-1 line-clamp-3 text-sm font-inter leading-relaxed text-dark-muted">
+                                                            {workshop.hostBio}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="card-section !p-4 sm:!p-6">
+                                            <BookingGuestForm
+                                                formData={formData}
+                                                formErrors={formErrors}
+                                                onFieldChange={handleFormFieldChange}
+                                                onContinue={handleContinue}
+                                                isBusy={isUpdatingSeats}
+                                                continueDisabled={detailsCtaDisabled}
+                                                continueLabel={detailsCtaLabel}
+                                                showContinueButton={false}
+                                            />
+                                        </div>
                                         <div className="card-section !p-4 sm:!p-6">
                                             <SeatMap
                                                 maxSeats={workshop.maxSeats}
@@ -378,17 +443,11 @@ function BookingContent() {
                                                 footer={seatChangeBar}
                                             />
                                         </div>
-                                        <div className="card-section !p-4 sm:!p-6">
-                                            <BookingGuestForm
-                                                formData={formData}
-                                                formErrors={formErrors}
-                                                onFieldChange={handleFormFieldChange}
-                                                onContinue={handleContinue}
-                                                isBusy={isUpdatingSeats}
-                                                continueDisabled={detailsCtaDisabled}
-                                                continueLabel={detailsCtaLabel}
-                                            />
-                                        </div>
+                                        <BookingContinueButton
+                                            isBusy={isUpdatingSeats}
+                                            disabled={detailsCtaDisabled}
+                                            label={detailsCtaLabel}
+                                        />
                                     </>
                                 ) : (
                                     <div className="card-section !p-4 sm:!p-6">
@@ -439,9 +498,7 @@ function BookingContent() {
                     submitting={submitting}
                     awaitingConfirmation={awaitingConfirmation}
                     onPay={() => void handleCheckout()}
-                >
-                    {summary}
-                </BookingMobileBar>
+                />
 
                 <Footer />
             </main>

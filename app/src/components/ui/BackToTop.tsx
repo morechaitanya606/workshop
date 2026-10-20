@@ -34,7 +34,9 @@ export default function BackToTop() {
                     transition={{ duration: 0.2 }}
                     onClick={scrollToTop}
                     aria-label="Back to top"
-                    className="hidden md:flex fixed bottom-8 right-8 z-50 w-11 h-11 rounded-full bg-terracotta text-white shadow-lg shadow-terracotta/25 items-center justify-center hover:bg-terracotta-600 hover:scale-110 active:scale-95 transition-all duration-200"
+                    // Bottom-left: the bottom-right corner belongs to the WhatsApp/support and
+                    // surprise launchers, which covered this button on tablets and desktops.
+                    className="hidden md:flex fixed bottom-8 left-8 z-50 w-11 h-11 rounded-full bg-terracotta text-white shadow-lg shadow-terracotta/25 items-center justify-center hover:bg-terracotta-600 hover:scale-110 active:scale-95 transition-all duration-200"
                 >
                     <ArrowUp className="w-5 h-5" />
                 </motion.button>

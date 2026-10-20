@@ -25,6 +25,8 @@ const DEFAULT_CRON_INTERVAL_HOURS = 24;
 const REMINDER_LEAD_HOURS = 24;
 const WORKSHOP_DURATION_HOURS = 2;
 const FEEDBACK_DELAY_HOURS = 2;
+/** Reviews and feedback are switched off for now, so attendees get no "rate your workshop" email. */
+const SEND_FEEDBACK_REQUESTS = false;
 const CONFIRMATION_RETRY_WINDOW_HOURS = 72;
 const MAX_CONFIRMATION_ATTEMPTS = 4;
 const MAX_CONFIRMATION_RETRIES_PER_RUN = 100;
@@ -195,6 +197,7 @@ export async function GET(request: Request) {
             }
 
             if (
+                SEND_FEEDBACK_REQUESTS &&
                 hoursSinceWorkshopEnd > FEEDBACK_DELAY_HOURS &&
                 hoursSinceWorkshopEnd <= feedbackWindowHours &&
                 !sentFeedbacks.has(booking.id)

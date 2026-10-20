@@ -27,7 +27,7 @@ export default function StaticPage({
 
     return (
         <>
-            <section className="min-h-screen bg-cream pt-28 pb-16 section-padding">
+            <section className="min-h-screen bg-cream pt-28 pb-8 md:pb-16 section-padding">
                 <div className="max-w-3xl mx-auto">
                     {/* CSS entrance: always visible in the server HTML, never gated on hydration. */}
                     <div className={cn("reveal-up", isCentered && "text-center")}>

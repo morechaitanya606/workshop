@@ -40,10 +40,10 @@ export default function HowItWorksSection() {
     return (
         <section className="section-padding mt-10 sm:mt-14">
             <motion.div
-                variants={prefersReducedMotion ? undefined : fadeInUp}
-                initial={prefersReducedMotion ? undefined : "hidden"}
-                whileInView={prefersReducedMotion ? undefined : "visible"}
-                viewport={prefersReducedMotion ? undefined : revealViewport}
+                variants={fadeInUp}
+                initial={"hidden"}
+                whileInView={"visible"}
+                viewport={revealViewport}
                 transition={prefersReducedMotion ? { duration: 0 } : standardTransition}
                 className="text-center mb-8"
             >
@@ -52,16 +52,16 @@ export default function HowItWorksSection() {
             </motion.div>
 
             <motion.div
-                variants={prefersReducedMotion ? undefined : staggerContainer}
-                initial={prefersReducedMotion ? undefined : "hidden"}
-                whileInView={prefersReducedMotion ? undefined : "visible"}
-                viewport={prefersReducedMotion ? undefined : revealViewport}
+                variants={staggerContainer}
+                initial={"hidden"}
+                whileInView={"visible"}
+                viewport={revealViewport}
                 className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6"
             >
                 {STEPS.map((step, i) => (
                     <motion.div
                         key={step.title}
-                        variants={prefersReducedMotion ? undefined : fadeInUp}
+                        variants={fadeInUp}
                         transition={
                             prefersReducedMotion
                                 ? { duration: 0 }

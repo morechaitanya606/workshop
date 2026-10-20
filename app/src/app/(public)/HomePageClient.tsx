@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import { Info } from "lucide-react";
@@ -16,7 +17,6 @@ import PartnersMarquee from "@/components/home/PartnersMarquee";
 import CommunityGallerySection from "@/components/home/CommunityGallerySection";
 import HostCtaSection from "@/components/home/HostCtaSection";
 import SpecialEventBanner from "@/components/home/SpecialEventBanner";
-import ScrollReveal from "@/components/ui/ScrollReveal";
 import { categories, PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
 import type { CommunityPhoto } from "@/lib/community-photos";
@@ -27,6 +27,11 @@ import { getRecentlyViewed } from "@/lib/recently-viewed";
 
 const OTHER_CATEGORY_VALUE = "__other__";
 const PAST_EVENT_MARQUEE_LIMIT = 12;
+/**
+ * The horizontal rails size their cards at 240-280px, and on phones the cover is the left 2/5 of
+ * the card. The default (a share of the viewport) would ask the optimizer for a much wider image.
+ */
+const RAIL_CARD_IMAGE_SIZES = "(max-width: 640px) 112px, 280px";
 
 export default function HomePageClient({
     initialWorkshops,
@@ -195,9 +200,9 @@ export default function HomePageClient({
 
             <HeroSection source={source} heroImageUrl={settings.hero_image_url || undefined} />
             <SpecialEventBanner />
-            <ScrollReveal>
-                <HowItWorksSection />
-            </ScrollReveal>
+            {/* No extra ScrollReveal wrappers around the sections: each section already animates
+                its own content, and the nested wrappers stacked their offsets and observers. */}
+            <HowItWorksSection />
 
             <section className="section-padding mt-24 sm:mt-16">
                 <div className="bg-white rounded-3xl shadow-card border border-clay/30 p-6 md:p-8">
@@ -216,7 +221,16 @@ export default function HomePageClient({
                         emptyDescription="We could not find more upcoming events for this category. Try another category or browse all workshops."
                         selectedCategoryLabel={selectedCategoryLabel}
                         onTryAnotherCategory={() => setSelectedCategory("trending")}
+                        cardImageSizes={RAIL_CARD_IMAGE_SIZES}
                     />
+                    <p className="mt-5 text-center">
+                        <Link
+                            href="/workshops/pune"
+                            className="interactive-link text-sm font-inter font-semibold text-terracotta"
+                        >
+                            See all workshops in Pune
+                        </Link>
+                    </p>
                 </div>
             </section>
 
@@ -237,6 +251,7 @@ export default function HomePageClient({
                     emptyTitle=""
                     emptyDescription=""
                     showCardBadgeLabels={false}
+                    cardImageSizes={RAIL_CARD_IMAGE_SIZES}
                 />
             )}
 
@@ -244,6 +259,7 @@ export default function HomePageClient({
                 <PastEventHighlight
                     pastWorkshop={pastWorkshop}
                     pastEventImages={pastEventImages}
+                    communityPhotos={communityPhotos}
                     shouldReduceMotion={shouldReduceMotion}
                     notifyState={notifyState[pastWorkshop.id] || { similar: false, creator: false }}
                     pastNotifyLoading={pastNotifyLoading}
@@ -255,27 +271,21 @@ export default function HomePageClient({
                 />
             )}
 
-            <ScrollReveal>
-                <SocialProofSection shouldReduceMotion={shouldReduceMotion} />
-            </ScrollReveal>
-            <ScrollReveal>
-                <PartnersMarquee
-                    shouldReduceMotion={shouldReduceMotion}
-                    partners={settings.cafe_partners}
-                />
-            </ScrollReveal>
+            <SocialProofSection shouldReduceMotion={shouldReduceMotion} />
+            <PartnersMarquee
+                shouldReduceMotion={shouldReduceMotion}
+                partners={settings.cafe_partners}
+            />
             <section className="section-padding mt-24 sm:mt-20">
-                <ScrollReveal className="bg-white rounded-3xl shadow-card border border-clay/30 p-6 md:p-8">
+                <div className="bg-white rounded-3xl shadow-card border border-clay/30 p-6 md:p-8">
                     <CommunityGallerySection
                         shouldReduceMotion={shouldReduceMotion}
                         sectionClassName="mt-0"
                         photos={communityPhotos}
                     />
-                </ScrollReveal>
+                </div>
             </section>
-            <ScrollReveal>
-                <HostCtaSection shouldReduceMotion={shouldReduceMotion} />
-            </ScrollReveal>
+            <HostCtaSection shouldReduceMotion={shouldReduceMotion} />
 
             <Footer />
         </div>

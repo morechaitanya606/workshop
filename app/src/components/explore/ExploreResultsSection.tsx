@@ -109,7 +109,10 @@ export default function ExploreResultsSection({
             )}
 
             {!isPending && workshops.length > 0 && (
-                <AnimatePresence mode="wait">
+                // initial={false}: results are never hidden waiting for an entrance animation.
+                // This presence unmounts while a filter/sort/page change is pending, so the new
+                // results appear without the stagger too.
+                <AnimatePresence mode="wait" initial={false}>
                     <motion.div
                         key={gridKey}
                         {...gridMotionProps}

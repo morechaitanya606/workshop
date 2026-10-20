@@ -40,7 +40,6 @@ const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
     { value: "date_desc", label: "Date: Latest" },
     { value: "price_asc", label: "Price: Low to High" },
     { value: "price_desc", label: "Price: High to Low" },
-    { value: "rating_desc", label: "Top Rated" },
 ];
 
 const OTHER_CATEGORY_VALUE = "__other__";
@@ -515,7 +514,7 @@ export default function ExploreClient({
 
     return (
         <div className="min-h-full">
-            <div className="pt-24 sm:pt-28">
+            <div className="pt-24 pb-8 sm:pt-28 md:pb-0">
                 <ExploreToolbarSection
                     headingMotionProps={headingMotionProps}
                     filterBarMotionProps={filterBarMotionProps}

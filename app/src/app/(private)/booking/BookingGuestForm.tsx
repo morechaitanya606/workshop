@@ -81,6 +81,7 @@ export default function BookingGuestForm({
     isBusy,
     continueDisabled = false,
     continueLabel = "Continue to review",
+    showContinueButton = true,
 }: {
     formData: BookingFormData;
     formErrors: FormErrors;
@@ -91,6 +92,8 @@ export default function BookingGuestForm({
     isBusy: boolean;
     continueDisabled?: boolean;
     continueLabel?: string;
+    /** False when the page renders <BookingContinueButton> further down instead. */
+    showContinueButton?: boolean;
 }) {
     const baseId = useId();
     const formRef = useRef<HTMLFormElement>(null);
@@ -278,23 +281,48 @@ export default function BookingGuestForm({
                 </div>
             </Field>
 
-            <button
-                type="submit"
-                disabled={isBusy || continueDisabled}
-                className="btn-primary hidden w-full !py-3.5 disabled:cursor-not-allowed disabled:opacity-50 lg:inline-flex"
-            >
-                {isBusy ? (
-                    <>
-                        <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-                        {continueLabel}
-                    </>
-                ) : (
-                    <>
-                        {continueLabel}
-                        <ArrowRight className="h-5 w-5" aria-hidden="true" />
-                    </>
-                )}
-            </button>
+            {showContinueButton && (
+                <BookingContinueButton
+                    isBusy={isBusy}
+                    disabled={continueDisabled}
+                    label={continueLabel}
+                />
+            )}
         </form>
+    );
+}
+
+/**
+ * The desktop "Continue" button. It submits the details form through the `form` attribute, so it
+ * can sit below the seat picker while the form itself is above it. Phones use the bottom bar.
+ */
+export function BookingContinueButton({
+    isBusy,
+    disabled = false,
+    label = "Continue to review",
+}: {
+    isBusy: boolean;
+    disabled?: boolean;
+    label?: string;
+}) {
+    return (
+        <button
+            type="submit"
+            form={BOOKING_DETAILS_FORM_ID}
+            disabled={isBusy || disabled}
+            className="btn-primary hidden w-full !py-3.5 disabled:cursor-not-allowed disabled:opacity-50 lg:inline-flex"
+        >
+            {isBusy ? (
+                <>
+                    <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                    {label}
+                </>
+            ) : (
+                <>
+                    {label}
+                    <ArrowRight className="h-5 w-5" aria-hidden="true" />
+                </>
+            )}
+        </button>
     );
 }
