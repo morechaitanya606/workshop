@@ -26,8 +26,8 @@ export default function AboutPage() {
             <section>
                 <h2 className="heading-sm mb-2">How We Vet Hosts</h2>
                 <p>
-                    Hosts are reviewed for teaching clarity, venue readiness, and attendee feedback
-                    before they are promoted broadly on the platform.
+                    Hosts are checked for teaching clarity and venue readiness before they are
+                    promoted broadly on the platform.
                 </p>
                 <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-inter font-semibold text-emerald-800">
                     <ShieldCheck className="h-3.5 w-3.5" aria-hidden />

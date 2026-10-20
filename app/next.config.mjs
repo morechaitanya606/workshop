@@ -61,8 +61,15 @@ function getDevDistDir() {
 const baseConfig = {
     allowedDevOrigins: ["localhost:3000", "127.0.0.1:3000"],
     images: {
+        // AVIF first: about 30% smaller than WebP for these photos. Keep formats and the default
+        // deviceSizes stable: changing either gives every image new URLs, so all cached variants
+        // go cold at once after the deploy.
         formats: ["image/avif", "image/webp"],
         qualities: [60, 70, 72, 75, 80],
+        // Photo URLs are immutable (random upload paths / mirrored Drive ids). The default of 60s
+        // let Vercel re-fetch and re-encode from the origin again and again; a month keeps every
+        // variant warm so only the very first visitor to a width ever waits.
+        minimumCacheTTL: 60 * 60 * 24 * 30,
         remotePatterns: [
             {
                 protocol: "https",
@@ -100,6 +107,17 @@ const baseConfig = {
     async headers() {
         return [
             {
+                // Hero clips (several MB each) were served with max-age=0, so every visit
+                // re-validated them. A day of caching is safe even if a file is re-encoded in place.
+                source: "/videos/:file*",
+                headers: [
+                    {
+                        key: "Cache-Control",
+                        value: "public, max-age=86400, stale-while-revalidate=604800",
+                    },
+                ],
+            },
+            {
                 source: "/chatbot/embed",
                 headers: [...baseSecurityHeaders, ...strictTransportSecurityHeader],
             },
@@ -135,7 +153,9 @@ export default async function configByPhase(phase) {
     };
 
     const isSentryConfigured = Boolean(
-        process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_AUTH_TOKEN
+        process.env.SENTRY_DSN ||
+        process.env.NEXT_PUBLIC_SENTRY_DSN ||
+        process.env.SENTRY_AUTH_TOKEN
     );
 
     if (process.env.NODE_ENV !== "production" || !isSentryConfigured) {

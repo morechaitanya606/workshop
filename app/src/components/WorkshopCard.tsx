@@ -3,8 +3,9 @@
 import React, { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
-import { Calendar, MapPin, Star, Heart, Clock, Share2, Users } from "lucide-react";
+import { motion } from "framer-motion";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
+import { Calendar, MapPin, Heart, Clock, Share2, Users } from "lucide-react";
 import { formatCurrency, formatDate, formatTime, truncateText } from "@/lib/utils";
 import { getWorkshopDateTime } from "@/lib/booking-time";
 import { addFavorite, getFavorites, removeFavorite } from "@/lib/api-client";
@@ -20,7 +21,11 @@ interface WorkshopCardProps {
     animateOnScroll?: boolean;
     /** Hide the suitability keyword chips (e.g. in the "Recently Viewed" rail). */
     showBadgeLabels?: boolean;
+    /** `sizes` for the cover image; set it where the card's width is not a plain column share. */
+    imageSizes?: string;
 }
+
+const DEFAULT_IMAGE_SIZES = "(max-width: 640px) 40vw, (max-width: 1024px) 33vw, 25vw";
 
 const favoritesCache = new Map<string, string[]>();
 const favoritesRequests = new Map<string, Promise<string[]>>();
@@ -58,16 +63,18 @@ export default function WorkshopCard({
     variant = "default",
     animateOnScroll = true,
     showBadgeLabels = true,
+    imageSizes = DEFAULT_IMAGE_SIZES,
 }: WorkshopCardProps) {
     const { user, session } = useAuth();
-    const prefersReducedMotion = useReducedMotion();
-    const shouldAnimateOnScroll = animateOnScroll && !prefersReducedMotion;
+    const prefersReducedMotion = usePrefersReducedMotion();
+    // Not tied to reduced motion: the preference is only known after hydration, and dropping the
+    // reveal then froze the card in its server-rendered state. MotionConfig makes it instant.
+    const shouldAnimateOnScroll = animateOnScroll;
     const accessToken = session?.access_token ?? null;
     const [isSaved, setIsSaved] = useState(false);
     const [favoriteLoading, setFavoriteLoading] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
     const [imageIndex, setImageIndex] = useState(0);
-    const [imageLoaded, setImageLoaded] = useState(false);
     const [heartPopping, setHeartPopping] = useState(false);
     const [shareMessage, setShareMessage] = useState<string | null>(null);
     const shareMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -172,8 +179,9 @@ export default function WorkshopCard({
             return;
         }
 
-        let index = 1 % imagePool.length;
-        setImageIndex(index);
+        // The first swap waits one full interval. Swapping at once meant every card that slid
+        // under a resting mouse pointer during a wheel scroll started fetching another photo.
+        let index = 0;
 
         const interval = setInterval(() => {
             index = (index + 1) % imagePool.length;
@@ -269,8 +277,12 @@ export default function WorkshopCard({
             initial={shouldAnimateOnScroll ? "hidden" : undefined}
             whileInView={shouldAnimateOnScroll ? "visible" : undefined}
             viewport={shouldAnimateOnScroll ? revealViewport : undefined}
+            // Stagger within a row only: `index * 0.08` made the 13th card in a one-column phone
+            // list wait about a second after scrolling into view.
             transition={
-                shouldAnimateOnScroll ? { ...standardTransition, delay: index * 0.08 } : undefined
+                shouldAnimateOnScroll
+                    ? { ...standardTransition, delay: (index % 4) * 0.08 }
+                    : undefined
             }
         >
             {/* The card is a plain container; the Link and the share/save buttons are siblings
@@ -278,8 +290,14 @@ export default function WorkshopCard({
                 the click target ambiguous, which is why the old code needed preventDefault. */}
             <div
                 className={`group relative card-workshop light-sweep hover-lift active:scale-[0.97] ${isPastWorkshop ? " card-workshop-past" : ""}`}
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
+                // A real mouse only: on phones a tap fires a compat mouseenter with no mouseleave,
+                // which left the card cycling (and fetching) photos while the visitor scrolled.
+                onPointerEnter={(event) => {
+                    if (event.pointerType === "mouse") setIsHovered(true);
+                }}
+                onPointerLeave={(event) => {
+                    if (event.pointerType === "mouse") setIsHovered(false);
+                }}
             >
                 <Link
                     href={`/workshop/${workshop.id}`}
@@ -288,19 +306,19 @@ export default function WorkshopCard({
                     onBlur={() => setIsHovered(false)}
                 >
                     {/* Image */}
-                    <div
-                        className={`relative overflow-hidden w-2/5 sm:w-full shrink-0 aspect-[5/4] bg-cream-100 ${!imageLoaded ? "animate-pulse" : ""}`}
-                    >
+                    <div className="relative overflow-hidden w-2/5 sm:w-full shrink-0 aspect-[5/4] bg-cream-100">
+                        {/* No blur/pulse "loading" state: it was server-rendered and only cleared
+                            after hydration, so photos that had already arrived stayed blurred. No
+                            `key` either, so a hover swap keeps the current photo until the next
+                            one has loaded instead of flashing an empty box. */}
                         <Image
-                            key={imagePool[isHovered ? imageIndex : 0]} // Force remount on source change to reset loading state if needed, but actually without key it might blink. Let's omit key to allow Next.js to swap it smoothly.
                             src={imagePool[isHovered ? imageIndex : 0]}
                             alt={`${workshop.category} workshop: ${workshop.title}`}
                             fill
-                            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                            sizes={imageSizes}
                             className={`object-cover transition-transform duration-700 ease-out ${
                                 isHovered ? "scale-105" : "scale-100"
-                            } ${!imageLoaded ? "blur-sm" : "blur-0"}`}
-                            onLoad={() => setImageLoaded(true)}
+                            }`}
                         />
                         {/* Category Badge - Removed per user request */}
                         {/* Bestseller / New Badge */}
@@ -380,29 +398,6 @@ export default function WorkshopCard({
 
                         {/* Bottom Row */}
                         <div className="flex items-center justify-between pt-2 border-t border-gray-100 mt-auto sm:mt-0">
-                            <div className="flex items-center gap-1.5 hidden sm:flex">
-                                {workshop.reviewCount > 0 ? (
-                                    <>
-                                        <Star className="w-3.5 h-3.5 text-terracotta fill-terracotta" />
-                                        <span className="text-sm font-inter font-semibold text-dark">
-                                            {workshop.rating}
-                                        </span>
-                                        <span className="text-xs font-inter text-dark-muted">
-                                            ({workshop.reviewCount})
-                                        </span>
-                                    </>
-                                ) : isPastWorkshop ? (
-                                    <span className="text-xs font-inter text-dark-muted flex items-center gap-1">
-                                        <Star className="w-3.5 h-3.5" />
-                                        No reviews
-                                    </span>
-                                ) : (
-                                    <span className="text-xs font-inter font-semibold text-emerald-600 flex items-center gap-1">
-                                        <Star className="w-3.5 h-3.5" />
-                                        New
-                                    </span>
-                                )}
-                            </div>
                             <span className="text-sm sm:text-lg font-inter font-bold text-terracotta ml-auto">
                                 {formatCurrency(workshop.price)}
                             </span>
@@ -469,7 +464,7 @@ export default function WorkshopCard({
                             type="button"
                             onClick={(event) => void handleShare(event)}
                             aria-label="Share workshop"
-                            className="p-2 bg-white/90 backdrop-blur-sm rounded-full shadow-soft transition-all duration-300 hover:bg-white hover:scale-110 hover:text-terracotta active:scale-95"
+                            className="p-2 bg-white/90 rounded-full shadow-soft transition-all duration-300 hover:bg-white hover:scale-110 hover:text-terracotta active:scale-95"
                         >
                             <Share2 className="w-4 h-4 text-dark-muted hover:text-terracotta transition-colors" />
                         </button>
@@ -480,7 +475,7 @@ export default function WorkshopCard({
                             disabled={favoriteLoading}
                             aria-label={isSaved ? "Remove from wishlist" : "Save to wishlist"}
                             aria-pressed={isSaved}
-                            className={`p-2 bg-white/90 backdrop-blur-sm rounded-full shadow-soft transition-all duration-300 hover:bg-white hover:scale-110 active:scale-95 ${
+                            className={`p-2 bg-white/90 rounded-full shadow-soft transition-all duration-300 hover:bg-white hover:scale-110 active:scale-95 ${
                                 favoriteLoading ? "cursor-not-allowed opacity-50" : ""
                             }`}
                         >

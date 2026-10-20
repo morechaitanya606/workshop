@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { heroVideoUrl } from "@/lib/media";
-import { fadeIn, quickTransition, slowBounce, useMotionProps } from "@/lib/motion-presets";
+import { fadeIn, quickTransition, useMotionProps } from "@/lib/motion-presets";
 import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 
 const HERO_MOBILE_QUERY = "(max-width: 640px)";
@@ -44,6 +44,22 @@ const HERO_MOBILE_CLIPS = [
  */
 const HERO_PLAYBACK_DEADLINE_MS = 8000;
 
+/** Scroll-linked parallax only where it is cheap: a mouse/trackpad on a wide screen. */
+const HERO_PARALLAX_QUERY = "(pointer: fine) and (min-width: 768px)";
+
+type NetworkInformationLike = { saveData?: boolean; effectiveType?: string };
+
+/** Data saver on, or a 2G/3G connection: the poster image is the better hero there. */
+function prefersNoHeroVideo() {
+    const connection = (navigator as Navigator & { connection?: NetworkInformationLike })
+        .connection;
+    if (!connection) return false;
+    return (
+        connection.saveData === true ||
+        ["slow-2g", "2g", "3g"].includes(connection.effectiveType ?? "")
+    );
+}
+
 export default function HeroSection({
     source,
     heroImageUrl,
@@ -58,9 +74,11 @@ export default function HeroSection({
         target: heroRef,
         offset: ["start start", "end start"],
     });
+    // No scale: re-scaling the video layer on every scroll frame was the costliest part. On
+    // phones the parallax styles are not bound (see HERO_PARALLAX_QUERY), so a touch scroll only
+    // updates these values; nothing is restyled or repainted.
     const heroY = useTransform(scrollYProgress, [0, 1], [0, shouldReduceMotion ? 0 : 150]);
     const heroOpacity = useTransform(scrollYProgress, [0, 0.5], [1, shouldReduceMotion ? 1 : 0]);
-    const heroScale = useTransform(scrollYProgress, [0, 0.5], [1, shouldReduceMotion ? 1 : 1.1]);
     const heroTextOverlayOpacity = useTransform(
         scrollYProgress,
         [0, 0.45],
@@ -83,29 +101,72 @@ export default function HeroSection({
     const [clipIndex, setClipIndex] = useState(0);
     const [readySrc, setReadySrc] = useState<string | null>(null);
     const [failedSrcs, setFailedSrcs] = useState<ReadonlySet<string>>(() => new Set());
+    const [isHeroInView, setIsHeroInView] = useState(true);
+    const [isParallaxEnabled, setIsParallaxEnabled] = useState(false);
 
     useEffect(() => {
         // Read the preference directly here: `shouldReduceMotion` starts false for hydration, and
         // keying this effect on it would briefly mount (then abort) a video for those visitors.
-        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || prefersNoHeroVideo()) {
             setIsMobileRendition(null);
             return;
         }
 
         const mediaQuery = window.matchMedia(HERO_MOBILE_QUERY);
         const applyRendition = () => setIsMobileRendition(mediaQuery.matches);
+        // Start the video only once the page itself has loaded, so megabytes of clip do not
+        // compete with the photos and scripts the visitor is waiting for.
+        const start = () => {
+            applyRendition();
+            mediaQuery.addEventListener("change", applyRendition);
+        };
 
-        applyRendition();
-        mediaQuery.addEventListener("change", applyRendition);
-        return () => mediaQuery.removeEventListener("change", applyRendition);
+        if (document.readyState === "complete") {
+            start();
+        } else {
+            window.addEventListener("load", start, { once: true });
+        }
+
+        return () => {
+            window.removeEventListener("load", start);
+            mediaQuery.removeEventListener("change", applyRendition);
+        };
+    }, []);
+
+    useEffect(() => {
+        const mediaQuery = window.matchMedia(HERO_PARALLAX_QUERY);
+        const apply = () => setIsParallaxEnabled(mediaQuery.matches);
+
+        apply();
+        mediaQuery.addEventListener("change", apply);
+        return () => mediaQuery.removeEventListener("change", apply);
+    }, []);
+
+    // Unmount the video once the hero is scrolled away: that stops the download and the decoding
+    // instead of letting a clip nobody sees take bandwidth from the photos being scrolled to.
+    useEffect(() => {
+        const node = heroRef.current;
+        if (!node || typeof IntersectionObserver === "undefined") return;
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                setIsHeroInView(entry.isIntersecting);
+                // A remounted clip must fade in again once it actually plays.
+                if (!entry.isIntersecting) setReadySrc(null);
+            },
+            { threshold: 0.05 }
+        );
+        observer.observe(node);
+        return () => observer.disconnect();
     }, []);
 
     const videoSrc =
-        isMobileRendition === null
+        isMobileRendition === null || !isHeroInView
             ? null
             : isMobileRendition
               ? HERO_MOBILE_CLIPS[clipIndex]
               : HERO_VIDEO_DESKTOP;
+    const parallaxActive = isParallaxEnabled && !shouldReduceMotion;
 
     const advanceClip = useCallback(
         () => setClipIndex((index) => (index + 1) % HERO_MOBILE_CLIPS.length),
@@ -151,7 +212,9 @@ export default function HeroSection({
             }`}
         >
             <motion.div
-                style={shouldReduceMotion ? undefined : { y: heroY, scale: heroScale }}
+                // Keys stay present when parallax is off (a static value): removing a key from a
+                // motion style leaves its last inline value behind instead of resetting it.
+                style={{ y: parallaxActive ? heroY : 0 }}
                 className="absolute inset-0"
             >
                 <Image
@@ -163,10 +226,11 @@ export default function HeroSection({
                     sizes="100vw"
                 />
                 {shouldRenderVideo && videoSrc && (
+                    // No `poster`: the optimised hero image underneath already shows that frame, and
+                    // the raw poster file was a second, unoptimised download of it.
                     <video
                         key={videoSrc}
                         src={videoSrc}
-                        poster={heroImageSrc}
                         autoPlay
                         muted
                         loop={!isMobileRendition}
@@ -185,43 +249,47 @@ export default function HeroSection({
                     />
                 )}
                 <div className="absolute inset-0 hero-gradient-mesh" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_#fbe4db_0%,_#fefbea_45%,_#f5e48a_100%)] opacity-75 mix-blend-soft-light" />
-                <div className="absolute inset-0 grain-overlay" />
+                {/* A plain warm tint. Blend modes (soft-light, multiply grain) over a playing video
+                    had to be recomposited on every frame. */}
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_#fbe4db_0%,_#fefbea_45%,_#f5e48a_100%)] opacity-15" />
                 <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/80" />
             </motion.div>
             <motion.div
-                style={shouldReduceMotion ? undefined : { opacity: heroTextOverlayOpacity }}
+                style={{ opacity: parallaxActive ? heroTextOverlayOpacity : 0 }}
                 className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-cream/20 to-cream/80"
             />
 
             <motion.div
-                style={shouldReduceMotion ? undefined : { opacity: heroOpacity }}
+                style={{ opacity: parallaxActive ? heroOpacity : 1 }}
                 className="relative z-10 h-full flex flex-col items-center justify-center text-center px-4"
             >
                 <div
                     style={{ "--reveal-delay": "0.2s" } as React.CSSProperties}
-                    className="reveal-scale inline-flex items-center gap-2 bg-white/15 backdrop-blur-md border border-white/20 rounded-full px-5 py-2 mb-8 hover-lift"
+                    className="reveal-scale inline-flex items-center gap-2 bg-white/20 border border-white/20 rounded-full px-5 py-2 mb-8 hover-lift"
                 >
                     <Sparkles className="w-4 h-4 text-terracotta-300" />
                     <span className="text-sm font-inter font-medium text-white/90">
-                        Creative experiences in the city
+                        Creative workshops in Pune
                     </span>
                 </div>
 
                 <div className="mb-6">
                     <h1 className="heading-xl text-white max-w-4xl text-balance text-glow-soft">
+                        {/* A real space after each word (not a margin): otherwise the heading's text,
+                            which search engines and screen readers read, is "ABetterWeekend". */}
                         {headlineWords.map((word, i) => (
-                            <span
-                                key={word}
-                                style={
-                                    {
-                                        "--reveal-delay": `${0.3 + i * 0.12}s`,
-                                    } as React.CSSProperties
-                                }
-                                className="reveal-up inline-block mr-[0.3em]"
-                            >
-                                {word}
-                            </span>
+                            <Fragment key={word}>
+                                <span
+                                    style={
+                                        {
+                                            "--reveal-delay": `${0.3 + i * 0.12}s`,
+                                        } as React.CSSProperties
+                                    }
+                                    className="reveal-up inline-block"
+                                >
+                                    {word}
+                                </span>{" "}
+                            </Fragment>
                         ))}
                         <br />
                         <span
@@ -262,13 +330,9 @@ export default function HeroSection({
                     className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10"
                     aria-hidden="true"
                 >
-                    <motion.div
-                        animate={{ y: [0, 8, 0] }}
-                        transition={slowBounce}
-                        className="w-6 h-10 rounded-full border-2 border-white/40 flex items-start justify-center p-2"
-                    >
-                        <motion.div className="w-1.5 h-1.5 bg-white rounded-full" />
-                    </motion.div>
+                    <div className="scroll-cue w-6 h-10 rounded-full border-2 border-white/40 flex items-start justify-center p-2">
+                        <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                    </div>
                 </motion.div>
             )}
         </section>

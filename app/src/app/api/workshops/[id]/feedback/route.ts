@@ -8,6 +8,10 @@ import { workshopFeedbackSchema } from "@/lib/validators";
 import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { isMissingFeedbackTableError } from "@/lib/feedback-fallback";
 import { getWorkshopDateTime } from "@/lib/booking-time";
+import { mirrorImageFields } from "@/lib/image-mirror";
+
+// Pasted image links are copied into storage on save (see lib/image-mirror).
+export const maxDuration = 60;
 
 type FeedbackRow = Pick<
     Tables<"workshop_feedback">,
@@ -190,6 +194,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             );
         }
 
+        // Pasted Drive/Photos/Unsplash links are copied into our storage at full resolution.
+        await mirrorImageFields(parsed.data, ["photos"]);
         const nextContent = {
             rating: parsed.data.rating,
             comment: parsed.data.comment,

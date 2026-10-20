@@ -116,16 +116,10 @@
 }
 
 /* ── SCROLL WRAP ── */
+/* No bottom padding: the app's <main> already reserves the mobile bottom nav's height. */
 .summer-retreat .sr-wrap {
     position: relative;
     z-index: 1;
-    padding-bottom: 80px;
-}
-
-@media (min-width: 1025px) {
-    .summer-retreat .sr-wrap {
-        padding-bottom: 0;
-    }
 }
 
 /* ═══ HERO ═══ */

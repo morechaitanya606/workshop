@@ -146,7 +146,8 @@ export default function BookingReview({
                 )}
             </button>
             <p className="hidden text-center text-xs font-inter text-dark-muted lg:block">
-                Payments are processed by Razorpay. We never see your card details.
+                All prices are inclusive of GST. Payments are processed by Razorpay. We never see
+                your card details.
             </p>
         </div>
     );

@@ -84,7 +84,7 @@ export default function BecomeAHostPage() {
 
     return (
         <div className="min-h-full bg-cream text-dark">
-            <section className="pt-28 pb-16 section-padding">
+            <section className="pt-28 pb-8 md:pb-16 section-padding">
                 <div className="max-w-2xl mx-auto">
                     <ScrollReveal preset="slide-right">
                         <Link

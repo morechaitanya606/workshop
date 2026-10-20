@@ -34,7 +34,7 @@ function parseUrl(value: string) {
     }
 }
 
-function extractGoogleDriveFileId(value: string) {
+export function extractGoogleDriveFileId(value: string) {
     const url = parseUrl(value);
     if (!url) return null;
 
@@ -100,6 +100,44 @@ export function normalizeWorkshopImageUrlInput(value: string) {
     }
 
     return trimmed;
+}
+
+/**
+ * True when an address field holds a web link (admins often paste a Google Maps share link)
+ * rather than a postal address. Such a value must not be shown or sent to search engines as
+ * the street address.
+ */
+export function isWebUrl(value: string | null | undefined) {
+    return /^https?:\/\//i.test(value?.trim() ?? "");
+}
+
+const GOOGLE_MAPS_SHORT_HOSTS = new Set(["maps.app.goo.gl"]);
+const GOOGLE_HOSTS = new Set([
+    "google.com",
+    "www.google.com",
+    "google.co.in",
+    "www.google.co.in",
+    "goo.gl",
+]);
+const MAPS_PATH_RE = /^\/maps(?:\/|$)/;
+
+/**
+ * The link itself when `value` is a Google Maps link (e.g. `https://maps.app.goo.gl/...`), so
+ * it can be the "Open in Maps" target; `null` for anything else. Limited to Google's hosts so
+ * an address field cannot turn into a link to an arbitrary site.
+ */
+export function googleMapsLinkOf(value: string | null | undefined) {
+    const url = parseUrl(value?.trim() ?? "");
+    if (!url || url.protocol !== "https:") return null;
+
+    const host = url.hostname.toLowerCase();
+    if (GOOGLE_MAPS_SHORT_HOSTS.has(host)) return url.toString();
+    // maps.google.com also serves /url redirects; only accept map pages.
+    if (host === "maps.google.com" && (url.pathname === "/" || MAPS_PATH_RE.test(url.pathname))) {
+        return url.toString();
+    }
+    if (GOOGLE_HOSTS.has(host) && MAPS_PATH_RE.test(url.pathname)) return url.toString();
+    return null;
 }
 
 export function isSupportedWorkshopImageUrl(value: string | null | undefined) {

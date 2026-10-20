@@ -2,19 +2,15 @@
 
 import { motion, type Transition } from "framer-motion";
 import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
-import {
-    getRevealVariants,
-    reducedMotionFade,
-    standardTransition,
-    type RevealPreset,
-} from "@/lib/motion-presets";
+import { getRevealVariants, standardTransition, type RevealPreset } from "@/lib/motion-presets";
 import { cn } from "@/lib/utils";
 
 interface RevealGroupProps {
     children: React.ReactNode;
     className?: string;
     once?: boolean;
-    amount?: number;
+    /** Share of the group that must be on screen; "some" (the default) means any part of it. */
+    amount?: number | "some" | "all";
     stagger?: number;
     delayChildren?: number;
 }
@@ -31,16 +27,15 @@ export function RevealGroup({
     children,
     className,
     once = true,
-    amount = 0.16,
+    amount = "some",
     stagger = 0.08,
     delayChildren = 0.04,
 }: RevealGroupProps) {
     const shouldReduceMotion = usePrefersReducedMotion();
 
-    if (shouldReduceMotion) {
-        return <div className={className}>{children}</div>;
-    }
-
+    // Always the same element and triggers: the reduced-motion preference is only known after
+    // hydration, and switching to a plain <div> then froze the items in their server-rendered
+    // "hidden" state. With reduced motion the items simply settle at once.
     return (
         <motion.div
             className={className}
@@ -50,10 +45,12 @@ export function RevealGroup({
             variants={{
                 hidden: {},
                 visible: {
-                    transition: {
-                        delayChildren,
-                        staggerChildren: stagger,
-                    },
+                    transition: shouldReduceMotion
+                        ? {}
+                        : {
+                              delayChildren,
+                              staggerChildren: stagger,
+                          },
                 },
             }}
         >
@@ -74,8 +71,8 @@ export function RevealItem({
     return (
         <motion.div
             className={cn(className)}
-            variants={shouldReduceMotion ? reducedMotionFade : getRevealVariants(preset)}
-            transition={shouldReduceMotion ? { duration: 0.2, delay } : { ...transition, delay }}
+            variants={getRevealVariants(preset)}
+            transition={shouldReduceMotion ? { duration: 0 } : { ...transition, delay }}
         >
             {children}
         </motion.div>

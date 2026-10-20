@@ -3,8 +3,14 @@
 import { AnimatePresence, motion } from "framer-motion";
 import WorkshopCard from "@/components/WorkshopCard";
 import type { Workshop } from "@/lib/data";
-import { fadeIn, quickTransition, useMotionProps } from "@/lib/motion-presets";
+import { quickTransition, useMotionProps } from "@/lib/motion-presets";
 import { EmptyWorkshopState, SectionHeader } from "@/components/home/HomeSectionShared";
+
+/** Cross-fade when the category changes. The first render is never hidden (see below). */
+const gridSwapVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1 },
+};
 
 export default function WorkshopGridSection({
     title,
@@ -24,6 +30,7 @@ export default function WorkshopGridSection({
     selectedCategoryLabel,
     onTryAnotherCategory,
     showCardBadgeLabels = true,
+    cardImageSizes,
 }: {
     title: string;
     eyebrow?: string;
@@ -42,10 +49,16 @@ export default function WorkshopGridSection({
     selectedCategoryLabel: string;
     onTryAnotherCategory: () => void;
     showCardBadgeLabels?: boolean;
+    cardImageSizes?: string;
 }) {
-    const gridSwapMotionProps = useMotionProps(shouldReduceMotion, fadeIn, quickTransition, {
-        whileInView: false,
-    });
+    const gridSwapMotionProps = useMotionProps(
+        shouldReduceMotion,
+        gridSwapVariants,
+        quickTransition,
+        {
+            whileInView: false,
+        }
+    );
 
     return (
         <section className={sectionClassName || "section-padding mt-20 sm:mt-16"}>
@@ -56,7 +69,9 @@ export default function WorkshopGridSection({
                 href={actionHref}
                 reduceMotion={shouldReduceMotion}
             />
-            <AnimatePresence mode="wait">
+            {/* initial={false}: the first grid is server-rendered visible instead of opacity 0
+                until hydration; only later category switches fade. */}
+            <AnimatePresence mode="wait" initial={false}>
                 <motion.div
                     key={`${gridKeyPrefix}-${selectedCategory}`}
                     {...gridSwapMotionProps}
@@ -84,6 +99,7 @@ export default function WorkshopGridSection({
                                         index={index}
                                         animateOnScroll={false}
                                         showBadgeLabels={showCardBadgeLabels}
+                                        imageSizes={cardImageSizes}
                                     />
                                 );
                             }
@@ -95,6 +111,7 @@ export default function WorkshopGridSection({
                                         index={index}
                                         animateOnScroll={false}
                                         showBadgeLabels={showCardBadgeLabels}
+                                        imageSizes={cardImageSizes}
                                     />
                                 </div>
                             );

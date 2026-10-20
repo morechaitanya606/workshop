@@ -200,11 +200,16 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
         ? workshop.coverImage
         : getAbsoluteUrl(workshop.coverImage);
 
-    const jsonLd = workshopEventJsonLd(workshop, {
-        canonicalUrl,
-        imageUrl: socialPreviewUrl,
-        siteUrl: getAppUrl(),
-    });
+    // Event data only while the workshop is still ahead: Google ignores ended events, and the
+    // markup ("scheduled", "in stock") would contradict the page's own "Past Event" label.
+    const jsonLd =
+        workshop.date >= todayIso
+            ? workshopEventJsonLd(workshop, {
+                  canonicalUrl,
+                  imageUrl: socialPreviewUrl,
+                  siteUrl: getAppUrl(),
+              })
+            : null;
     // Mirrors the visible breadcrumb in WorkshopClient: Home > city > category > workshop.
     const seoCity = getSeoCityByName(workshop.city);
     const breadcrumb = breadcrumbJsonLd([
@@ -225,10 +230,12 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
 
     return (
         <>
-            <script
-                type="application/ld+json"
-                dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
-            />
+            {jsonLd && (
+                <script
+                    type="application/ld+json"
+                    dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
+                />
+            )}
             <script
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumb) }}

@@ -1,4 +1,6 @@
 import type { Workshop } from "@/lib/data";
+import { CONTACT_PHONE_NUMBERS } from "@/lib/contact";
+import { isWebUrl } from "@/lib/workshop-media";
 
 /**
  * Next replaces (does not merge) a child's `openGraph` object over the parent's, so a page that
@@ -125,7 +127,10 @@ type EventUrls = { canonicalUrl: string; imageUrl: string; siteUrl: string };
 /** schema.org Event for a workshop page (Google's event rich result fields). */
 export function workshopEventJsonLd(workshop: Workshop, urls: EventUrls) {
     const durationMinutes = parseDurationMinutes(workshop.duration);
-    const streetAddress = workshop.eventAddress?.trim() || workshop.location;
+    // A pasted Maps link is not an address: Google would get no street or area at all.
+    const eventAddress = workshop.eventAddress?.trim();
+    const streetAddress =
+        eventAddress && !isWebUrl(eventAddress) ? eventAddress : workshop.location;
     const city = getSeoCityByName(workshop.city);
     const hasGeo =
         typeof workshop.latitude === "number" &&
@@ -181,15 +186,6 @@ export function workshopEventJsonLd(workshop: Workshop, urls: EventUrls) {
                     : "https://schema.org/SoldOut",
             url: urls.canonicalUrl,
         },
-        ...(workshop.rating > 0 && workshop.reviewCount > 0
-            ? {
-                  aggregateRating: {
-                      "@type": "AggregateRating",
-                      ratingValue: workshop.rating,
-                      reviewCount: workshop.reviewCount,
-                  },
-              }
-            : {}),
     };
 }
 
@@ -225,6 +221,7 @@ export function siteJsonLd(siteUrl: string) {
                 url,
                 logo: `${url}images/icon.png`,
                 email: CONTACT_EMAIL,
+                telephone: CONTACT_PHONE_NUMBERS[0].value,
                 description:
                     "Hands-on creative workshops and weekend experiences in Pune, hosted by local makers.",
                 areaServed: { "@type": "City", name: "Pune" },
@@ -233,6 +230,7 @@ export function siteJsonLd(siteUrl: string) {
                     "@type": "ContactPoint",
                     contactType: "customer support",
                     email: CONTACT_EMAIL,
+                    telephone: CONTACT_PHONE_NUMBERS[0].value,
                     areaServed: "IN",
                     availableLanguage: ["English"],
                 },

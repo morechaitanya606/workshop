@@ -10,10 +10,13 @@ import { cardReveal, standardTransition, useMotionProps } from "@/lib/motion-pre
 import { formatDate } from "@/lib/utils";
 import { SectionHeader } from "@/components/home/HomeSectionShared";
 import PastEventsMarquee, { type PastEventImage } from "@/components/home/PastEventsMarquee";
+import MomentsRows, { MIN_MOMENTS_PHOTOS, type MomentPhoto } from "@/components/home/MomentsStrip";
+import type { CommunityPhoto } from "@/lib/community-photos";
 
 export default function PastEventHighlight({
     pastWorkshop,
     pastEventImages,
+    communityPhotos,
     shouldReduceMotion,
     notifyState,
     pastNotifyLoading,
@@ -23,6 +26,7 @@ export default function PastEventHighlight({
 }: {
     pastWorkshop: Workshop;
     pastEventImages: PastEventImage[];
+    communityPhotos: CommunityPhoto[];
     shouldReduceMotion: boolean;
     notifyState: { similar: boolean; creator: boolean };
     pastNotifyLoading: "similar" | "creator" | null;
@@ -33,6 +37,24 @@ export default function PastEventHighlight({
     const router = useRouter();
     const pastEventMotionProps = useMotionProps(shouldReduceMotion, cardReveal, standardTransition);
 
+    // Past-event photos open their own event. Only when there are too few of them, fall back to
+    // the community photos, which open the Past Events page.
+    const eventPhotos: MomentPhoto[] = pastEventImages.map((image) => ({
+        id: `${image.workshopId}:${image.src}`,
+        src: image.src,
+        alt: image.title,
+        href: `/workshop/${image.workshopId}`,
+    }));
+    const momentPhotos: MomentPhoto[] =
+        eventPhotos.length >= MIN_MOMENTS_PHOTOS
+            ? eventPhotos
+            : communityPhotos.map((photo) => ({
+                  id: photo.id,
+                  src: photo.imageUrl,
+                  alt: photo.altText || "Moment from a past workshop",
+                  href: "/past-events",
+              }));
+
     return (
         <section className="section-padding mt-20 sm:mt-16">
             <SectionHeader
@@ -42,7 +64,18 @@ export default function PastEventHighlight({
                 href="/past-events"
                 reduceMotion={shouldReduceMotion}
             />
-            <PastEventsMarquee images={pastEventImages} shouldReduceMotion={shouldReduceMotion} />
+            {momentPhotos.length >= MIN_MOMENTS_PHOTOS ? (
+                <MomentsRows
+                    photos={momentPhotos}
+                    shouldReduceMotion={shouldReduceMotion}
+                    className="mb-6"
+                />
+            ) : (
+                <PastEventsMarquee
+                    images={pastEventImages}
+                    shouldReduceMotion={shouldReduceMotion}
+                />
+            )}
             <motion.div
                 {...pastEventMotionProps}
                 className="bg-white border border-gray-100 rounded-3xl shadow-soft overflow-hidden hover-lift cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-terracotta"
@@ -78,28 +111,6 @@ export default function PastEventHighlight({
                             {formatDate(pastWorkshop.date)} &bull; {pastWorkshop.time} &bull;{" "}
                             {pastWorkshop.location}, {pastWorkshop.city}
                         </p>
-
-                        {/* Don't advertise "Rated 0/5 from 0 reviews" on the homepage. */}
-                        {pastWorkshop.reviewCount > 0 && (
-                            <div className="bg-cream-100 rounded-2xl p-4 sm:p-5 border border-clay/40 mb-5">
-                                <p className="text-[11px] font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
-                                    Attendee Feedback
-                                </p>
-                                <p className="text-sm sm:text-base font-inter text-dark-secondary leading-relaxed">
-                                    {pastWorkshop.feedbackHighlight ? (
-                                        <>&ldquo;{pastWorkshop.feedbackHighlight}&rdquo;</>
-                                    ) : (
-                                        `Rated ${pastWorkshop.rating}/5 by attendees.`
-                                    )}
-                                </p>
-                                <p className="text-xs font-inter text-dark-muted mt-2">
-                                    {pastWorkshop.feedbackAuthor ||
-                                        `${pastWorkshop.reviewCount} verified ${
-                                            pastWorkshop.reviewCount === 1 ? "review" : "reviews"
-                                        }`}
-                                </p>
-                            </div>
-                        )}
 
                         <div className="flex flex-wrap gap-3">
                             <button
@@ -148,7 +159,7 @@ export default function PastEventHighlight({
                                 className="inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-inter font-semibold bg-white text-dark border border-gray-200 hover:border-terracotta hover:text-terracotta transition-colors"
                             >
                                 <Images className="w-4 h-4" />
-                                View Photos & Reviews
+                                View Photos
                             </Link>
                         </div>
 

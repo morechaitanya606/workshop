@@ -391,6 +391,9 @@ export async function POST(request: NextRequest) {
             .upload(objectPath, buffer, {
                 contentType: uploadContentType,
                 upsert: false,
+                // The object path is random and never rewritten, so the file is immutable.
+                // Supabase's default of one hour makes browsers and the CDN re-check constantly.
+                cacheControl: "31536000",
             });
 
         if (uploadError) {

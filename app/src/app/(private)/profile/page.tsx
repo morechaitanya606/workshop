@@ -2,16 +2,10 @@
 
 import { useEffect, useMemo, useState, useRef, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
-import * as Sentry from "@sentry/nextjs";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
     Loader2,
-    Star,
-    Upload,
-    Video,
     X,
-    CheckCircle2,
     Ticket,
     History,
     MessageSquare,
@@ -32,8 +26,6 @@ import {
     removeFavorite,
     getWorkshopById,
     getMyBookings,
-    getBulkWorkshopFeedback,
-    submitWorkshopFeedback,
     toApiErrorMessage,
     uploadMedia,
     getProfile,
@@ -63,29 +55,6 @@ type BookingItem = {
     };
 };
 
-type FeedbackDraft = {
-    rating: number;
-    comment: string;
-    photos: string[];
-    videoUrl: string;
-};
-
-type SavedFeedback = {
-    rating: number;
-    comment: string;
-    photos: string[];
-    videoUrl: string;
-    submittedAt: string;
-};
-
-const defaultDraft: FeedbackDraft = {
-    rating: 5,
-    comment: "",
-    photos: [],
-    videoUrl: "",
-};
-const MIN_REVIEW_LENGTH = 10;
-
 export default function ProfilePage() {
     const router = useRouter();
     const { user, session, loading, signOut, role } = useAuth();
@@ -108,12 +77,6 @@ export default function ProfilePage() {
     const [error, setError] = useState<string | null>(null);
     const [reloadKey, setReloadKey] = useState(0);
 
-    const [openFeedbackId, setOpenFeedbackId] = useState<string | null>(null);
-    const [drafts, setDrafts] = useState<Record<string, FeedbackDraft>>({});
-    const [records, setRecords] = useState<Record<string, SavedFeedback>>({});
-    const [feedbackErrors, setFeedbackErrors] = useState<Record<string, string>>({});
-    const [savingFeedback, setSavingFeedback] = useState(false);
-    const [uploading, setUploading] = useState(false);
     const [profileName, setProfileName] = useState("");
     const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
     const [profileDob, setProfileDob] = useState("");
@@ -124,8 +87,6 @@ export default function ProfilePage() {
     const [profileError, setProfileError] = useState<string | null>(null);
     const [avatarUploading, setAvatarUploading] = useState(false);
 
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const feedbackDialogContainerRef = useRef<HTMLDivElement>(null);
     const avatarInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -162,29 +123,6 @@ export default function ProfilePage() {
             active = false;
         };
     }, [session?.access_token, user?.user_metadata?.full_name]);
-
-    useEffect(() => {
-        if (!openFeedbackId) {
-            return;
-        }
-
-        const focusTimer = window.setTimeout(() => {
-            feedbackDialogContainerRef.current?.focus();
-        }, 0);
-
-        const handleEscape = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                setOpenFeedbackId(null);
-            }
-        };
-
-        window.addEventListener("keydown", handleEscape);
-
-        return () => {
-            window.clearTimeout(focusTimer);
-            window.removeEventListener("keydown", handleEscape);
-        };
-    }, [openFeedbackId]);
 
     useEffect(() => {
         let cancelled = false;
@@ -230,60 +168,6 @@ export default function ProfilePage() {
             setLoadingMoreBookings(false);
         }
     };
-
-    // Fetch existing feedback for past events
-    useEffect(() => {
-        let active = true;
-        const fetchFeedback = async () => {
-            if (!user || !session?.access_token) return;
-
-            const today = new Date().toISOString().slice(0, 10);
-            const pastWorkshops = bookings
-                .filter((b) => b.workshop?.date && b.workshop.date < today && b.workshop?.id)
-                .map((b) => ({ bookingId: b.id, workshopId: b.workshop!.id }));
-
-            if (pastWorkshops.length === 0) return;
-
-            const newRecords: Record<string, SavedFeedback> = {};
-            const workshopIds = pastWorkshops.map((w) => w.workshopId);
-
-            try {
-                const response = await getBulkWorkshopFeedback(workshopIds, session.access_token);
-
-                pastWorkshops.forEach(({ bookingId, workshopId }) => {
-                    const fb = response.feedback[workshopId];
-                    if (fb) {
-                        newRecords[bookingId] = {
-                            rating: fb.rating || 5,
-                            comment: fb.comment || "",
-                            photos: fb.photos || [],
-                            videoUrl: fb.video_url || "",
-                            submittedAt: fb.updated_at,
-                        };
-                    }
-                });
-            } catch (e) {
-                Sentry.captureException(e, {
-                    tags: {
-                        layer: "profile",
-                        action: "load_feedback_bulk",
-                    },
-                });
-            }
-
-            if (active) {
-                setRecords((prev) => ({ ...prev, ...newRecords }));
-            }
-        };
-
-        if (bookings.length > 0) {
-            fetchFeedback();
-        }
-
-        return () => {
-            active = false;
-        };
-    }, [bookings, user, session]);
 
     useEffect(() => {
         let active = true;
@@ -380,45 +264,6 @@ export default function ProfilePage() {
               : tab === "past"
                 ? pastEvents
                 : [];
-
-    const getDraft = (id: string) => drafts[id] || defaultDraft;
-    const updateDraft = (id: string, patch: Partial<FeedbackDraft>) => {
-        setDrafts((prev) => ({ ...prev, [id]: { ...(prev[id] || defaultDraft), ...patch } }));
-    };
-
-    const handleFileUpload = async (
-        bookingId: string,
-        event: React.ChangeEvent<HTMLInputElement>
-    ) => {
-        const file = event.target.files?.[0];
-        if (!file || !session?.access_token) return;
-
-        setUploading(true);
-
-        try {
-            const data = await uploadMedia(session.access_token, file);
-
-            const currentDraft = getDraft(bookingId);
-            updateDraft(bookingId, { photos: [...currentDraft.photos, data.url] });
-        } catch (e) {
-            setFeedbackErrors((prev) => ({
-                ...prev,
-                [bookingId]: toApiErrorMessage(e, "Upload failed"),
-            }));
-        } finally {
-            setUploading(false);
-            if (fileInputRef.current) {
-                fileInputRef.current.value = "";
-            }
-        }
-    };
-
-    const removePhoto = (bookingId: string, index: number) => {
-        const currentDraft = getDraft(bookingId);
-        const newPhotos = [...currentDraft.photos];
-        newPhotos.splice(index, 1);
-        updateDraft(bookingId, { photos: newPhotos });
-    };
 
     const syncProfileAvatar = async (nextAvatar: string | null) => {
         if (!session?.access_token) return nextAvatar;
@@ -522,66 +367,6 @@ export default function ProfilePage() {
             setProfileError(toApiErrorMessage(error, "Unable to update profile settings."));
         } finally {
             setProfileSaving(false);
-        }
-    };
-
-    const openEditor = (id: string) => {
-        const existing = records[id];
-        if (existing) {
-            setDrafts((prev) => ({
-                ...prev,
-                [id]: {
-                    rating: existing.rating,
-                    comment: existing.comment,
-                    photos: [...existing.photos],
-                    videoUrl: existing.videoUrl,
-                },
-            }));
-        }
-        setOpenFeedbackId(id);
-    };
-
-    const saveFeedback = async (id: string, workshopId?: string) => {
-        if (!workshopId || !session?.access_token) return;
-
-        const d = getDraft(id);
-        const trimmedComment = d.comment.trim();
-        if (trimmedComment.length < MIN_REVIEW_LENGTH) {
-            setFeedbackErrors((prev) => ({
-                ...prev,
-                [id]: `Please add at least ${MIN_REVIEW_LENGTH} characters.`,
-            }));
-            return;
-        }
-
-        setSavingFeedback(true);
-        try {
-            await submitWorkshopFeedback(workshopId, session.access_token, {
-                rating: d.rating,
-                comment: trimmedComment,
-                photos: d.photos,
-                videoUrl: d.videoUrl.trim() || undefined,
-            });
-
-            setRecords((prev) => ({
-                ...prev,
-                [id]: {
-                    rating: d.rating,
-                    comment: trimmedComment,
-                    photos: [...d.photos],
-                    videoUrl: d.videoUrl.trim(),
-                    submittedAt: new Date().toISOString(),
-                },
-            }));
-            setFeedbackErrors((prev) => ({ ...prev, [id]: "" }));
-            setOpenFeedbackId(null);
-        } catch (e) {
-            setFeedbackErrors((prev) => ({
-                ...prev,
-                [id]: toApiErrorMessage(e, "Failed to save."),
-            }));
-        } finally {
-            setSavingFeedback(false);
         }
     };
 
@@ -787,9 +572,6 @@ export default function ProfilePage() {
                                 ) : (
                                     <div className="space-y-6">
                                         {activeList.map((b) => {
-                                            const saved = records[b.id];
-                                            const isOpen = openFeedbackId === b.id;
-                                            const d = getDraft(b.id);
                                             const ticketAttendeeName =
                                                 [b.first_name, b.last_name]
                                                     .filter((value): value is string =>
@@ -893,487 +675,6 @@ export default function ProfilePage() {
                                                             </div>
                                                         </div>
                                                     </div>
-
-                                                    {tab === "past" && (
-                                                        <div className="mt-8 pt-6 border-t border-dark/10">
-                                                            {saved && !isOpen && (
-                                                                <div className="bg-cream-100/50 rounded-xl p-6 relative overflow-hidden border border-cream-200">
-                                                                    <div className="flex items-center justify-between mb-4 relative z-10">
-                                                                        <h4 className="font-medium text-dark text-lg flex items-center gap-2">
-                                                                            Your Review
-                                                                            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                                                                        </h4>
-                                                                        <div className="flex items-center gap-1 bg-white px-3 py-1.5 rounded-full shadow-sm">
-                                                                            {[1, 2, 3, 4, 5].map(
-                                                                                (s) => (
-                                                                                    <Star
-                                                                                        key={s}
-                                                                                        className={`w-3.5 h-3.5 ${saved.rating >= s ? "text-amber-400 fill-amber-400" : "text-dark/20"}`}
-                                                                                    />
-                                                                                )
-                                                                            )}
-                                                                            <span className="ml-2 text-xs font-semibold text-dark/80">
-                                                                                {saved.rating}.0
-                                                                            </span>
-                                                                        </div>
-                                                                    </div>
-
-                                                                    <p className="text-dark/80 mb-5 relative z-10 leading-relaxed text-sm">
-                                                                        &quot;{saved.comment}&quot;
-                                                                    </p>
-
-                                                                    {saved.photos &&
-                                                                        saved.photos.length > 0 && (
-                                                                            <div className="flex gap-3 mb-5 overflow-x-auto pb-2 relative z-10 scrollbar-hide">
-                                                                                {saved.photos.map(
-                                                                                    (url, i) => (
-                                                                                        <div
-                                                                                            key={i}
-                                                                                            className="relative w-24 h-24 rounded-xl overflow-hidden shrink-0 border border-dark/10 shadow-sm"
-                                                                                        >
-                                                                                            <Image
-                                                                                                src={
-                                                                                                    url
-                                                                                                }
-                                                                                                alt={`Feedback ${i}`}
-                                                                                                fill
-                                                                                                sizes="96px"
-                                                                                                className="object-cover hover:scale-105 transition-transform"
-                                                                                            />
-                                                                                        </div>
-                                                                                    )
-                                                                                )}
-                                                                            </div>
-                                                                        )}
-
-                                                                    <div className="flex items-center justify-between relative z-10 mt-2">
-                                                                        {saved.videoUrl ? (
-                                                                            <a
-                                                                                href={
-                                                                                    saved.videoUrl
-                                                                                }
-                                                                                target="_blank"
-                                                                                rel="noreferrer"
-                                                                                className="inline-flex items-center gap-2 text-sm font-medium text-terracotta hover:underline bg-terracotta/5 px-3 py-1.5 rounded-lg"
-                                                                            >
-                                                                                <Video className="w-4 h-4" />
-                                                                                Watch attached video
-                                                                            </a>
-                                                                        ) : (
-                                                                            <div />
-                                                                        )}
-
-                                                                        <button
-                                                                            onClick={() =>
-                                                                                openEditor(b.id)
-                                                                            }
-                                                                            className="text-sm font-medium text-dark/60 hover:text-terracotta hover:bg-terracotta/5 px-4 py-2 rounded-lg transition-colors"
-                                                                        >
-                                                                            Edit Review
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {!saved && !isOpen && (
-                                                                <div
-                                                                    className="flex flex-col items-center justify-center p-10 border border-dashed border-dark/20 rounded-2xl bg-cream-50 overflow-hidden relative group cursor-pointer transition-colors hover:border-terracotta hover:bg-terracotta/5"
-                                                                    onClick={() => openEditor(b.id)}
-                                                                >
-                                                                    <div className="absolute inset-0 bg-gradient-to-t from-cream/50 to-transparent pointer-events-none" />
-                                                                    <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4 group-hover:scale-110 transition-transform duration-300 relative z-10">
-                                                                        <MessageSquare className="w-7 h-7 text-terracotta" />
-                                                                    </div>
-                                                                    <p className="text-dark/70 mb-5 max-w-sm text-center font-medium relative z-10">
-                                                                        We&apos;d love to hear about
-                                                                        your experience! Share your
-                                                                        thoughts and photos with the
-                                                                        host.
-                                                                    </p>
-                                                                    <button className="btn-primary font-medium shadow-sm relative z-10 pointer-events-none">
-                                                                        Rate Experience
-                                                                    </button>
-                                                                </div>
-                                                            )}
-
-                                                            <AnimatePresence initial={false}>
-                                                                {isOpen && (
-                                                                    <motion.div
-                                                                        initial={
-                                                                            prefersReducedMotion
-                                                                                ? { opacity: 0 }
-                                                                                : {
-                                                                                      opacity: 0,
-                                                                                      y: 16,
-                                                                                  }
-                                                                        }
-                                                                        animate={
-                                                                            prefersReducedMotion
-                                                                                ? { opacity: 1 }
-                                                                                : {
-                                                                                      opacity: 1,
-                                                                                      y: 0,
-                                                                                  }
-                                                                        }
-                                                                        exit={
-                                                                            prefersReducedMotion
-                                                                                ? { opacity: 0 }
-                                                                                : {
-                                                                                      opacity: 0,
-                                                                                      y: 8,
-                                                                                  }
-                                                                        }
-                                                                        transition={
-                                                                            prefersReducedMotion
-                                                                                ? {
-                                                                                      duration: 0.2,
-                                                                                  }
-                                                                                : {
-                                                                                      duration: 0.25,
-                                                                                      ease: [
-                                                                                          0.22, 1,
-                                                                                          0.36, 1,
-                                                                                      ],
-                                                                                  }
-                                                                        }
-                                                                        className="fixed inset-0 z-[90] overflow-y-auto bg-cream/95 p-4 backdrop-blur-sm md:static md:inset-auto md:z-auto md:overflow-visible md:bg-transparent md:p-0 md:backdrop-blur-0"
-                                                                    >
-                                                                        <div
-                                                                            ref={
-                                                                                feedbackDialogContainerRef
-                                                                            }
-                                                                            role="dialog"
-                                                                            aria-modal="true"
-                                                                            aria-labelledby={`feedback-editor-title-${b.id}`}
-                                                                            aria-describedby={`feedback-editor-description-${b.id}`}
-                                                                            tabIndex={-1}
-                                                                            className="bg-white border border-dark/10 rounded-2xl p-6 md:p-8 shadow-md min-h-[calc(100dvh-2rem)] md:min-h-0"
-                                                                        >
-                                                                            <h4
-                                                                                id={`feedback-editor-title-${b.id}`}
-                                                                                className="sr-only"
-                                                                            >
-                                                                                Write your review
-                                                                            </h4>
-                                                                            <p
-                                                                                id={`feedback-editor-description-${b.id}`}
-                                                                                className="sr-only"
-                                                                            >
-                                                                                Share your
-                                                                                experience to help
-                                                                                future attendees and
-                                                                                support the host.
-                                                                            </p>
-                                                                            <div className="sticky -mx-6 -mt-6 top-0 z-10 mb-6 flex items-center justify-between border-b border-dark/10 bg-white px-6 py-4 md:hidden">
-                                                                                <h4 className="font-playfair text-xl font-medium">
-                                                                                    Write your
-                                                                                    review
-                                                                                </h4>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() =>
-                                                                                        setOpenFeedbackId(
-                                                                                            null
-                                                                                        )
-                                                                                    }
-                                                                                    aria-label="Close review editor"
-                                                                                    className="rounded-full p-2 text-dark/70 hover:bg-dark/5 hover:text-dark transition-colors"
-                                                                                >
-                                                                                    <X className="w-4 h-4" />
-                                                                                </button>
-                                                                            </div>
-                                                                            <div className="hidden md:flex items-center justify-between mb-1">
-                                                                                <h4 className="font-playfair text-2xl font-medium">
-                                                                                    Write your
-                                                                                    review
-                                                                                </h4>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() =>
-                                                                                        setOpenFeedbackId(
-                                                                                            null
-                                                                                        )
-                                                                                    }
-                                                                                    aria-label="Close review editor"
-                                                                                    className="rounded-full p-2 text-dark/70 hover:bg-dark/5 hover:text-dark transition-colors"
-                                                                                >
-                                                                                    <X className="w-4 h-4" />
-                                                                                </button>
-                                                                            </div>
-                                                                            <p className="text-dark/60 text-sm mb-8">
-                                                                                Share your
-                                                                                experience to help
-                                                                                future attendees and
-                                                                                support the host.
-                                                                            </p>
-
-                                                                            <div className="space-y-8">
-                                                                                {/* Rating */}
-                                                                                <div className="bg-cream-50 rounded-xl p-6 border border-dark/5 flex flex-col items-center">
-                                                                                    <label className="block text-sm font-semibold uppercase tracking-wider text-dark/50 mb-4">
-                                                                                        Overall
-                                                                                        Rating
-                                                                                    </label>
-                                                                                    <div className="flex items-center gap-3">
-                                                                                        {[
-                                                                                            1, 2, 3,
-                                                                                            4, 5,
-                                                                                        ].map(
-                                                                                            (s) => (
-                                                                                                <button
-                                                                                                    key={`${b.id}-${s}`}
-                                                                                                    type="button"
-                                                                                                    aria-label={`Rate ${s} star${s > 1 ? "s" : ""}`}
-                                                                                                    onClick={() =>
-                                                                                                        updateDraft(
-                                                                                                            b.id,
-                                                                                                            {
-                                                                                                                rating: s,
-                                                                                                            }
-                                                                                                        )
-                                                                                                    }
-                                                                                                    className="transform hover:scale-110 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta/50 focus-visible:ring-offset-2 focus-visible:ring-offset-cream p-1"
-                                                                                                >
-                                                                                                    <Star
-                                                                                                        className={`w-10 h-10 ${d.rating >= s ? "text-amber-400 fill-amber-400 drop-shadow-sm" : "text-dark/10"}`}
-                                                                                                    />
-                                                                                                </button>
-                                                                                            )
-                                                                                        )}
-                                                                                    </div>
-                                                                                </div>
-
-                                                                                {/* Comment */}
-                                                                                <div>
-                                                                                    <label className="block text-sm font-medium text-dark mb-2">
-                                                                                        Detailed
-                                                                                        Thoughts{" "}
-                                                                                        <span className="text-red-500">
-                                                                                            *
-                                                                                        </span>
-                                                                                    </label>
-                                                                                    <textarea
-                                                                                        value={
-                                                                                            d.comment
-                                                                                        }
-                                                                                        onChange={(
-                                                                                            e
-                                                                                        ) =>
-                                                                                            updateDraft(
-                                                                                                b.id,
-                                                                                                {
-                                                                                                    comment:
-                                                                                                        e
-                                                                                                            .target
-                                                                                                            .value,
-                                                                                                }
-                                                                                            )
-                                                                                        }
-                                                                                        rows={4}
-                                                                                        placeholder="What did you enjoy the most? How was the host?"
-                                                                                        className="w-full bg-cream-50 border border-dark/10 rounded-xl px-5 py-4 text-dark focus:ring-2 focus:ring-terracotta/20 focus:border-terracotta transition-all resize-none shadow-inner"
-                                                                                    />
-                                                                                    <p className="mt-2 text-xs text-dark/50">
-                                                                                        Minimum{" "}
-                                                                                        {
-                                                                                            MIN_REVIEW_LENGTH
-                                                                                        }{" "}
-                                                                                        characters (
-                                                                                        {
-                                                                                            d.comment.trim()
-                                                                                                .length
-                                                                                        }
-                                                                                        /
-                                                                                        {
-                                                                                            MIN_REVIEW_LENGTH
-                                                                                        }
-                                                                                        )
-                                                                                    </p>
-                                                                                </div>
-
-                                                                                {/* Media */}
-                                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-dark/5">
-                                                                                    <div>
-                                                                                        <label className="block text-sm font-medium text-dark mb-3 flex items-center gap-2">
-                                                                                            <Upload className="w-4 h-4 text-terracotta" />{" "}
-                                                                                            Photos
-                                                                                        </label>
-
-                                                                                        <div className="grid grid-cols-3 gap-3">
-                                                                                            {d.photos.map(
-                                                                                                (
-                                                                                                    photo,
-                                                                                                    i
-                                                                                                ) => (
-                                                                                                    <div
-                                                                                                        key={
-                                                                                                            i
-                                                                                                        }
-                                                                                                        className="relative aspect-square rounded-xl overflow-hidden group border border-dark/10 shadow-sm"
-                                                                                                    >
-                                                                                                        <Image
-                                                                                                            src={
-                                                                                                                photo
-                                                                                                            }
-                                                                                                            alt={`Uploaded feedback photo ${i + 1}`}
-                                                                                                            fill
-                                                                                                            className="object-cover w-full h-full"
-                                                                                                        />
-                                                                                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                                                                            <button
-                                                                                                                onClick={() =>
-                                                                                                                    removePhoto(
-                                                                                                                        b.id,
-                                                                                                                        i
-                                                                                                                    )
-                                                                                                                }
-                                                                                                                aria-label={`Remove photo ${i + 1}`}
-                                                                                                                className="w-8 h-8 bg-white/20 hover:bg-red-500 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm"
-                                                                                                            >
-                                                                                                                <X className="w-4 h-4 text-white" />
-                                                                                                            </button>
-                                                                                                        </div>
-                                                                                                    </div>
-                                                                                                )
-                                                                                            )}
-                                                                                            {d
-                                                                                                .photos
-                                                                                                .length <
-                                                                                                5 && (
-                                                                                                <label className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-dark/20 rounded-xl text-dark/50 hover:text-terracotta hover:border-terracotta hover:bg-terracotta/5 transition-all cursor-pointer bg-cream-50 group">
-                                                                                                    {uploading ? (
-                                                                                                        <Loader2 className="w-6 h-6 animate-spin mb-2" />
-                                                                                                    ) : (
-                                                                                                        <Upload className="w-6 h-6 mb-2 group-hover:-translate-y-1 transition-transform" />
-                                                                                                    )}
-                                                                                                    <span className="text-xs font-medium">
-                                                                                                        Add
-                                                                                                        Photo
-                                                                                                    </span>
-                                                                                                    <input
-                                                                                                        type="file"
-                                                                                                        accept="image/*"
-                                                                                                        className="hidden"
-                                                                                                        ref={
-                                                                                                            fileInputRef
-                                                                                                        }
-                                                                                                        onChange={(
-                                                                                                            e
-                                                                                                        ) =>
-                                                                                                            handleFileUpload(
-                                                                                                                b.id,
-                                                                                                                e
-                                                                                                            )
-                                                                                                        }
-                                                                                                        disabled={
-                                                                                                            uploading
-                                                                                                        }
-                                                                                                    />
-                                                                                                </label>
-                                                                                            )}
-                                                                                        </div>
-                                                                                        <p className="text-xs text-dark/40 mt-3 font-medium uppercase tracking-wide">
-                                                                                            Up to 5
-                                                                                            photos
-                                                                                            (max 5MB
-                                                                                            each)
-                                                                                        </p>
-                                                                                    </div>
-
-                                                                                    <div>
-                                                                                        <label className="block text-sm font-medium text-dark mb-3 flex items-center gap-2">
-                                                                                            <Video className="w-4 h-4 text-terracotta" />{" "}
-                                                                                            Video
-                                                                                            Link
-                                                                                        </label>
-                                                                                        <input
-                                                                                            type="url"
-                                                                                            value={
-                                                                                                d.videoUrl
-                                                                                            }
-                                                                                            onChange={(
-                                                                                                e
-                                                                                            ) =>
-                                                                                                updateDraft(
-                                                                                                    b.id,
-                                                                                                    {
-                                                                                                        videoUrl:
-                                                                                                            e
-                                                                                                                .target
-                                                                                                                .value,
-                                                                                                    }
-                                                                                                )
-                                                                                            }
-                                                                                            placeholder="YouTube or Instagram Reel URL"
-                                                                                            className="w-full bg-cream-50 border border-dark/10 rounded-xl px-4 py-3.5 text-sm focus:ring-2 focus:ring-terracotta/20 focus:border-terracotta transition-shadow shadow-inner"
-                                                                                        />
-                                                                                    </div>
-                                                                                </div>
-
-                                                                                {feedbackErrors[
-                                                                                    b.id
-                                                                                ] && (
-                                                                                    <div className="bg-red-50 text-red-700 text-sm px-5 py-4 rounded-xl border border-red-100 flex items-center gap-3">
-                                                                                        <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center shrink-0">
-                                                                                            <X className="w-4 h-4 text-red-500" />
-                                                                                        </div>
-                                                                                        <div className="font-medium">
-                                                                                            {
-                                                                                                feedbackErrors[
-                                                                                                    b
-                                                                                                        .id
-                                                                                                ]
-                                                                                            }
-                                                                                        </div>
-                                                                                    </div>
-                                                                                )}
-
-                                                                                <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-dark/10">
-                                                                                    <button
-                                                                                        onClick={() =>
-                                                                                            saveFeedback(
-                                                                                                b.id,
-                                                                                                b
-                                                                                                    .workshop
-                                                                                                    ?.id
-                                                                                            )
-                                                                                        }
-                                                                                        disabled={
-                                                                                            savingFeedback ||
-                                                                                            d.comment.trim()
-                                                                                                .length <
-                                                                                                MIN_REVIEW_LENGTH
-                                                                                        }
-                                                                                        className="btn-primary !py-3.5 flex-1 sm:flex-none flex justify-center items-center gap-2 shadow-md hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
-                                                                                    >
-                                                                                        {savingFeedback && (
-                                                                                            <Loader2 className="w-5 h-5 animate-spin" />
-                                                                                        )}
-                                                                                        Publish
-                                                                                        Review
-                                                                                    </button>
-                                                                                    <button
-                                                                                        onClick={() =>
-                                                                                            setOpenFeedbackId(
-                                                                                                null
-                                                                                            )
-                                                                                        }
-                                                                                        disabled={
-                                                                                            savingFeedback
-                                                                                        }
-                                                                                        className="px-6 py-3.5 rounded-full font-medium border border-dark/10 text-dark/70 hover:text-dark hover:bg-dark/5 flex-1 sm:flex-none transition-all pulse-hover"
-                                                                                    >
-                                                                                        Discard
-                                                                                        changes
-                                                                                    </button>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </motion.div>
-                                                                )}
-                                                            </AnimatePresence>
-                                                        </div>
-                                                    )}
                                                 </div>
                                             );
                                         })}

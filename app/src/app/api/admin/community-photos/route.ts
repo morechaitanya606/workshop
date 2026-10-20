@@ -11,6 +11,7 @@ import {
 } from "@/lib/community-photos";
 import { communityPhotoCreateSchema } from "@/lib/validators";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { mirrorImageFields } from "@/lib/image-mirror";
 
 export async function GET(request: NextRequest) {
     const limited = await enforceRateLimit(request, "publicRead", "api-admin-photos-list");
@@ -69,6 +70,8 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+        // Pasted Drive/Photos/Unsplash links are copied into our storage at full resolution.
+        await mirrorImageFields(parsed.data, ["imageUrl"]);
         const { data, error } = await service.client
             .from("community_photos")
             .insert({

@@ -307,7 +307,7 @@ export default async function CityWorkshopsPage({ params }: Params) {
                 </section>
             )}
 
-            <section className="section-padding pb-20" aria-labelledby="faq-heading">
+            <section className="section-padding pb-8 md:pb-20" aria-labelledby="faq-heading">
                 <div className="max-w-3xl mx-auto">
                     <h2 id="faq-heading" className="heading-md mb-6">
                         Workshops in {city.name}: questions people ask
