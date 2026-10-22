@@ -1,10 +1,13 @@
 "use server";
 
 import type { Workshop } from "@/lib/data";
+import { topicLinksFor, type TopicLink } from "@/lib/seo-topics";
 import { PAST_WORKSHOPS_PAGE_SIZE, loadPastWorkshops } from "@/lib/workshop-page-data";
 
 export type PastEventsPageResult = {
     workshops: Workshop[];
+    /** Activity page per workshop id (see topicLinksFor). */
+    topicLinks: Record<string, TopicLink>;
     total: number;
     ok: boolean;
 };
@@ -16,6 +19,7 @@ export async function loadMorePastEvents(page: number): Promise<PastEventsPageRe
 
     return {
         workshops: result.data,
+        topicLinks: topicLinksFor(result.data),
         total: result.total,
         ok: result.source !== "error",
     };

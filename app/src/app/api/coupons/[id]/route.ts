@@ -93,3 +93,47 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         return handleApiError("Failed to update coupon.", error);
     }
 }
+
+/**
+ * Deletes a coupon for good. Past bookings are unaffected: coupon_redemptions.coupon_id is
+ * ON DELETE SET NULL (migration 20261001100600), so each redemption keeps its discount amount as
+ * an audit record. A shopper still holding the code at checkout gets the usual "not valid" error.
+ */
+export async function DELETE(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const limited = await enforceRateLimit(request, "write", "api-coupons-delete");
+    if (!limited.ok) return limited.response;
+
+    const { id } = await params;
+    const auth = await requireAdminUser(request);
+    if (!auth.ok) return auth.response;
+
+    if (!couponIdSchema.safeParse(id).success) {
+        return jsonError("Invalid coupon id.", 400);
+    }
+
+    const service = requireSupabaseService();
+    if (!service.ok) return service.response;
+
+    try {
+        const { data, error } = await service.client
+            .from("coupons")
+            .delete()
+            .eq("id", id)
+            .select("id")
+            .maybeSingle();
+
+        if (error) {
+            throw error;
+        }
+        if (!data) {
+            return jsonError("Coupon not found.", 404);
+        }
+
+        return NextResponse.json({ ok: true, id: data.id }, { status: 200 });
+    } catch (error) {
+        return handleApiError("Failed to delete coupon.", error);
+    }
+}

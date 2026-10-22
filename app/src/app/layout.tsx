@@ -10,6 +10,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import { getAppUrl } from "@/lib/env";
 import { PlatformSettingsProvider } from "@/lib/platform-settings-context";
 import { getCachedPlatformSettings } from "@/lib/cached-reads";
+import { SITE_NAME } from "@/lib/seo";
 
 // Self-hosted by next/font at build time (no runtime request to Google). The CSS variables are
 // the ones tailwind.config.ts maps `font-inter` / `font-playfair` / `font-display` onto.
@@ -78,24 +79,19 @@ const chunkLoadRecoveryScript = `
 })();
 `;
 
+const googleSiteVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
+
 export const metadata: Metadata = {
     metadataBase: new URL(getAppUrl()),
     title: "Only Workshops | Creative Workshops & Events in Pune",
     description:
         "Book curated creative workshops and experiences in Pune: pottery, baking, cooking and more, with local makers. A Better Weekend Awaits.",
-    keywords: [
-        "workshops",
-        "creative experiences",
-        "pottery class",
-        "painting workshop",
-        "weekend activities",
-        "things to do",
-        "craft workshops",
-    ],
     openGraph: {
         title: "Only Workshops | A Better Weekend Awaits",
-        description: "Discover creative workshops and experiences happening in your city.",
+        description: "Discover creative workshops and experiences happening in Pune.",
         type: "website",
+        siteName: SITE_NAME,
+        locale: "en_IN",
         images: [
             {
                 url: "/images/og-default.jpg",
@@ -108,9 +104,11 @@ export const metadata: Metadata = {
     twitter: {
         card: "summary_large_image",
         title: "Only Workshops | A Better Weekend Awaits",
-        description: "Discover creative workshops and experiences happening in your city.",
+        description: "Discover creative workshops and experiences happening in Pune.",
         images: ["/images/og-default.jpg"],
     },
+    // Search Console ownership tag, emitted only once the owner sets the variable in Vercel.
+    ...(googleSiteVerification ? { verification: { google: googleSiteVerification } } : {}),
     icons: {
         icon: "/images/icon.png",
         shortcut: "/images/icon.png",
@@ -126,7 +124,7 @@ export default async function RootLayout({
     const settings = await getCachedPlatformSettings();
 
     return (
-        <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
+        <html lang="en-IN" className={`${inter.variable} ${playfair.variable}`}>
             <body className="min-h-screen bg-cream antialiased" suppressHydrationWarning>
                 <script dangerouslySetInnerHTML={{ __html: chunkLoadRecoveryScript }} />
                 <a

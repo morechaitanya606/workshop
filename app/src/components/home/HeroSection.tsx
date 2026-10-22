@@ -263,18 +263,20 @@ export default function HeroSection({
                 style={{ opacity: parallaxActive ? heroOpacity : 1 }}
                 className="relative z-10 h-full flex flex-col items-center justify-center text-center px-4"
             >
-                <div
-                    style={{ "--reveal-delay": "0.2s" } as React.CSSProperties}
-                    className="reveal-scale inline-flex items-center gap-2 bg-white/20 border border-white/20 rounded-full px-5 py-2 mb-8 hover-lift"
-                >
-                    <Sparkles className="w-4 h-4 text-terracotta-300" />
-                    <span className="text-sm font-inter font-medium text-white/90">
-                        Creative workshops in Pune
-                    </span>
-                </div>
-
-                <div className="mb-6">
-                    <h1 className="heading-xl text-white max-w-4xl text-balance text-glow-soft">
+                {/* The badge is part of the h1 so the heading says what and where ("Creative
+                    workshops in Pune") to search engines. The h1 only lays the two out: the badge
+                    and the headline keep the exact classes they had as separate elements. */}
+                <h1 className="mb-6 flex flex-col items-center">
+                    <span
+                        style={{ "--reveal-delay": "0.2s" } as React.CSSProperties}
+                        className="reveal-scale inline-flex items-center gap-2 bg-white/20 border border-white/20 rounded-full px-5 py-2 mb-8 hover-lift"
+                    >
+                        <Sparkles className="w-4 h-4 text-terracotta-300" aria-hidden="true" />
+                        <span className="text-sm font-inter font-medium text-white/90">
+                            Creative workshops in Pune
+                        </span>
+                    </span>{" "}
+                    <span className="heading-xl block text-white max-w-4xl text-balance text-glow-soft">
                         {/* A real space after each word (not a margin): otherwise the heading's text,
                             which search engines and screen readers read, is "ABetterWeekend". */}
                         {headlineWords.map((word, i) => (
@@ -298,8 +300,8 @@ export default function HeroSection({
                         >
                             Awaits.
                         </span>
-                    </h1>
-                </div>
+                    </span>
+                </h1>
 
                 <div className="overflow-hidden mb-10">
                     <p

@@ -1,5 +1,8 @@
 import { Skeleton } from "@/components/ui";
 
+// Lives here, not at the app root: a root loading.tsx wraps every public page in Suspense, so the
+// response streams with 200 before notFound() runs and missing workshops became soft 404s.
+// booking/ and (public)/explore/ keep their own loading files.
 export default function Loading() {
     return (
         <main className="section-padding min-h-[70vh] py-20">

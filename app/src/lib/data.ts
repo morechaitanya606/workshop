@@ -47,6 +47,8 @@ export interface Workshop {
     earlyBirdDaysAfterListing?: number;
     createdAt?: string;
     approvalStatus?: "pending" | "approved" | "rejected";
+    /** The template this session was made from: sessions of one template are one workshop. */
+    templateId?: string;
 }
 
 export const PAST_EVENTS_CATEGORY_ID = "past-events";

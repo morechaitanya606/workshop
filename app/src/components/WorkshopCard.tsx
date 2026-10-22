@@ -12,6 +12,7 @@ import { addFavorite, getFavorites, removeFavorite } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import type { Workshop } from "@/lib/data";
 import { fadeInUp, revealViewport, standardTransition } from "@/lib/motion-presets";
+import { areaWithCity, displayVenue, workshopArea } from "@/lib/seo";
 
 interface WorkshopCardProps {
     workshop: Workshop;
@@ -131,6 +132,12 @@ export default function WorkshopCard({
     const seatsLabel = isSoldOut
         ? "Sold out"
         : `${workshop.seatsRemaining} seat${workshop.seatsRemaining === 1 ? "" : "s"} available`;
+
+    // Never print a pasted Maps link as the venue; fall back to the area the address names.
+    const venue = displayVenue(workshop);
+    const placeLabel = venue
+        ? [venue, workshop.city].filter(Boolean).join(", ")
+        : areaWithCity(workshopArea(workshop), workshop.city || "Pune");
 
     const includesMaterials = workshop.materialsProvided.length > 0;
     const isGreatForGroups = workshop.maxSeats >= 6;
@@ -374,7 +381,9 @@ export default function WorkshopCard({
                         {/* Host & Location */}
                         {variant === "default" && (
                             <div className="flex items-center gap-1.5 mb-2 sm:mb-3 mt-auto sm:mt-0">
-                                {workshop.hostAvatar ? (
+                                {/* A host avatar that is the cover photo again is skipped. */}
+                                {workshop.hostAvatar &&
+                                workshop.hostAvatar !== workshop.coverImage ? (
                                     <div className="hidden sm:block relative w-4 h-4 rounded-full overflow-hidden shrink-0 border border-gray-100">
                                         <Image
                                             src={workshop.hostAvatar}
@@ -391,7 +400,7 @@ export default function WorkshopCard({
                                     <span className="hidden sm:inline">
                                         {workshop.hostName} &bull;{" "}
                                     </span>
-                                    {workshop.location}, {workshop.city}
+                                    {placeLabel}
                                 </span>
                             </div>
                         )}

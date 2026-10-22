@@ -20,7 +20,7 @@ vi.mock("@/lib/api-helpers", () => ({ requireSupabaseService: mocks.requireSupab
 vi.mock("@/lib/rate-limit", () => ({ enforceRateLimit: mocks.enforceRateLimit }));
 vi.mock("@sentry/nextjs", () => ({ captureException: () => undefined }));
 
-import { PATCH } from "./route";
+import { DELETE, PATCH } from "./route";
 
 const COUPON_ID = "11111111-2222-4333-8444-555555555555";
 
@@ -104,5 +104,55 @@ describe("PATCH /api/coupons/[id]", () => {
         const response = await patch({ is_active: true });
 
         expect(response.status).toBe(404);
+    });
+});
+
+function remove(id = COUPON_ID) {
+    return DELETE(new NextRequest(`http://localhost/api/coupons/${id}`, { method: "DELETE" }), {
+        params: Promise.resolve({ id }),
+    });
+}
+
+describe("DELETE /api/coupons/[id]", () => {
+    beforeEach(() => {
+        mocks.enforceRateLimit.mockResolvedValue({ ok: true });
+        mocks.requireAdminUser.mockResolvedValue({ ok: true, user: { id: "admin-1" } });
+    });
+
+    it("deletes the coupon by id", async () => {
+        const db = createChainableSupabase({ coupons: [{ data: { id: COUPON_ID }, error: null }] });
+        mocks.requireSupabaseService.mockReturnValue({ ok: true, client: db.client });
+
+        const response = await remove();
+
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ ok: true, id: COUPON_ID });
+        const calls = db.callsFor("coupons");
+        expect(calls.some((call) => call.op === "delete")).toBe(true);
+        expect(calls.find((call) => call.op === "eq")!.args).toEqual(["id", COUPON_ID]);
+    });
+
+    it("returns 404 when the coupon does not exist", async () => {
+        const db = createChainableSupabase({ coupons: [{ data: null, error: null }] });
+        mocks.requireSupabaseService.mockReturnValue({ ok: true, client: db.client });
+
+        expect((await remove()).status).toBe(404);
+    });
+
+    it("rejects a non-uuid id without touching the database", async () => {
+        const db = createChainableSupabase();
+        mocks.requireSupabaseService.mockReturnValue({ ok: true, client: db.client });
+
+        expect((await remove("not-a-uuid")).status).toBe(400);
+        expect(db.callsFor("coupons")).toHaveLength(0);
+    });
+
+    it("is admin-only", async () => {
+        mocks.requireAdminUser.mockResolvedValue({
+            ok: false,
+            response: new Response(null, { status: 403 }),
+        });
+
+        expect((await remove()).status).toBe(403);
     });
 });

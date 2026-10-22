@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import WorkshopTicket from "@/app/(private)/booking/WorkshopTicket";
 import Navbar from "@/components/Navbar";
+import ProfileDoodles from "@/components/profile/ProfileDoodles";
 import ProfileEarningsPanel from "@/components/profile/ProfileEarningsPanel";
 import ProfileSettingsPanel from "@/components/profile/ProfileSettingsPanel";
 import ProfileWishlistPanel from "@/components/profile/ProfileWishlistPanel";
@@ -420,10 +421,12 @@ export default function ProfilePage() {
     tabs.push({ id: "settings", label: "Settings", icon: Settings });
 
     return (
-        <main className="min-h-screen bg-cream pb-24 md:pb-12 text-dark">
+        <main className="relative min-h-screen bg-cream pb-24 md:pb-12 text-dark">
             <Navbar />
+            <ProfileDoodles />
 
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-28 pb-10">
+            {/* `relative` keeps the content above the doodle layer. */}
+            <div className="relative max-w-5xl mx-auto px-4 sm:px-6 pt-28 pb-10">
                 <header className="mb-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                     <div>
                         <h1 className="text-3xl md:text-4xl font-playfair font-medium text-dark mb-2 flex items-center gap-3">

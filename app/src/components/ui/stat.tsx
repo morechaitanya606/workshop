@@ -10,7 +10,10 @@ type StatProps = {
 export function Stat({ label, value, icon, className, ...props }: StatProps) {
     return (
         <div
-            className={cn("rounded-2xl border border-gray-100 bg-white p-5 shadow-soft", className)}
+            className={cn(
+                "rounded-2xl border border-gray-100 bg-white p-4 shadow-soft sm:p-5",
+                className
+            )}
             {...props}
         >
             <p className="text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">

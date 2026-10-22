@@ -6,11 +6,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
-import { ArrowLeft, Calendar, MapPin, ChevronLeft, ChevronRight, Camera, Info } from "lucide-react";
+import {
+    ArrowRight,
+    Calendar,
+    MapPin,
+    ChevronLeft,
+    ChevronRight,
+    Camera,
+    Info,
+} from "lucide-react";
 import Footer from "@/components/Footer";
 import { Dialog } from "@/components/ui/dialog";
 import { LIGHTBOX_IMAGE_SIZES, PreloadImages } from "@/components/ui/LightboxPreload";
 import type { Workshop } from "@/lib/data";
+import { areaWithCity, displayVenue, workshopArea } from "@/lib/seo";
+import type { TopicLink } from "@/lib/seo-topics";
 import { formatDate } from "@/lib/utils";
 import { loadMorePastEvents } from "./actions";
 import {
@@ -32,13 +42,41 @@ interface LightboxState {
     photoIndex: number;
 }
 
+/**
+ * A finished session cannot be booked, so its card points at the activity page, which lists the
+ * upcoming dates. Nothing renders when the workshop fits no activity or its city has no pages.
+ */
+function UpcomingTopicLink({
+    topicLink,
+    className = "",
+}: {
+    topicLink: TopicLink | undefined;
+    className?: string;
+}) {
+    if (!topicLink) return null;
+
+    return (
+        <div className={`border-t border-clay/30 px-5 py-3 ${className}`}>
+            <Link
+                href={topicLink.href}
+                className="inline-flex items-center gap-1.5 text-sm font-inter font-semibold text-terracotta hover:gap-2.5 transition-all duration-300"
+            >
+                More {topicLink.name.toLowerCase()} workshops
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+        </div>
+    );
+}
+
 export default function PastEventsPageClient({
     initialWorkshops,
+    initialTopicLinks,
     initialTotal,
     pageSize,
     source,
 }: {
     initialWorkshops: Workshop[];
+    initialTopicLinks: Record<string, TopicLink>;
     initialTotal: number;
     pageSize: number;
     source: "supabase" | "error";
@@ -49,6 +87,7 @@ export default function PastEventsPageClient({
     const sectionMotionProps = useMotionProps(shouldReduceMotion, fadeInUp, standardTransition);
 
     const [workshops, setWorkshops] = useState<Workshop[]>(initialWorkshops);
+    const [topicLinks, setTopicLinks] = useState(initialTopicLinks);
     const [total, setTotal] = useState(initialTotal);
     const [loadedPages, setLoadedPages] = useState(1);
     const [isLoadingMore, startLoadingMore] = useTransition();
@@ -57,10 +96,11 @@ export default function PastEventsPageClient({
     // The server revalidates every 60s; if a fresh first page arrives, restart from it.
     useEffect(() => {
         setWorkshops(initialWorkshops);
+        setTopicLinks(initialTopicLinks);
         setTotal(initialTotal);
         setLoadedPages(1);
         setLoadMoreError(false);
-    }, [initialWorkshops, initialTotal]);
+    }, [initialWorkshops, initialTopicLinks, initialTotal]);
 
     const hasMore = workshops.length < total && loadedPages * pageSize <= total;
 
@@ -78,6 +118,7 @@ export default function PastEventsPageClient({
                     const seen = new Set(previous.map((workshop) => workshop.id));
                     return [...previous, ...result.workshops.filter((w) => !seen.has(w.id))];
                 });
+                setTopicLinks((previous) => ({ ...previous, ...result.topicLinks }));
                 setTotal(result.total);
                 setLoadedPages(nextPage);
             } catch {
@@ -146,22 +187,45 @@ export default function PastEventsPageClient({
             {/* Hero header */}
             <section className="pt-28 pb-12 section-padding">
                 <div className="max-w-7xl mx-auto">
-                    <Link
-                        href="/"
-                        className="inline-flex items-center gap-2 text-sm font-inter text-dark-muted hover:text-terracotta transition-colors mb-6"
+                    {/* Same trail as the BreadcrumbList JSON-LD in page.tsx. */}
+                    <nav
+                        aria-label="Breadcrumb"
+                        className="mb-6 flex flex-wrap items-center gap-2 text-sm font-inter text-dark-muted"
                     >
-                        <ArrowLeft className="w-4 h-4" />
-                        Back to Home
-                    </Link>
+                        <Link
+                            href="/"
+                            className="inline-flex items-center hover:text-terracotta transition-colors"
+                        >
+                            Home
+                        </Link>
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <Link
+                            href="/workshops/pune"
+                            className="inline-flex items-center hover:text-terracotta transition-colors"
+                        >
+                            Workshops in Pune
+                        </Link>
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="text-dark" aria-current="page">
+                            Past workshops
+                        </span>
+                    </nav>
 
                     <motion.div {...sectionMotionProps}>
                         <span className="eyebrow-label">Memories</span>
                         <h1 className="heading-lg !text-4xl sm:!text-5xl mb-3">
-                            Past Events & Photos
+                            Past workshops in Pune
                         </h1>
                         <p className="text-body text-dark-muted max-w-2xl mb-8">
-                            Relive the magic of our past workshops. Browse photos, see what
-                            attendees experienced, and get inspired for upcoming events.
+                            Photos and highlights from past workshops in Pune. Browse each session
+                            to see what it was like, then find your next one among the{" "}
+                            <Link
+                                href="/workshops/pune"
+                                className="interactive-link font-semibold text-terracotta"
+                            >
+                                upcoming workshops in Pune
+                            </Link>
+                            .
                         </p>
                     </motion.div>
                 </div>
@@ -235,7 +299,10 @@ export default function PastEventsPageClient({
                                         </span>
                                         <span className="inline-flex items-center gap-1.5">
                                             <MapPin className="w-3.5 h-3.5" />
-                                            {workshop.location}
+                                            {/* A Maps link pasted as the venue is not a place
+                                                name: fall back to the area from the address. */}
+                                            {displayVenue(workshop) ||
+                                                areaWithCity(workshopArea(workshop))}
                                         </span>
                                     </div>
 
@@ -291,6 +358,12 @@ export default function PastEventsPageClient({
                                                 </div>
                                             </div>
                                         )}
+
+                                    {/* Pinned to the card's foot when there is no photo grid. */}
+                                    <UpcomingTopicLink
+                                        topicLink={topicLinks[workshop.id]}
+                                        className={workshop.galleryImages?.length ? "" : "mt-auto"}
+                                    />
                                 </motion.div>
                             ))}
                         </div>
