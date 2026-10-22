@@ -170,24 +170,25 @@ export default function WorkshopGallery({
                                 </button>
                             ) : null}
 
-                            {/* Mobile: the side thumbnails are hidden, so step through with arrows. */}
+                            {/* Arrows on every screen: phones have no side thumbnails, and on laptops the
+                                thumbnails show only a few of the photos. */}
                             {hasThumbnails && (
                                 <>
                                     <button
                                         type="button"
                                         onClick={() => showAdjacentImage(-1)}
                                         aria-label="Previous image"
-                                        className="absolute left-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-dark shadow-soft backdrop-blur-sm sm:hidden"
+                                        className="absolute left-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-dark shadow-soft transition-colors hover:bg-white hover:text-terracotta sm:left-4 sm:h-12 sm:w-12"
                                     >
-                                        <ChevronLeft className="h-5 w-5" />
+                                        <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" />
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => showAdjacentImage(1)}
                                         aria-label="Next image"
-                                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-dark shadow-soft backdrop-blur-sm sm:hidden"
+                                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-dark shadow-soft transition-colors hover:bg-white hover:text-terracotta sm:right-4 sm:h-12 sm:w-12"
                                     >
-                                        <ChevronRight className="h-5 w-5" />
+                                        <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
                                     </button>
                                 </>
                             )}

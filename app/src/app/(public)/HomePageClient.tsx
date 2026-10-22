@@ -26,7 +26,8 @@ import { usePlatformSettings } from "@/lib/platform-settings-context";
 import { getRecentlyViewed } from "@/lib/recently-viewed";
 
 const OTHER_CATEGORY_VALUE = "__other__";
-const PAST_EVENT_MARQUEE_LIMIT = 12;
+/** Enough for about two photos from each recent event; tiles load lazily. */
+const PAST_EVENT_MARQUEE_LIMIT = 18;
 /**
  * The horizontal rails size their cards at 240-280px, and on phones the cover is the left 2/5 of
  * the card. The default (a share of the viewport) would ask the optimizer for a much wider image.
@@ -93,23 +94,32 @@ export default function HomePageClient({
     );
     const pastWorkshop = recentPastWorkshops.at(0);
 
-    // Flatten the most recent past events into a single strip of images for the
-    // marquee, newest first and de-duplicated so a shared cover/gallery photo is
-    // not repeated across the track.
+    // Photos from the most recent past events for the highlight strip, taken in turns (each
+    // event's first photo, then each event's second...), so one event's gallery never fills the
+    // strip with near-identical shots side by side. De-duplicated: a shared cover/gallery photo
+    // appears once.
     const pastEventImages = useMemo(() => {
         const seen = new Set<string>();
+        const perWorkshop = recentPastWorkshops.map((workshop) =>
+            [workshop.coverImage, ...(workshop.galleryImages || [])]
+                .map((candidate) => candidate?.trim())
+                .filter((src): src is string => Boolean(src))
+                .map((src) => ({ src, workshopId: workshop.id, title: workshop.title }))
+        );
         const images: PastEventImage[] = [];
+        const longest = Math.max(0, ...perWorkshop.map((photos) => photos.length));
 
-        for (const workshop of recentPastWorkshops) {
-            for (const candidate of [workshop.coverImage, ...(workshop.galleryImages || [])]) {
-                const src = candidate?.trim();
-                if (!src || seen.has(src)) continue;
-                seen.add(src);
-                images.push({ src, workshopId: workshop.id, title: workshop.title });
+        for (let round = 0; round < longest && images.length < PAST_EVENT_MARQUEE_LIMIT; round++) {
+            for (const photos of perWorkshop) {
+                const image = photos[round];
+                if (!image || seen.has(image.src)) continue;
+                seen.add(image.src);
+                images.push(image);
+                if (images.length >= PAST_EVENT_MARQUEE_LIMIT) break;
             }
         }
 
-        return images.slice(0, PAST_EVENT_MARQUEE_LIMIT);
+        return images;
     }, [recentPastWorkshops]);
 
     const handlePastNotify = async (mode: "similar" | "creator") => {
