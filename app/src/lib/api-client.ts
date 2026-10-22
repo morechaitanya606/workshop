@@ -524,6 +524,8 @@ export type AdminCoupon = {
     used_count: number | null;
     valid_until: string | null;
     created_at: string | null;
+    /** null or empty = every workshop; otherwise only these workshop ids. */
+    applicable_workshop_ids?: string[] | null;
 };
 
 export type AdminCouponsResponse = {
@@ -543,6 +545,7 @@ export function createAdminCoupon(
         code: string;
         discount_type: AdminCoupon["discount_type"];
         discount_value: number;
+        applicable_workshop_ids?: string[] | null;
     }
 ) {
     return apiRequest<{ coupon: AdminCoupon }>("/api/coupons", {
@@ -556,13 +559,21 @@ export function updateAdminCoupon(
     accessToken: string,
     couponId: string,
     payload: {
-        is_active: boolean;
+        is_active?: boolean;
+        applicable_workshop_ids?: string[] | null;
     }
 ) {
     return apiRequest<{ coupon: AdminCoupon }>(`/api/coupons/${couponId}`, {
         method: "PATCH",
         accessToken,
         body: payload,
+    });
+}
+
+export function deleteAdminCoupon(accessToken: string, couponId: string) {
+    return apiRequest<{ ok: true; id: string }>(`/api/coupons/${couponId}`, {
+        method: "DELETE",
+        accessToken,
     });
 }
 

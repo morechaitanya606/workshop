@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
     ImageIcon,
     IndianRupee,
@@ -16,10 +16,15 @@ import {
 } from "lucide-react";
 
 import AdminShell from "@/components/admin/AdminShell";
+import CouponWorkshopPicker, {
+    type CouponWorkshopOption,
+} from "@/components/admin/CouponWorkshopPicker";
 import { Stat } from "@/components/ui";
 import {
     createAdminCoupon,
+    deleteAdminCoupon,
     getAdminCoupons,
+    getAdminWorkshops,
     getPlatformSettings,
     toApiErrorMessage,
     updateAdminCoupon,
@@ -42,6 +47,7 @@ import {
     normalizeSpecialPagePath,
     resolveSpecialPageSettings,
 } from "@/lib/special-page";
+import { getIstTodayIso } from "@/lib/ist-date";
 import { formatCurrency } from "@/lib/utils";
 
 const DEFAULT_SERVICE_FEE = 99;
@@ -55,6 +61,8 @@ type CouponFormState = {
     code: string;
     discount_type: "percentage" | "fixed";
     discount_value: string;
+    /** null = all workshops. */
+    applicable_workshop_ids: string[] | null;
 };
 
 type SpecialPageFormState = {
@@ -71,6 +79,7 @@ const INITIAL_COUPON_FORM: CouponFormState = {
     code: "",
     discount_type: "percentage",
     discount_value: "",
+    applicable_workshop_ids: null,
 };
 
 const INITIAL_SPECIAL_PAGE_FORM: SpecialPageFormState = {
@@ -114,6 +123,14 @@ export default function AdminSettingsPage() {
     const [couponMsg, setCouponMsg] = useState<string | null>(null);
     const [updatingCouponId, setUpdatingCouponId] = useState<string | null>(null);
     const [newCoupon, setNewCoupon] = useState<CouponFormState>(INITIAL_COUPON_FORM);
+    const [couponWorkshops, setCouponWorkshops] = useState<CouponWorkshopOption[]>([]);
+    const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
+    const [editingWorkshopIds, setEditingWorkshopIds] = useState<string[] | null>(null);
+    const todayIso = useMemo(() => getIstTodayIso(), []);
+    const workshopTitleById = useMemo(
+        () => new Map(couponWorkshops.map((workshop) => [workshop.id, workshop.title])),
+        [couponWorkshops]
+    );
 
     const [cafePartners, setCafePartners] = useState<CafePartner[]>([]);
     const [newPartnerName, setNewPartnerName] = useState("");
@@ -133,9 +150,11 @@ export default function AdminSettingsPage() {
             setError(null);
 
             try {
-                const [settingsResult, couponsResult] = await Promise.all([
+                const [settingsResult, couponsResult, workshopsResult] = await Promise.all([
                     getPlatformSettings(session.access_token),
                     getAdminCoupons(session.access_token),
+                    // Only for the coupon "Applies to" list: a failure must not block settings.
+                    getAdminWorkshops(session.access_token).catch(() => ({ data: [] })),
                 ]);
 
                 if (cancelled) return;
@@ -169,6 +188,13 @@ export default function AdminSettingsPage() {
                     Array.isArray(couponsResult.coupons)
                         ? couponsResult.coupons.map(normalizeCoupon)
                         : []
+                );
+                setCouponWorkshops(
+                    (workshopsResult.data || []).map((workshop) => ({
+                        id: workshop.id,
+                        title: workshop.title,
+                        date: workshop.date,
+                    }))
                 );
             } catch (loadError) {
                 if (!cancelled) {
@@ -374,6 +400,10 @@ export default function AdminSettingsPage() {
             setCouponMsg("Enter a coupon code and a valid discount value.");
             return;
         }
+        if (newCoupon.applicable_workshop_ids?.length === 0) {
+            setCouponMsg("Choose at least one workshop, or set it to all workshops.");
+            return;
+        }
 
         setCreatingCoupon(true);
         setCouponMsg(null);
@@ -383,6 +413,7 @@ export default function AdminSettingsPage() {
                 code,
                 discount_type: newCoupon.discount_type,
                 discount_value: discountValue,
+                applicable_workshop_ids: newCoupon.applicable_workshop_ids,
             });
 
             setCoupons((prev) => [normalizeCoupon(result.coupon), ...prev]);
@@ -392,6 +423,27 @@ export default function AdminSettingsPage() {
             setCouponMsg(toApiErrorMessage(createError, "Unable to create coupon right now."));
         } finally {
             setCreatingCoupon(false);
+        }
+    };
+
+    const handleDeleteCoupon = async (coupon: CouponRecord) => {
+        if (!session?.access_token) return;
+        const confirmed = window.confirm(
+            `Delete coupon ${coupon.code}? This cannot be undone. Bookings that already used it keep their discount; to pause it instead, set it to Disabled.`
+        );
+        if (!confirmed) return;
+
+        setUpdatingCouponId(coupon.id);
+        setCouponMsg(null);
+        try {
+            await deleteAdminCoupon(session.access_token, coupon.id);
+            setCoupons((prev) => prev.filter((item) => item.id !== coupon.id));
+            if (editingCouponId === coupon.id) setEditingCouponId(null);
+            setCouponMsg(`Coupon ${coupon.code} deleted successfully.`);
+        } catch (deleteError) {
+            setCouponMsg(toApiErrorMessage(deleteError, "Unable to delete the coupon right now."));
+        } finally {
+            setUpdatingCouponId(null);
         }
     };
 
@@ -426,6 +478,51 @@ export default function AdminSettingsPage() {
         }
     };
 
+    const startEditingWorkshops = (coupon: CouponRecord) => {
+        setCouponMsg(null);
+        setEditingCouponId(coupon.id);
+        setEditingWorkshopIds(
+            coupon.applicable_workshop_ids?.length ? coupon.applicable_workshop_ids : null
+        );
+    };
+
+    const handleSaveCouponWorkshops = async (coupon: CouponRecord) => {
+        if (!session?.access_token) return;
+        if (editingWorkshopIds?.length === 0) {
+            setCouponMsg("Choose at least one workshop, or set it to all workshops.");
+            return;
+        }
+
+        setUpdatingCouponId(coupon.id);
+        setCouponMsg(null);
+        try {
+            const result = await updateAdminCoupon(session.access_token, coupon.id, {
+                applicable_workshop_ids: editingWorkshopIds,
+            });
+            setCoupons((prev) =>
+                prev.map((item) => (item.id === coupon.id ? normalizeCoupon(result.coupon) : item))
+            );
+            setEditingCouponId(null);
+            setCouponMsg(`Coupon ${coupon.code} updated successfully.`);
+        } catch (updateError) {
+            setCouponMsg(
+                toApiErrorMessage(updateError, "Unable to update the coupon's workshops.")
+            );
+        } finally {
+            setUpdatingCouponId(null);
+        }
+    };
+
+    /** "All workshops", or the names of the workshops a coupon is limited to. */
+    const describeCouponWorkshops = (coupon: CouponRecord) => {
+        const ids = coupon.applicable_workshop_ids ?? [];
+        if (ids.length === 0) return "All workshops";
+        const names = ids.map((id) => workshopTitleById.get(id) ?? id);
+        return names.length <= 2
+            ? names.join(", ")
+            : `${names.slice(0, 2).join(", ")} +${names.length - 2} more`;
+    };
+
     const serviceFee = Number(settings.service_fee ?? DEFAULT_SERVICE_FEE);
     const activeCoupons = coupons.filter((coupon) => coupon.is_active).length;
     const communityUrlCheck = validateWhatsAppCommunityUrl(communityUrlInput);
@@ -444,8 +541,8 @@ export default function AdminSettingsPage() {
                 </p>
                 <h1 className="heading-md">Platform Settings</h1>
                 <p className="mt-1 text-body text-dark-muted">
-                    Manage the service fee, special page promotion, and platform-wide coupon
-                    campaigns.
+                    Manage the service fee, homepage content and coupon codes (for every workshop or
+                    only selected ones).
                 </p>
             </div>
 
@@ -471,7 +568,7 @@ export default function AdminSettingsPage() {
                 </div>
             ) : (
                 <div className="space-y-8">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
                         <Stat
                             label="Service Fee"
                             value={formatCurrency(serviceFee)}
@@ -897,6 +994,20 @@ export default function AdminSettingsPage() {
                                         className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-dark outline-none focus:border-terracotta/50"
                                     />
                                 </div>
+                                <div className="sm:col-span-4">
+                                    <CouponWorkshopPicker
+                                        workshops={couponWorkshops}
+                                        value={newCoupon.applicable_workshop_ids}
+                                        onChange={(next) =>
+                                            setNewCoupon((prev) => ({
+                                                ...prev,
+                                                applicable_workshop_ids: next,
+                                            }))
+                                        }
+                                        todayIso={todayIso}
+                                        disabled={creatingCoupon}
+                                    />
+                                </div>
                                 <div className="flex flex-wrap items-center justify-between gap-2 sm:col-span-4">
                                     <button
                                         type="submit"
@@ -924,67 +1035,268 @@ export default function AdminSettingsPage() {
                                 </div>
                             </form>
 
-                            <div className="overflow-x-auto">
+                            {/* Phones: one card per coupon instead of a table to swipe through. */}
+                            <ul className="space-y-3 sm:hidden">
+                                {coupons.map((coupon) => {
+                                    const isUpdating = updatingCouponId === coupon.id;
+                                    const isEditing = editingCouponId === coupon.id;
+                                    return (
+                                        <li
+                                            key={coupon.id}
+                                            className="rounded-xl border border-gray-100 p-4 text-sm font-inter"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <span className="mr-auto rounded bg-gray-100 px-2 py-1 font-mono font-bold text-gray-800">
+                                                    {coupon.code}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleToggleCoupon(coupon)}
+                                                    disabled={isUpdating}
+                                                    className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-70 ${
+                                                        coupon.is_active
+                                                            ? "bg-emerald-50 text-emerald-700"
+                                                            : "bg-gray-100 text-gray-500"
+                                                    }`}
+                                                >
+                                                    {coupon.is_active ? "Active" : "Disabled"}
+                                                    {isUpdating ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                    ) : coupon.is_active ? (
+                                                        <ToggleRight className="h-4 w-4" />
+                                                    ) : (
+                                                        <ToggleLeft className="h-4 w-4" />
+                                                    )}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleDeleteCoupon(coupon)}
+                                                    disabled={isUpdating}
+                                                    aria-label={`Delete coupon ${coupon.code}`}
+                                                    title="Delete coupon"
+                                                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-dark-muted transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 -mr-2"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                            <p className="mt-2 font-medium text-dark">
+                                                {coupon.discount_type === "percentage"
+                                                    ? `${coupon.discount_value}% OFF`
+                                                    : `${formatCurrency(coupon.discount_value)} OFF`}
+                                                <span className="font-normal text-dark-muted">
+                                                    {` · ${coupon.used_count} uses`}
+                                                </span>
+                                            </p>
+                                            <div className="mt-1 flex items-center gap-2">
+                                                <span className="min-w-0 truncate text-dark-secondary">
+                                                    {describeCouponWorkshops(coupon)}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        isEditing
+                                                            ? setEditingCouponId(null)
+                                                            : startEditingWorkshops(coupon)
+                                                    }
+                                                    className="shrink-0 text-xs font-semibold text-terracotta"
+                                                >
+                                                    {isEditing ? "Close" : "Edit"}
+                                                </button>
+                                            </div>
+                                            {isEditing && (
+                                                <div className="mt-3 rounded-xl border border-clay/30 bg-cream-50 p-3">
+                                                    <CouponWorkshopPicker
+                                                        workshops={couponWorkshops}
+                                                        value={editingWorkshopIds}
+                                                        onChange={setEditingWorkshopIds}
+                                                        todayIso={todayIso}
+                                                        disabled={isUpdating}
+                                                    />
+                                                    <div className="mt-3 flex gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                void handleSaveCouponWorkshops(
+                                                                    coupon
+                                                                )
+                                                            }
+                                                            disabled={isUpdating}
+                                                            className="btn-secondary !px-4 !py-2 text-sm disabled:opacity-60"
+                                                        >
+                                                            Save
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEditingCouponId(null)}
+                                                            className="rounded-full px-4 py-2 text-sm font-semibold text-dark-muted"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </li>
+                                    );
+                                })}
+                                {coupons.length === 0 && (
+                                    <li className="py-6 text-center text-sm text-dark-muted">
+                                        No coupons created yet.
+                                    </li>
+                                )}
+                            </ul>
+
+                            <div className="hidden overflow-x-auto sm:block">
                                 <table className="w-full text-left text-sm font-inter">
                                     <thead className="border-b border-gray-100 text-xs uppercase tracking-wider text-dark-muted">
                                         <tr>
                                             <th className="pb-3 font-semibold">Code</th>
                                             <th className="pb-3 font-semibold">Discount</th>
+                                            <th className="pb-3 font-semibold">Workshops</th>
                                             <th className="pb-3 font-semibold">Uses</th>
                                             <th className="pb-3 font-semibold">Status</th>
+                                            <th className="pb-3 font-semibold">
+                                                <span className="sr-only">Delete</span>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50">
                                         {coupons.map((coupon) => {
                                             const isUpdating = updatingCouponId === coupon.id;
 
+                                            const isEditing = editingCouponId === coupon.id;
+
                                             return (
-                                                <tr key={coupon.id}>
-                                                    <td className="py-4">
-                                                        <span className="rounded bg-gray-100 px-2 py-1 font-mono font-bold text-gray-800">
-                                                            {coupon.code}
-                                                        </span>
-                                                    </td>
-                                                    <td className="py-4 font-medium text-dark">
-                                                        {coupon.discount_type === "percentage"
-                                                            ? `${coupon.discount_value}% OFF`
-                                                            : `${formatCurrency(coupon.discount_value)} OFF`}
-                                                    </td>
-                                                    <td className="py-4 text-dark-muted">
-                                                        {coupon.used_count} uses
-                                                    </td>
-                                                    <td className="py-4">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                void handleToggleCoupon(coupon)
-                                                            }
-                                                            disabled={isUpdating}
-                                                            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${
-                                                                coupon.is_active
-                                                                    ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                                                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                                                            }`}
-                                                        >
-                                                            {coupon.is_active
-                                                                ? "Active"
-                                                                : "Disabled"}
-                                                            {isUpdating ? (
-                                                                <Loader2 className="ml-1 h-4 w-4 animate-spin" />
-                                                            ) : coupon.is_active ? (
-                                                                <ToggleRight className="ml-1 h-4 w-4" />
-                                                            ) : (
-                                                                <ToggleLeft className="ml-1 h-4 w-4" />
-                                                            )}
-                                                        </button>
-                                                    </td>
-                                                </tr>
+                                                <Fragment key={coupon.id}>
+                                                    <tr>
+                                                        <td className="py-4">
+                                                            <span className="rounded bg-gray-100 px-2 py-1 font-mono font-bold text-gray-800">
+                                                                {coupon.code}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-4 font-medium text-dark">
+                                                            {coupon.discount_type === "percentage"
+                                                                ? `${coupon.discount_value}% OFF`
+                                                                : `${formatCurrency(coupon.discount_value)} OFF`}
+                                                        </td>
+                                                        <td className="py-4 pr-4">
+                                                            <div className="flex max-w-xs items-center gap-2">
+                                                                <span className="truncate text-dark-secondary">
+                                                                    {describeCouponWorkshops(
+                                                                        coupon
+                                                                    )}
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        isEditing
+                                                                            ? setEditingCouponId(
+                                                                                  null
+                                                                              )
+                                                                            : startEditingWorkshops(
+                                                                                  coupon
+                                                                              )
+                                                                    }
+                                                                    className="shrink-0 text-xs font-semibold text-terracotta hover:underline"
+                                                                >
+                                                                    {isEditing ? "Close" : "Edit"}
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                        <td className="py-4 text-dark-muted">
+                                                            {coupon.used_count} uses
+                                                        </td>
+                                                        <td className="py-4">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    void handleToggleCoupon(coupon)
+                                                                }
+                                                                disabled={isUpdating}
+                                                                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${
+                                                                    coupon.is_active
+                                                                        ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                                                        : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                                                }`}
+                                                            >
+                                                                {coupon.is_active
+                                                                    ? "Active"
+                                                                    : "Disabled"}
+                                                                {isUpdating ? (
+                                                                    <Loader2 className="ml-1 h-4 w-4 animate-spin" />
+                                                                ) : coupon.is_active ? (
+                                                                    <ToggleRight className="ml-1 h-4 w-4" />
+                                                                ) : (
+                                                                    <ToggleLeft className="ml-1 h-4 w-4" />
+                                                                )}
+                                                            </button>
+                                                        </td>
+                                                        <td className="py-4 text-right">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    void handleDeleteCoupon(coupon)
+                                                                }
+                                                                disabled={isUpdating}
+                                                                aria-label={`Delete coupon ${coupon.code}`}
+                                                                title="Delete coupon"
+                                                                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-dark-muted transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                    {isEditing && (
+                                                        <tr>
+                                                            <td colSpan={6} className="pb-5">
+                                                                <div className="rounded-xl border border-clay/30 bg-cream-50 p-4">
+                                                                    <CouponWorkshopPicker
+                                                                        workshops={couponWorkshops}
+                                                                        value={editingWorkshopIds}
+                                                                        onChange={
+                                                                            setEditingWorkshopIds
+                                                                        }
+                                                                        todayIso={todayIso}
+                                                                        disabled={isUpdating}
+                                                                    />
+                                                                    <div className="mt-3 flex gap-2">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                void handleSaveCouponWorkshops(
+                                                                                    coupon
+                                                                                )
+                                                                            }
+                                                                            disabled={isUpdating}
+                                                                            className="btn-secondary !px-4 !py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                                                                        >
+                                                                            {isUpdating && (
+                                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                                            )}
+                                                                            Save
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                setEditingCouponId(
+                                                                                    null
+                                                                                )
+                                                                            }
+                                                                            className="rounded-full px-4 py-2 text-sm font-semibold text-dark-muted hover:text-dark"
+                                                                        >
+                                                                            Cancel
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </Fragment>
                                             );
                                         })}
                                         {coupons.length === 0 && (
                                             <tr>
                                                 <td
-                                                    colSpan={4}
+                                                    colSpan={6}
                                                     className="py-8 text-center text-dark-muted"
                                                 >
                                                     No coupons created yet.
