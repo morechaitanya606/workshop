@@ -127,6 +127,7 @@ export function mapWorkshopRowToWorkshop(row: Tables<"workshops">): Workshop {
         earlyBirdDaysAfterListing: Number(row.early_bird_days_after_listing || 0),
         createdAt: row.created_at || undefined,
         approvalStatus: row.approval_status || "approved",
+        templateId: row.template_id || undefined,
     };
 }
 

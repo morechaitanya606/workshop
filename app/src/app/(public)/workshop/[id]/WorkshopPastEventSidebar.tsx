@@ -1,16 +1,21 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
-import { BellRing } from "lucide-react";
+import { ArrowRight, BellRing } from "lucide-react";
 import { slideInRight, standardTransition } from "@/lib/motion-presets";
+import { formatWorkshopDate } from "@/lib/seo";
 import { formatDate } from "@/lib/utils";
 
 export interface WorkshopPastEventSidebarProps {
     workshopDate: string;
     formattedWorkshopTime: string;
+    /** The venue, or the area when the venue field holds a link; may be empty. */
     workshopLocation: string;
     workshopCity: string;
+    /** The next date of this workshop, or its activity page: a past page should lead somewhere. */
+    nextStep?: { href: string; label: string } | null;
 
     notifyState: { similar: boolean; creator: boolean };
     notifyLoadingMode: "similar" | "creator" | null;
@@ -24,6 +29,7 @@ export default function WorkshopPastEventSidebar({
     formattedWorkshopTime,
     workshopLocation,
     workshopCity,
+    nextStep = null,
 
     notifyState,
     notifyLoadingMode,
@@ -32,6 +38,10 @@ export default function WorkshopPastEventSidebar({
     onPastNotify,
 }: WorkshopPastEventSidebarProps) {
     const prefersReducedMotion = usePrefersReducedMotion();
+    const place = [workshopLocation, workshopCity]
+        .map((part) => part?.trim())
+        .filter(Boolean)
+        .join(", ");
 
     return (
         <motion.div
@@ -46,10 +56,22 @@ export default function WorkshopPastEventSidebar({
             <div className="inline-flex items-center gap-2 bg-terracotta/10 text-terracotta text-xs font-inter font-bold uppercase tracking-wider px-3 py-1.5 rounded-full mb-4">
                 Past Event
             </div>
+            {/* With the year: a past date without one reads as this year's. */}
             <p className="text-sm font-inter text-dark-muted mb-5">
-                {formatDate(workshopDate)} &bull; {formattedWorkshopTime} &bull; {workshopLocation},{" "}
-                {workshopCity}
+                {formatWorkshopDate(workshopDate) || formatDate(workshopDate)} &bull;{" "}
+                {formattedWorkshopTime}
+                {place ? <> &bull; {place}</> : null}
             </p>
+
+            {nextStep && (
+                <Link
+                    href={nextStep.href}
+                    className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-terracotta/30 bg-terracotta/5 px-4 py-3 text-sm font-inter font-semibold text-terracotta transition-colors hover:bg-terracotta/10"
+                >
+                    <span>{nextStep.label}</span>
+                    <ArrowRight className="h-4 w-4 shrink-0" />
+                </Link>
+            )}
 
             <div className="space-y-3">
                 <button

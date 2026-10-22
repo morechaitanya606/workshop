@@ -87,15 +87,15 @@ export default async function AdminDashboardPage() {
                 </div>
             ) : (
                 <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+                    <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-8">
                         {statCards.map((card) => {
                             const Icon = card.icon;
                             return (
                                 <div
                                     key={card.label}
-                                    className="rounded-2xl border border-gray-200 bg-white p-5 shadow-soft"
+                                    className="rounded-2xl border border-gray-200 bg-white p-4 shadow-soft sm:p-5"
                                 >
-                                    <div className="mb-4 flex items-center justify-between gap-3">
+                                    <div className="mb-3 flex items-start justify-between gap-2 sm:mb-4 sm:items-center sm:gap-3">
                                         <div
                                             className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${card.iconBg}`}
                                         >
@@ -105,7 +105,7 @@ export default async function AdminDashboardPage() {
                                             {card.label}
                                         </p>
                                     </div>
-                                    <p className="font-playfair text-3xl font-bold text-dark leading-none">
+                                    <p className="font-playfair text-2xl sm:text-3xl font-bold text-dark leading-none">
                                         {card.value}
                                     </p>
                                 </div>

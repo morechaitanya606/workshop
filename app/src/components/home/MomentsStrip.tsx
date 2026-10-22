@@ -28,6 +28,9 @@ const TILE_SHAPES = [
     { className: "w-44 sm:w-56", sizes: "(max-width: 640px) 176px, 224px" },
 ] as const;
 
+const CAPTION_CLASS_NAME =
+    "pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2.5 pt-8 text-left text-xs font-inter font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100";
+
 function Tile({
     photo,
     shapeIndex,
@@ -58,9 +61,16 @@ function Tile({
                 loading="lazy"
                 className="object-cover transition-transform duration-500 ease-out group-hover:scale-105"
             />
-            <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2.5 pt-8 text-left text-xs font-inter font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                {photo.alt}
-            </span>
+            {decorative ? (
+                // The repeats show the same hover caption from a data attribute (CSS `content`),
+                // so the page text does not list every title dozens of times.
+                <span
+                    data-caption={photo.alt}
+                    className={`${CAPTION_CLASS_NAME} after:content-[attr(data-caption)]`}
+                />
+            ) : (
+                <span className={CAPTION_CLASS_NAME}>{photo.alt}</span>
+            )}
         </Link>
     );
 }
@@ -68,11 +78,14 @@ function Tile({
 function Row({
     photos,
     reverse,
+    decorative = false,
     shouldReduceMotion,
     className = "",
 }: {
     photos: MomentPhoto[];
     reverse?: boolean;
+    /** Every tile is a repeat (the second row shows the first row's photos again). */
+    decorative?: boolean;
     shouldReduceMotion: boolean;
     className?: string;
 }) {
@@ -85,7 +98,7 @@ function Row({
             <div className={`flex snap-x gap-3 overflow-x-auto pb-1 scrollbar-hide ${className}`}>
                 {photos.map((photo, index) => (
                     <div key={photo.id} className="snap-start">
-                        <Tile photo={photo} shapeIndex={index} decorative={false} />
+                        <Tile photo={photo} shapeIndex={index} decorative={decorative} />
                     </div>
                 ))}
             </div>
@@ -104,20 +117,19 @@ function Row({
                 }`}
             >
                 {[0, 1].map((copy) =>
-                    half.map((photo, index) => (
-                        <div
-                            key={`${copy}-${index}`}
-                            aria-hidden={copy === 1 || undefined}
-                            data-copy={copy}
-                        >
-                            <Tile
-                                photo={photo}
-                                shapeIndex={index}
-                                // Only the first pass of the first copy is announced/tabbable.
-                                decorative={copy === 1 || index >= photos.length}
-                            />
-                        </div>
-                    ))
+                    half.map((photo, index) => {
+                        // Only the first pass of the first copy is announced/tabbable.
+                        const isRepeat = decorative || copy === 1 || index >= photos.length;
+                        return (
+                            <div
+                                key={`${copy}-${index}`}
+                                aria-hidden={isRepeat || undefined}
+                                data-copy={copy}
+                            >
+                                <Tile photo={photo} shapeIndex={index} decorative={isRepeat} />
+                            </div>
+                        );
+                    })
                 )}
             </div>
         </div>
@@ -152,9 +164,11 @@ export default function MomentsRows({
         <div className={`space-y-3 ${className}`}>
             <Row photos={photos} shouldReduceMotion={shouldReduceMotion} />
             {!shouldReduceMotion && (
+                // Same photos as the first row, which already links and names each one.
                 <Row
                     photos={secondRowPhotos}
                     reverse
+                    decorative
                     shouldReduceMotion={shouldReduceMotion}
                     className="hidden sm:block"
                 />

@@ -7,6 +7,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { categoryGroups, findCategoryGroup, normalizeGroupFilterLabel } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
 import { trackEvent } from "@/lib/analytics";
+import { SEO_CITIES } from "@/lib/seo";
 import {
     fadeIn,
     fadeInUp,
@@ -44,13 +45,9 @@ const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
 
 const OTHER_CATEGORY_VALUE = "__other__";
 const CATEGORY_OPTIONS = categoryGroups.filter((item) => item.id !== "trending");
-// "" is the "All Cities" option. Pune is where workshops are actually hosted today.
-const BASE_CITY_OPTIONS = ["", "Pune", "Mumbai", "Bangalore", "Delhi", "Hyderabad"];
-// Headline marketing figures, deliberately fixed rather than derived from the live counts.
-const EXPLORE_STATS = [
-    { label: "Categories", value: "25+" },
-    { label: "Workshops", value: "150+" },
-];
+// "" is the "All Cities" option. Only cities where workshops are actually hosted are offered:
+// the others always returned an empty page.
+const BASE_CITY_OPTIONS = ["", ...SEO_CITIES.map((city) => city.name)];
 const PAGE_SIZE = 8;
 
 function buildFilterParams(next: FilterState) {
@@ -520,7 +517,6 @@ export default function ExploreClient({
                     filterBarMotionProps={filterBarMotionProps}
                     filterPanelMotionProps={filterPanelMotionProps}
                     appliedFilterSummary={appliedFilterSummary}
-                    exploreStats={EXPLORE_STATS}
                     searchQuery={searchQuery}
                     onSearchQueryChange={setSearchQuery}
                     onSearchEnter={handleSearch}

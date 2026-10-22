@@ -8,7 +8,9 @@ import { getIstTodayIso } from "@/lib/ist-date";
 import { loadExploreWorkshops } from "@/lib/workshop-page-data";
 import ExploreClient from "./ExploreClient";
 
-const title = "Explore Workshops in Pune | Only Workshops";
+// Dates and prices are what this page has that the evergreen /workshops/pune hub does not, so
+// the title leads with them instead of competing for "workshops in Pune".
+const title = "Upcoming Workshop Dates & Prices in Pune | Only Workshops";
 const description =
     "Browse upcoming creative workshops in Pune by date, price and category: pottery, baking, cooking and more. Filter, compare and book your seat online.";
 const canonical = getAbsoluteUrl("/explore");

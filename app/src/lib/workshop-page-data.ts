@@ -1,6 +1,7 @@
 import "server-only";
 
 import { unstable_cache } from "next/cache";
+import { NotCached, readThroughCache, withOneRetry } from "@/lib/cache-success-only";
 
 import * as Sentry from "@sentry/nextjs";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
@@ -296,11 +297,21 @@ export async function loadExploreWorkshops(searchParams: {
     const normalizedCategory = normalizeGroupFilterLabel(query.category);
     const cacheKey = JSON.stringify({ ...query, category: normalizedCategory });
 
-    return unstable_cache(
-        () => fetchExploreWorkshops(query, normalizedCategory),
-        ["explore-workshops", cacheKey],
-        { revalidate: 60, tags: [WORKSHOPS_LIST_TAG] }
-    )();
+    // A failed query is retried once and never cached (see lib/cache-success-only.ts).
+    return readThroughCache(
+        unstable_cache(
+            async () => {
+                const result = await withOneRetry(
+                    () => fetchExploreWorkshops(query, normalizedCategory),
+                    (attempt) => attempt.source === "error"
+                );
+                if (result.source === "error") throw new NotCached(result);
+                return result;
+            },
+            ["explore-workshops", cacheKey],
+            { revalidate: 60, tags: [WORKSHOPS_LIST_TAG] }
+        )
+    );
 }
 
 export type PastWorkshopsResult = {
@@ -385,7 +396,9 @@ async function fetchCityWorkshops(cityName: string): Promise<CityWorkshopsResult
             if (includeApprovalFilter) {
                 dbQuery = dbQuery.eq("approval_status", "approved");
             }
-            return dbQuery.order("date", { ascending: true }).limit(200);
+            // Newest first, like the sitemap: with an oldest-first limit the upcoming sessions
+            // were the rows that fell off once the city had more than the limit.
+            return dbQuery.order("date", { ascending: false }).limit(1000);
         };
 
         let { data, error } = await run(true);
@@ -396,8 +409,8 @@ async function fetchCityWorkshops(cityName: string): Promise<CityWorkshopsResult
         if (!error) {
             const workshops = (data || []).map((row) => mapWorkshopRowToWorkshop(row));
             return {
-                upcoming: workshops.filter((workshop) => workshop.date >= today),
-                past: workshops.filter((workshop) => workshop.date < today).reverse(),
+                upcoming: workshops.filter((workshop) => workshop.date >= today).reverse(),
+                past: workshops.filter((workshop) => workshop.date < today),
                 source: "supabase",
             };
         }
@@ -411,10 +424,22 @@ async function fetchCityWorkshops(cityName: string): Promise<CityWorkshopsResult
 }
 
 export async function loadCityWorkshops(cityName: string): Promise<CityWorkshopsResult> {
-    return unstable_cache(() => fetchCityWorkshops(cityName), ["city-workshops", cityName], {
-        revalidate: 300,
-        tags: [WORKSHOPS_LIST_TAG],
-    })();
+    // A failed query is retried once and never cached: a cached empty list would also have made
+    // the topic pages answer noindex for the whole window.
+    return readThroughCache(
+        unstable_cache(
+            async () => {
+                const result = await withOneRetry(
+                    () => fetchCityWorkshops(cityName),
+                    (attempt) => attempt.source === "error"
+                );
+                if (result.source === "error") throw new NotCached(result);
+                return result;
+            },
+            ["city-workshops", cityName],
+            { revalidate: 300, tags: [WORKSHOPS_LIST_TAG] }
+        )
+    );
 }
 
 export type PlatformSettingsType = {

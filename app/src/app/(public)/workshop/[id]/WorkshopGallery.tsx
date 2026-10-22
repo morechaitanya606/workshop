@@ -15,6 +15,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fadeIn, quickTransition } from "@/lib/motion-presets";
 import { isSupportedWorkshopImageUrl } from "@/lib/workshop-media";
+import { workshopOgTitle } from "@/lib/seo";
 import { VIDEO_IFRAME_ALLOW, VIDEO_IFRAME_SANDBOX, getSafeVideoEmbed } from "@/lib/video-embed";
 import { Dialog } from "@/components/ui/dialog";
 import type { Workshop } from "@/lib/data";
@@ -66,6 +67,10 @@ export default function WorkshopGallery({
         .filter((item) => item.index !== activeImageIndex)
         .slice(0, 2);
     const viewAllThumbnailPosition = imageCount > 2 ? visibleThumbnails.length - 1 : -1;
+    // Descriptive alt text: the first photo says what and where ("… in Baner, Pune"), the rest
+    // are numbered. Thumbnails sit in labelled buttons, so the label still names the control.
+    const photoAlt = (index: number) =>
+        index === 0 ? workshopOgTitle(workshop) : `${workshop.title} – photo ${index + 1}`;
 
     const showAdjacentImage = (direction: 1 | -1) => {
         if (imageCount < 2) return;
@@ -133,7 +138,7 @@ export default function WorkshopGallery({
                         <div className="relative aspect-[16/9] w-full min-h-[240px] sm:col-span-2 sm:row-span-2 sm:min-h-[420px] ring-1 ring-white/50">
                             <Image
                                 src={activeImageSrc}
-                                alt={workshop.title}
+                                alt={photoAlt(activeImageIndex)}
                                 fill
                                 priority
                                 className="object-cover"
@@ -165,24 +170,25 @@ export default function WorkshopGallery({
                                 </button>
                             ) : null}
 
-                            {/* Mobile: the side thumbnails are hidden, so step through with arrows. */}
+                            {/* Arrows on every screen: phones have no side thumbnails, and on laptops the
+                                thumbnails show only a few of the photos. */}
                             {hasThumbnails && (
                                 <>
                                     <button
                                         type="button"
                                         onClick={() => showAdjacentImage(-1)}
                                         aria-label="Previous image"
-                                        className="absolute left-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-dark shadow-soft backdrop-blur-sm sm:hidden"
+                                        className="absolute left-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-dark shadow-soft transition-colors hover:bg-white hover:text-terracotta sm:left-4 sm:h-12 sm:w-12"
                                     >
-                                        <ChevronLeft className="h-5 w-5" />
+                                        <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" />
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => showAdjacentImage(1)}
                                         aria-label="Next image"
-                                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-dark shadow-soft backdrop-blur-sm sm:hidden"
+                                        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-dark shadow-soft transition-colors hover:bg-white hover:text-terracotta sm:right-4 sm:h-12 sm:w-12"
                                     >
-                                        <ChevronRight className="h-5 w-5" />
+                                        <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
                                     </button>
                                 </>
                             )}
@@ -205,7 +211,7 @@ export default function WorkshopGallery({
                                 >
                                     <Image
                                         src={item.src}
-                                        alt=""
+                                        alt={photoAlt(item.index)}
                                         fill
                                         className="object-cover hover:opacity-90 transition-opacity"
                                         sizes="20vw"
@@ -325,7 +331,7 @@ export default function WorkshopGallery({
                         >
                             <Image
                                 src={src}
-                                alt=""
+                                alt={photoAlt(index)}
                                 fill
                                 className="object-cover"
                                 sizes="(max-width: 640px) 45vw, 30vw"
