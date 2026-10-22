@@ -3,21 +3,33 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Workshop } from "@/lib/data";
 import { getAbsoluteUrl, getAppUrl } from "@/lib/env";
+import { getCachedFaqRows, type PublicFaqRow } from "@/lib/faqs";
 import { getIstTodayIso } from "@/lib/ist-date";
 import { serializeJsonLd } from "@/lib/json-ld";
 import {
     breadcrumbJsonLd,
     cityPagePath,
     getSeoCityByName,
-    trimForDescription,
+    SITE_NAME,
     workshopEventJsonLd,
+    workshopImageUrls,
+    workshopOgTitle,
+    workshopSeoDescription,
     workshopSeoTitle,
 } from "@/lib/seo";
+import { isBookingClosedNow } from "@/lib/booking-time";
+import {
+    primaryTopicFor,
+    topicPagePath,
+    topicsForWorkshop,
+    workshopMatchesTopic,
+    type SeoTopic,
+} from "@/lib/seo-topics";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
 import { getPlatformSettings } from "@/lib/workshop-page-data";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
-import WorkshopClient from "./WorkshopClient";
+import WorkshopClient, { type NextSession, type TopicLink } from "./WorkshopClient";
 
 export const revalidate = 60;
 
@@ -38,11 +50,13 @@ export async function generateStaticParams() {
 
     try {
         const serviceClient = createSupabaseServiceClient({ requestTimeoutMs: 10_000 });
+        // Latest dates first, so the upcoming sessions (the pages people book from) are always
+        // inside the limit; the oldest past sessions are the ones left to render on demand.
         const { data, error } = await serviceClient
             .from("workshops")
             .select("id")
             .eq("approval_status", "approved")
-            .order("date", { ascending: true })
+            .order("date", { ascending: false })
             .limit(PRERENDER_WORKSHOP_LIMIT);
 
         if (error || !data) return [];
@@ -53,7 +67,25 @@ export async function generateStaticParams() {
     }
 }
 
+function isSameTemplate(a: Workshop, b: Workshop) {
+    return Boolean(a.templateId) && a.templateId === b.templateId;
+}
+
+/** "Babka & Foccacia Workshop " and "babka & foccacia workshop" are the same workshop. */
+function normalizedTitle(title: string) {
+    return title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
+}
+
+/**
+ * Same template first, then a shared activity, then the same category; the rest follow by date
+ * so the section still fills up. City is not scored: every workshop is in Pune, so it ranked
+ * nothing and "similar" used to mean "the next three dates".
+ */
 function rankSimilarWorkshops(workshops: Workshop[], currentWorkshop: Workshop, todayIso: string) {
+    const currentTopics = new Set(topicsForWorkshop(currentWorkshop).map((topic) => topic.slug));
     return workshops
         .filter(
             (candidate) =>
@@ -61,19 +93,59 @@ function rankSimilarWorkshops(workshops: Workshop[], currentWorkshop: Workshop, 
                 candidate.seatsRemaining > 0 &&
                 candidate.date >= todayIso
         )
-        .map((candidate) => ({
-            candidate,
-            score:
-                Number(candidate.category === currentWorkshop.category) * 2 +
-                Number(candidate.city === currentWorkshop.city),
-        }))
-        .filter((item) => item.score > 0)
+        .map((candidate) => {
+            // Counted as well as scored: sourdough + baking beats the cooking hub alone.
+            const sharedTopics = topicsForWorkshop(candidate).filter((topic) =>
+                currentTopics.has(topic.slug)
+            ).length;
+            return {
+                candidate,
+                sharedTopics,
+                score:
+                    Number(isSameTemplate(candidate, currentWorkshop)) * 4 +
+                    Number(sharedTopics > 0) * 3 +
+                    Number(candidate.category === currentWorkshop.category),
+            };
+        })
         .sort((a, b) => {
             if (b.score !== a.score) return b.score - a.score;
+            if (b.sharedTopics !== a.sharedTopics) return b.sharedTopics - a.sharedTopics;
             return a.candidate.date.localeCompare(b.candidate.date);
         })
         .map((item) => item.candidate)
         .slice(0, SIMILAR_WORKSHOP_LIMIT);
+}
+
+/**
+ * Where a past session's page sends people next: another date of the same workshop (same
+ * template, else the same title), else the soonest upcoming workshop of its activity. The rows
+ * are already sorted by date.
+ */
+function findNextSession(
+    upcoming: Workshop[],
+    currentWorkshop: Workshop,
+    topic: SeoTopic | null
+): NextSession | null {
+    const title = normalizedTitle(currentWorkshop.title);
+    // "Upcoming" is by date only: a session later today may already be past its booking cutoff.
+    const now = new Date();
+    const bookable = upcoming.filter(
+        (candidate) => !isBookingClosedNow(candidate.date, candidate.time, now)
+    );
+    const sameWorkshop =
+        bookable.find((candidate) => isSameTemplate(candidate, currentWorkshop)) ??
+        bookable.find((candidate) => normalizedTitle(candidate.title) === title);
+    const next =
+        sameWorkshop ??
+        (topic ? bookable.find((candidate) => workshopMatchesTopic(candidate, topic)) : undefined);
+    if (!next) return null;
+    return {
+        id: next.id,
+        title: next.title,
+        date: next.date,
+        time: next.time,
+        sameWorkshop: Boolean(sameWorkshop),
+    };
 }
 
 export async function generateMetadata({
@@ -87,10 +159,17 @@ export async function generateMetadata({
         return { title: "Workshop Not Found | Only Workshops" };
     }
     const canonicalUrl = getAbsoluteUrl(`/workshop/${workshop.id}`);
-    const socialPreviewUrl = workshop.coverImage.startsWith("http")
-        ? workshop.coverImage
-        : getAbsoluteUrl(workshop.coverImage);
-    const description = trimForDescription(workshop.description);
+    // getAbsoluteUrl leaves http(s) URLs as they are; an unsupported cover is cleaned to "".
+    const socialPreviewUrl = getAbsoluteUrl(workshop.coverImage || "/images/og-default.jpg");
+    // What, where and when (date, venue, price) instead of the first lines of host copy.
+    const description = workshopSeoDescription(
+        workshop,
+        getIstTodayIso(),
+        primaryTopicFor(workshop)
+    );
+    // "{title} in {area, }Pune": the <title> keeps the site name, social cards do not need it.
+    const socialTitle = workshopOgTitle(workshop);
+    const socialImage = { url: socialPreviewUrl, alt: socialTitle };
     return {
         title: workshopSeoTitle(workshop),
         description,
@@ -98,17 +177,19 @@ export async function generateMetadata({
             canonical: canonicalUrl,
         },
         openGraph: {
-            title: workshop.title,
+            title: socialTitle,
             description,
             url: canonicalUrl,
+            siteName: SITE_NAME,
+            locale: "en_IN",
             type: "website",
-            images: [{ url: socialPreviewUrl }],
+            images: [socialImage],
         },
         twitter: {
             card: "summary_large_image",
-            title: workshop.title,
+            title: socialTitle,
             description,
-            images: [socialPreviewUrl],
+            images: [socialImage],
         },
     };
 }
@@ -142,7 +223,8 @@ const getWorkshop = cache(async (id: string) => {
     return null;
 });
 
-async function getSimilarWorkshops(workshop: Workshop, todayIso: string) {
+/** Up to 30 bookable upcoming workshops by date: the pool for "similar" and "next date". */
+async function getUpcomingWorkshops(workshop: Workshop, todayIso: string): Promise<Workshop[]> {
     if (isSupabaseServiceConfigured) {
         try {
             const serviceClient = createSupabaseServiceClient();
@@ -168,11 +250,7 @@ async function getSimilarWorkshops(workshop: Workshop, todayIso: string) {
             }
 
             if (!error) {
-                return rankSimilarWorkshops(
-                    (data || []).map((row) => mapWorkshopRowToWorkshop(row)),
-                    workshop,
-                    todayIso
-                );
+                return (data || []).map((row) => mapWorkshopRowToWorkshop(row));
             }
         } catch {
             // fallback
@@ -191,14 +269,20 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
         notFound();
     }
 
-    const [similarWorkshops, platformSettings] = await Promise.all([
-        getSimilarWorkshops(workshop, todayIso),
+    const [upcomingWorkshops, platformSettings, faqs] = await Promise.all([
+        getUpcomingWorkshops(workshop, todayIso),
         getPlatformSettings(),
+        // Server-rendered so the answers are in the HTML; WorkshopFAQ fetches only without them.
+        getCachedFaqRows().catch((): PublicFaqRow[] => []),
     ]);
     const canonicalUrl = getAbsoluteUrl(`/workshop/${workshop.id}`);
-    const socialPreviewUrl = workshop.coverImage.startsWith("http")
-        ? workshop.coverImage
-        : getAbsoluteUrl(workshop.coverImage);
+    const seoCity = getSeoCityByName(workshop.city);
+    const topic = primaryTopicFor(workshop);
+    // Plain data: a SeoTopic holds a RegExp, which cannot be passed to a client component.
+    const topicLink: TopicLink | null =
+        seoCity && topic ? { name: topic.name, href: topicPagePath(seoCity, topic) } : null;
+    const similarWorkshops = rankSimilarWorkshops(upcomingWorkshops, workshop, todayIso);
+    const nextSession = findNextSession(upcomingWorkshops, workshop, topic);
 
     // Event data only while the workshop is still ahead: Google ignores ended events, and the
     // markup ("scheduled", "in stock") would contradict the page's own "Past Event" label.
@@ -206,25 +290,17 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
         workshop.date >= todayIso
             ? workshopEventJsonLd(workshop, {
                   canonicalUrl,
-                  imageUrl: socialPreviewUrl,
+                  imageUrls: workshopImageUrls(workshop, getAbsoluteUrl),
                   siteUrl: getAppUrl(),
               })
             : null;
-    // Mirrors the visible breadcrumb in WorkshopClient: Home > city > category > workshop.
-    const seoCity = getSeoCityByName(workshop.city);
+    // Mirrors the visible breadcrumb in WorkshopClient: Home > city > activity > workshop. A
+    // workshop that fits no activity page skips that level rather than linking /explore, which
+    // canonicalises away.
     const breadcrumb = breadcrumbJsonLd([
         { name: "Home", url: getAbsoluteUrl("/") },
         ...(seoCity ? [{ name: seoCity.name, url: getAbsoluteUrl(cityPagePath(seoCity)) }] : []),
-        ...(workshop.category
-            ? [
-                  {
-                      name: workshop.category,
-                      url: getAbsoluteUrl(
-                          `/explore?category=${encodeURIComponent(workshop.category)}`
-                      ),
-                  },
-              ]
-            : []),
+        ...(topicLink ? [{ name: topicLink.name, url: getAbsoluteUrl(topicLink.href) }] : []),
         { name: workshop.title, url: canonicalUrl },
     ]);
 
@@ -245,6 +321,9 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
                 similarWorkshops={similarWorkshops}
                 platformSettings={platformSettings}
                 todayIso={todayIso}
+                topicLink={topicLink}
+                nextSession={nextSession}
+                initialFaqs={faqs}
             />
         </>
     );

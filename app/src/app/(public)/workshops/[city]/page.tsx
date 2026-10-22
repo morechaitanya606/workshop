@@ -4,10 +4,8 @@ import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import Footer from "@/components/Footer";
 import WorkshopCard from "@/components/WorkshopCard";
-import { BOOKING_HOLD_MINUTES } from "@/lib/booking-time";
 import { getCachedPlatformSettings } from "@/lib/cached-reads";
-import { CANCELLATION_POLICY } from "@/lib/cancellation-policy";
-import type { Workshop } from "@/lib/data";
+import { buildLandingFaqs, faqPageJsonLd, topicGroups } from "@/lib/city-faqs";
 import { getAbsoluteUrl } from "@/lib/env";
 import { getIstTodayIso } from "@/lib/ist-date";
 import { serializeJsonLd } from "@/lib/json-ld";
@@ -15,12 +13,13 @@ import {
     DEFAULT_OG_IMAGES,
     INSTAGRAM_URL,
     SEO_CITIES,
+    SITE_NAME,
     breadcrumbJsonLd,
     cityPagePath,
+    firstSentence,
     getSeoCityBySlug,
-    type SeoCity,
 } from "@/lib/seo";
-import { formatCurrency } from "@/lib/utils";
+import { topicPagePath } from "@/lib/seo-topics";
 import { loadCityWorkshops } from "@/lib/workshop-page-data";
 
 export const revalidate = 300;
@@ -46,6 +45,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
             description: city.metaDescription,
             url: canonicalUrl,
             type: "website",
+            // A page-level openGraph replaces the root one, so these are repeated here.
+            siteName: SITE_NAME,
+            locale: "en_IN",
             images: DEFAULT_OG_IMAGES,
         },
         twitter: {
@@ -54,73 +56,6 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
             description: city.metaDescription,
         },
     };
-}
-
-type Faq = { question: string; answer: string; link?: { href: string; label: string } };
-
-function joinList(items: string[]) {
-    if (items.length <= 1) return items[0] ?? "";
-    return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
-}
-
-function range(values: number[]) {
-    const clean = values.filter((value) => Number.isFinite(value) && value > 0);
-    return clean.length ? { min: Math.min(...clean), max: Math.max(...clean) } : null;
-}
-
-/** Answers come from live data and shared policy constants, so they cannot drift. */
-function buildFaqs(city: SeoCity, workshops: Workshop[], whatsappUrl: string | undefined) {
-    const categories = [...new Set(workshops.map((w) => w.category).filter(Boolean))];
-    const prices = range(workshops.map((w) => w.price));
-    const seats = range(workshops.map((w) => w.maxSeats));
-    const faqs: Faq[] = [];
-
-    if (categories.length) {
-        const groupSize = seats
-            ? seats.min === seats.max
-                ? ` Groups are kept to around ${seats.max} people.`
-                : ` Groups are kept small, around ${seats.min} to ${seats.max} people.`
-            : "";
-        faqs.push({
-            question: `What kind of workshops can I do in ${city.name}?`,
-            answer: `Hands-on ${joinList(categories.map((c) => c.toLowerCase()))} workshops led by local hosts.${groupSize}`,
-        });
-    }
-
-    faqs.push({
-        question: `Where do the workshops in ${city.name} take place?`,
-        answer: `At partner studios, cafés and kitchens around ${city.name}. The exact venue and address are on each workshop's page.`,
-    });
-
-    if (prices) {
-        faqs.push({
-            question: `How much does a workshop in ${city.name} cost?`,
-            answer:
-                prices.min === prices.max
-                    ? `Workshops have been ${formatCurrency(prices.min)} per person. Each workshop page shows the full price before you pay.`
-                    : `Workshops have ranged from ${formatCurrency(prices.min)} to ${formatCurrency(prices.max)} per person. Each workshop page shows the full price before you pay.`,
-        });
-    }
-
-    faqs.push({
-        question: "How do I book a seat?",
-        answer: `Pick a workshop and the number of seats, then pay online with UPI, cards or net banking. Your seats are held for ${BOOKING_HOLD_MINUTES} minutes while you pay, and your confirmation arrives by email.`,
-    });
-
-    faqs.push({
-        question: "Can I cancel my booking?",
-        answer: `${CANCELLATION_POLICY.earlyBirdSummary} ${CANCELLATION_POLICY.noCancellationSummary} ${CANCELLATION_POLICY.hostCancellationSummary}`,
-        link: { href: "/cancellations", label: "Read the full cancellation policy" },
-    });
-
-    faqs.push({
-        question: `How do I hear about new workshops in ${city.name}?`,
-        answer: whatsappUrl
-            ? "Join our WhatsApp community or follow @only_workshops on Instagram, where new dates are shared."
-            : "Follow @only_workshops on Instagram, where new dates are shared.",
-    });
-
-    return faqs;
 }
 
 export default async function CityWorkshopsPage({ params }: Params) {
@@ -133,16 +68,10 @@ export default async function CityWorkshopsPage({ params }: Params) {
     ]);
     const todayIso = getIstTodayIso();
     const whatsappUrl = settings.whatsapp_community_url?.trim() || undefined;
-    const allWorkshops = [...upcoming, ...past];
     const recentPast = past.slice(0, 12);
-    const faqs = buildFaqs(city, allWorkshops, whatsappUrl);
-
-    const categories = Object.entries(
-        allWorkshops.reduce<Record<string, number>>((counts, workshop) => {
-            if (workshop.category) counts[workshop.category] = (counts[workshop.category] || 0) + 1;
-            return counts;
-        }, {})
-    ).sort((a, b) => b[1] - a[1]);
+    const faqs = buildLandingFaqs({ city, upcoming, past, whatsappUrl });
+    // Activity pages that pass the thin-content rule; the others stay unlinked from here.
+    const topics = topicGroups(upcoming, past).filter((group) => group.indexable);
 
     const pageUrl = getAbsoluteUrl(cityPagePath(city));
     const structuredData = [
@@ -161,15 +90,7 @@ export default async function CityWorkshopsPage({ params }: Params) {
                 name: workshop.title,
             })),
         },
-        {
-            "@context": "https://schema.org",
-            "@type": "FAQPage",
-            mainEntity: faqs.map((faq) => ({
-                "@type": "Question",
-                name: faq.question,
-                acceptedAnswer: { "@type": "Answer", text: faq.answer },
-            })),
-        },
+        faqPageJsonLd(faqs),
     ];
 
     return (
@@ -210,16 +131,24 @@ export default async function CityWorkshopsPage({ params }: Params) {
                             </p>
                         ))}
                     </div>
-                    {categories.length > 0 && (
-                        <ul className="mt-6 flex flex-wrap gap-2" aria-label="Workshop categories">
-                            {categories.map(([category, count]) => (
-                                <li key={category}>
+                    {topics.length > 0 && (
+                        <ul
+                            className="mt-6 flex flex-wrap gap-2"
+                            aria-label="Workshops by activity"
+                        >
+                            {topics.map(({ topic, counts }) => (
+                                <li key={topic.slug}>
                                     <Link
-                                        href={`/explore?city=${encodeURIComponent(city.name)}&category=${encodeURIComponent(category)}`}
+                                        href={topicPagePath(city, topic)}
                                         className="inline-flex items-center rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-inter text-dark hover:border-terracotta hover:text-terracotta transition-colors"
                                     >
-                                        {category}
-                                        <span className="ml-2 text-dark-muted">{count}</span>
+                                        {topic.name}
+                                        <span className="ml-2 text-dark-muted">
+                                            {counts.total}
+                                            <span className="sr-only">
+                                                {counts.total === 1 ? " session" : " sessions"}
+                                            </span>
+                                        </span>
                                     </Link>
                                 </li>
                             ))}
@@ -277,6 +206,41 @@ export default async function CityWorkshopsPage({ params }: Params) {
                     )}
                 </div>
             </section>
+
+            {topics.length > 0 && (
+                <section className="section-padding pb-14" aria-labelledby="activities-heading">
+                    <div className="max-w-7xl mx-auto">
+                        <h2 id="activities-heading" className="heading-md mb-6">
+                            Workshops by activity in {city.name}
+                        </h2>
+                        {/* One evergreen line per activity page, so each link has real context. */}
+                        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            {topics.map(({ topic, counts }) => (
+                                <li
+                                    key={topic.slug}
+                                    className="rounded-2xl border border-gray-200 bg-white p-5 font-inter"
+                                >
+                                    <h3 className="mb-2 font-semibold text-dark">
+                                        <Link
+                                            href={topicPagePath(city, topic)}
+                                            className="hover:text-terracotta transition-colors"
+                                        >
+                                            {topic.linkLabel} in {city.name}
+                                        </Link>
+                                    </h3>
+                                    <p className="text-body-sm">{firstSentence(topic.intro[0])}</p>
+                                    {counts.upcoming > 0 && (
+                                        <p className="mt-3 text-sm font-semibold text-terracotta">
+                                            {counts.upcoming} upcoming{" "}
+                                            {counts.upcoming === 1 ? "date" : "dates"}
+                                        </p>
+                                    )}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </section>
+            )}
 
             {recentPast.length > 0 && (
                 <section className="section-padding pb-14" aria-labelledby="past-heading">

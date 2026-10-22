@@ -2,6 +2,8 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 
+import { NotCached, readThroughCache } from "@/lib/cache-success-only";
+
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
 import type { PlatformSettings } from "@/lib/api-client";
 import type { Json } from "@/lib/database.types";
@@ -31,7 +33,8 @@ async function readPlatformSettings(): Promise<PlatformSettings> {
         .in("setting_key", [...PUBLIC_SETTING_KEYS]);
 
     if (error || !data) {
-        return {};
+        // Thrown, not returned: an empty result here would be cached for an hour.
+        throw new NotCached<PlatformSettings>({});
     }
 
     const record = data.reduce(
@@ -53,8 +56,16 @@ async function readPlatformSettings(): Promise<PlatformSettings> {
  * `select *` per view). Reading them here lets the value ride along in the already
  * cached RSC payload instead.
  */
-export const getCachedPlatformSettings = unstable_cache(
-    readPlatformSettings,
+const cachedPlatformSettings = unstable_cache(
+    // One retry: a failure falls back to {} (no service fee, hero image or links) site-wide.
+    () =>
+        readPlatformSettings().catch((error: unknown) =>
+            error instanceof NotCached ? readPlatformSettings() : Promise.reject(error)
+        ),
     ["platform-settings"],
     { tags: [PLATFORM_SETTINGS_TAG], revalidate: 3600 }
 );
+
+export function getCachedPlatformSettings(): Promise<PlatformSettings> {
+    return readThroughCache(cachedPlatformSettings);
+}

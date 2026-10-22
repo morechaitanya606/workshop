@@ -5,12 +5,20 @@ import { ChevronDown } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { getFaqs, type FaqItem } from "@/lib/api-client";
 
-export default function WorkshopFAQ() {
+export interface WorkshopFAQProps {
+    /** Rows read on the server: rendered into the HTML, with no request from the browser. */
+    initialFaqs?: FaqItem[];
+}
+
+export default function WorkshopFAQ({ initialFaqs }: WorkshopFAQProps) {
     const [openIndex, setOpenIndex] = useState<number | null>(null);
-    const [faqs, setFaqs] = useState<FaqItem[]>([]);
+    const [faqs, setFaqs] = useState<FaqItem[]>(initialFaqs ?? []);
     const prefersReducedMotion = Boolean(useReducedMotion());
+    // An empty list may be a failed server read, so it still falls back to the API.
+    const hasServerFaqs = Boolean(initialFaqs && initialFaqs.length > 0);
 
     useEffect(() => {
+        if (hasServerFaqs) return;
         let cancelled = false;
 
         const loadFaqData = async () => {
@@ -31,7 +39,7 @@ export default function WorkshopFAQ() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [hasServerFaqs]);
 
     if (faqs.length === 0) {
         return null;
@@ -98,6 +106,9 @@ export default function WorkshopFAQ() {
                                 </motion.div>
                             )}
                         </AnimatePresence>
+                        {/* A closed answer stays in the HTML, hidden, so search engines read
+                            the whole FAQ and not only the questions. */}
+                        {openIndex !== i && <p hidden>{faq.answer}</p>}
                     </div>
                 ))}
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -33,6 +33,7 @@ import {
     removeFavorite,
     toApiErrorMessage,
     updateWorkshopNotifications,
+    type FaqItem,
 } from "@/lib/api-client";
 import { addRecentlyViewed } from "@/lib/recently-viewed";
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils";
@@ -50,7 +51,15 @@ import {
     standardTransition,
 } from "@/lib/motion-presets";
 import type { PlatformSettingsType } from "@/lib/workshop-page-data";
-import { cityPagePath, getSeoCityByName } from "@/lib/seo";
+import {
+    areaWithCity,
+    cityPagePath,
+    displayVenue,
+    formatWorkshopDate,
+    getSeoCityByName,
+    splitHostNames,
+    workshopArea,
+} from "@/lib/seo";
 import WorkshopGallery from "./WorkshopGallery";
 import WorkshopBookingSidebar from "./WorkshopBookingSidebar";
 import WorkshopPastEventSidebar from "./WorkshopPastEventSidebar";
@@ -126,11 +135,58 @@ function extractAvailableSeatsFromBookingError(error: unknown) {
 
     return null;
 }
+
+/** Joins place names with ", ", skipping one the earlier parts already name ("Pune" twice). */
+function joinPlace(parts: (string | null | undefined)[]) {
+    const kept: string[] = [];
+    for (const part of parts) {
+        const clean = part?.trim();
+        if (clean && !kept.join(" ").toLowerCase().includes(clean.toLowerCase())) {
+            kept.push(clean);
+        }
+    }
+    return kept.join(", ");
+}
+
+/** "Ice Plunge" -> "Ice plunge", for a topic name that starts a sentence. */
+function sentenceCase(text: string) {
+    const lower = text.toLowerCase();
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
+/** "Chef Dhanshri & Chef Krina" -> "DK", for the host badge when there is no real avatar. */
+function hostInitials(hostName: string) {
+    const names = splitHostNames(hostName).map((name) =>
+        name.replace(/^(?:chef|dr|mr|mrs|ms)\.?\s+/i, "")
+    );
+    const letters =
+        names.length > 1
+            ? names.map((name) => name.charAt(0))
+            : (names[0] ?? "").split(/\s+/).map((word) => word.charAt(0));
+    return letters.filter(Boolean).slice(0, 2).join("").toUpperCase();
+}
+
+/** The workshop's activity page, e.g. { name: "Pottery", href: "/workshops/pune/pottery" }. */
+export type TopicLink = { name: string; href: string };
+
+/**
+ * Where a past session sends people: another date of the same workshop (`sameWorkshop`), or the
+ * soonest upcoming workshop of the same activity.
+ */
+export type NextSession = Pick<Workshop, "id" | "title" | "date" | "time"> & {
+    sameWorkshop: boolean;
+};
+
 export interface WorkshopClientProps {
     workshop: Workshop;
     similarWorkshops?: Workshop[];
     platformSettings?: PlatformSettingsType;
     todayIso: string;
+    /** Null when no activity page fits: the breadcrumb then skips that level. */
+    topicLink?: TopicLink | null;
+    nextSession?: NextSession | null;
+    /** FAQ rows read on the server, so the answers are part of the HTML. */
+    initialFaqs?: FaqItem[];
 }
 
 export default function WorkshopClient({
@@ -138,6 +194,9 @@ export default function WorkshopClient({
     similarWorkshops = [],
     platformSettings,
     todayIso,
+    topicLink = null,
+    nextSession = null,
+    initialFaqs,
 }: WorkshopClientProps) {
     const router = useRouter();
     const prefersReducedMotion = usePrefersReducedMotion();
@@ -274,6 +333,108 @@ export default function WorkshopClient({
         }
     })();
 
+    // Place names as they may be printed: never a pasted link, and the area only when the
+    // address itself names one.
+    const venue = displayVenue(workshop);
+    const area = workshopArea(workshop);
+    const cityName = workshop.city?.trim() || "Pune";
+    const areaAndCity = areaWithCity(area, cityName);
+    const venueOrArea = venue || area || "";
+    const wherePlace = joinPlace([venue, area, cityName]);
+    const addressText =
+        workshop.eventAddress && !isWebUrl(workshop.eventAddress)
+            ? workshop.eventAddress.trim()
+            : "";
+    // The full address names the venue already in some rows; do not print it twice.
+    const keyDetailsPlace = addressText
+        ? joinPlace([
+              addressText.toLowerCase().includes(venue.toLowerCase()) ? "" : venue,
+              addressText,
+              cityName,
+          ])
+        : wherePlace;
+    const fullDate = formatWorkshopDate(workshop.date) || formatDate(workshop.date);
+    const activityLabel = topicLink
+        ? sentenceCase(topicLink.name)
+        : workshop.category?.trim()
+          ? sentenceCase(workshop.category)
+          : "";
+    // Some rows reuse the cover photo as the host avatar, which showed the cover a second time
+    // under the host's name. Show the host's initials instead (the default icon without a name).
+    const hostAvatarIsCover =
+        Boolean(workshop.coverImage) && workshop.hostAvatar === workshop.coverImage;
+    const hostBadgeInitials = hostAvatarIsCover ? hostInitials(workshop.hostName) : "";
+    const hostAvatarSrc = hostAvatarIsCover ? "/images/icon.png" : workshop.hostAvatar;
+
+    // A past page leads to the next date: the same workshop again, the next one of its
+    // activity, or the activity (or city) page.
+    const nextSessionDate = nextSession ? formatWorkshopDate(nextSession.date) : "";
+    // Another workshop of the activity is named, so "Next date" never points at a different one.
+    const nextActivity = topicLink ? topicLink.name.toLowerCase() : "similar";
+    const pastNextStep = nextSession
+        ? {
+              href: `/workshop/${nextSession.id}`,
+              label: nextSession.sameWorkshop
+                  ? `Next date: ${nextSessionDate} – Book`
+                  : `Next ${nextActivity} workshop: ${nextSession.title}, ${nextSessionDate} – Book`,
+          }
+        : topicLink
+          ? {
+                href: topicLink.href,
+                label: `More ${topicLink.name.toLowerCase()} workshops in ${cityName}`,
+            }
+          : seoCity
+            ? {
+                  href: cityPagePath(seoCity),
+                  label: `See upcoming workshops in ${seoCity.name}`,
+              }
+            : null;
+
+    // "Key details": only what this row states, so it stays true for every kind of workshop.
+    const keyDetails: { label: string; value: ReactNode }[] = [
+        {
+            label: "When",
+            value: [fullDate, workshop.time ? formattedWorkshopTime : "", workshop.duration?.trim()]
+                .filter(Boolean)
+                .join(" · "),
+        },
+        { label: "Where", value: keyDetailsPlace },
+        // A price of 0 is a missing price, not a free workshop.
+        ...(workshop.price > 0
+            ? [
+                  {
+                      label: "Price",
+                      value: `${formatCurrency(currentPricePerGuest)} per person, incl. GST${
+                          isEbEligible
+                              ? ` (early-bird price; regular ${formatCurrency(workshop.price)})`
+                              : ""
+                      }`,
+                  },
+              ]
+            : []),
+        ...(workshop.maxSeats > 0
+            ? [{ label: "Group size", value: `Up to ${workshop.maxSeats} people` }]
+            : []),
+        ...(workshop.hostName?.trim()
+            ? [{ label: "Hosted by", value: workshop.hostName.trim() }]
+            : []),
+        ...(topicLink
+            ? [
+                  {
+                      label: "Activity",
+                      value: (
+                          <Link
+                              href={topicLink.href}
+                              className="font-semibold text-terracotta hover:text-terracotta/80 transition-colors"
+                          >
+                              {topicLink.name} workshops in {cityName}
+                          </Link>
+                      ),
+                  },
+              ]
+            : []),
+    ];
+
     useEffect(() => {
         setIsMounted(true);
         setNowMs(Date.now());
@@ -383,15 +544,13 @@ export default function WorkshopClient({
         onClose: closeVideoModal,
     });
 
-    // Admins sometimes paste a Google Maps share link as the address. It is not searchable text,
-    // so it is left out of the map query and used as the "Open" target instead.
+    // Admins sometimes paste a Google Maps share link as the address, or as the venue. It is not
+    // searchable or printable text, so it is left out of the map query and the visible venue,
+    // and used as the "Open" target instead.
     const addressIsLink = isWebUrl(workshop.eventAddress);
-    const pastedMapsLink = googleMapsLinkOf(workshop.eventAddress);
-    const locationQuery = [
-        workshop.location,
-        addressIsLink ? "" : workshop.eventAddress,
-        workshop.city,
-    ]
+    const pastedMapsLink =
+        googleMapsLinkOf(workshop.eventAddress) ?? googleMapsLinkOf(workshop.location);
+    const locationQuery = [venue, addressIsLink ? "" : workshop.eventAddress, workshop.city]
         .map((part) => part?.trim())
         .filter(Boolean)
         .join(", ");
@@ -682,13 +841,20 @@ export default function WorkshopClient({
                                 <ChevronRight className="w-3.5 h-3.5 shrink-0" />
                             </>
                         )}
-                        <Link
-                            href={`/explore?category=${encodeURIComponent(workshop.category)}`}
-                            className="inline-flex items-center hover:text-terracotta transition-colors"
-                        >
-                            {workshop.category}
-                        </Link>
-                        <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                        {/* The activity page, not /explore?category=, which canonicalises away.
+                            No activity page fits: the level is left out, as in the JSON-LD. The
+                            name truncates with the title on narrow phones. */}
+                        {topicLink && (
+                            <>
+                                <Link
+                                    href={topicLink.href}
+                                    className="inline-flex min-w-0 items-center hover:text-terracotta transition-colors"
+                                >
+                                    <span className="truncate">{topicLink.name}</span>
+                                </Link>
+                                <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                            </>
+                        )}
                         <span className="min-w-0 truncate text-dark" aria-current="page">
                             {workshop.title}
                         </span>
@@ -724,15 +890,45 @@ export default function WorkshopClient({
                                 className="mt-6"
                             >
                                 {isPastWorkshop && (
-                                    <div className="inline-flex items-center gap-2 bg-terracotta/10 text-terracotta text-xs font-inter font-bold uppercase tracking-wider px-3 py-1.5 rounded-full mb-4">
-                                        Past Event
+                                    <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                        <div className="inline-flex items-center gap-2 bg-terracotta/10 text-terracotta text-xs font-inter font-bold uppercase tracking-wider px-3 py-1.5 rounded-full">
+                                            Past Event
+                                        </div>
+                                        {pastNextStep && (
+                                            <Link
+                                                href={pastNextStep.href}
+                                                className="inline-flex items-center gap-1.5 text-sm font-inter font-semibold text-terracotta hover:text-terracotta/80 transition-colors"
+                                            >
+                                                {pastNextStep.label}
+                                                <ArrowRight className="h-4 w-4 shrink-0" />
+                                            </Link>
+                                        )}
                                     </div>
                                 )}
-                                <h1 className="heading-lg font-inter mb-3">{workshop.title}</h1>
+                                <h1 className="heading-lg font-inter mb-2">{workshop.title}</h1>
+                                {/* What, where and who in one line, linking the activity page. */}
+                                <p className="mb-3 text-sm font-inter text-dark-secondary">
+                                    {topicLink ? (
+                                        <Link
+                                            href={topicLink.href}
+                                            className="font-semibold text-terracotta hover:text-terracotta/80 transition-colors"
+                                        >
+                                            {activityLabel} workshop
+                                        </Link>
+                                    ) : activityLabel ? (
+                                        `${activityLabel} workshop`
+                                    ) : (
+                                        "Workshop"
+                                    )}{" "}
+                                    in {areaAndCity}
+                                    {workshop.hostName ? (
+                                        <> &middot; Hosted by {workshop.hostName}</>
+                                    ) : null}
+                                </p>
                                 <div className="flex flex-wrap items-center gap-4 text-sm font-inter text-dark-secondary">
                                     <div className="flex items-center gap-1.5">
                                         <MapPin className="w-4 h-4 text-dark-muted" />{" "}
-                                        {workshop.location}, {workshop.city}
+                                        {venue ? joinPlace([venue, cityName]) : areaAndCity}
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         <Clock className="w-4 h-4 text-dark-muted" />{" "}
@@ -780,7 +976,7 @@ export default function WorkshopClient({
                                             {formatDate(workshop.date)}
                                         </p>
                                         <p className="mt-1 text-[11px] font-inter text-dark-muted">
-                                            {workshop.location}
+                                            {venue || areaAndCity}
                                         </p>
                                     </div>
                                     <div className="rounded-2xl border border-clay/40 bg-white/95 px-4 py-3 shadow-soft">
@@ -999,37 +1195,50 @@ export default function WorkshopClient({
                                     }
                                     className="card-section"
                                 >
+                                    {/* Built only from this workshop's own fields. The text that was
+                                        here was the same on every page and wrong for some (an ice
+                                        plunge does not send you home "with something you made"). */}
                                     <span className="eyebrow-label">Snapshot</span>
-                                    <h2 className="heading-sm font-inter mb-4">What to expect</h2>
-                                    <div className="text-sm font-inter text-dark-secondary space-y-1.5">
-                                        <p>
-                                            No prior experience needed – this workshop is designed
-                                            for complete beginners as well as hobbyists.
-                                        </p>
-                                        <p>
-                                            Small group session in the city with all core materials
-                                            provided at the studio.
-                                        </p>
-                                        <p>
-                                            You&apos;ll leave with something you made and the basics
-                                            to continue at home.
-                                        </p>
-                                    </div>
+                                    <h2 className="heading-sm font-inter mb-4">Key details</h2>
+                                    <dl className="divide-y divide-clay/20 text-sm font-inter">
+                                        {keyDetails.map((item) => (
+                                            <div
+                                                key={item.label}
+                                                className="flex flex-col gap-0.5 py-2.5 first:pt-0 last:pb-0 sm:flex-row sm:gap-4"
+                                            >
+                                                <dt className="shrink-0 font-semibold text-dark sm:w-28">
+                                                    {item.label}
+                                                </dt>
+                                                <dd className="min-w-0 text-dark-secondary">
+                                                    {item.value}
+                                                </dd>
+                                            </div>
+                                        ))}
+                                    </dl>
                                 </motion.div>
 
                                 {/* Host info is shown immediately: no scroll-reveal animation. */}
                                 <div className="card-section">
                                     <div className="flex items-start gap-4">
                                         <div className="relative w-16 h-16 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-terracotta/20">
-                                            {/* sizes: a 64px circle. Without it `fill` asked for a
-                                                full-width (up to 1200px) image, eagerly. */}
-                                            <Image
-                                                src={workshop.hostAvatar}
-                                                alt={workshop.hostName}
-                                                fill
-                                                sizes="64px"
-                                                className="object-cover"
-                                            />
+                                            {hostBadgeInitials ? (
+                                                <span
+                                                    aria-hidden="true"
+                                                    className="flex h-full w-full items-center justify-center bg-terracotta/10 font-playfair text-xl font-semibold text-terracotta"
+                                                >
+                                                    {hostBadgeInitials}
+                                                </span>
+                                            ) : (
+                                                // sizes: a 64px circle. Without it `fill` asked for
+                                                // a full-width (up to 1200px) image, eagerly.
+                                                <Image
+                                                    src={hostAvatarSrc}
+                                                    alt={workshop.hostName}
+                                                    fill
+                                                    sizes="64px"
+                                                    className="object-cover"
+                                                />
+                                            )}
                                         </div>
                                         <div className="flex-1">
                                             <p className="font-playfair text-lg font-semibold text-dark">
@@ -1092,7 +1301,7 @@ export default function WorkshopClient({
                                 >
                                     <span className="eyebrow-label">Location</span>
                                     <h2 className="heading-sm font-inter mb-4">
-                                        {"Where you'll be"}
+                                        Where: {wherePlace}
                                     </h2>
                                     <div className="relative overflow-hidden rounded-2xl border border-clay/30 bg-white shadow-soft mb-4">
                                         <iframe
@@ -1106,7 +1315,7 @@ export default function WorkshopClient({
                                         <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-3 rounded-xl bg-white/95 p-3 shadow-soft">
                                             <div className="min-w-0">
                                                 <p className="text-sm font-inter font-semibold text-dark truncate">
-                                                    {workshop.location}
+                                                    {venue || areaAndCity}
                                                 </p>
                                                 <p className="text-xs font-inter text-dark-muted truncate">
                                                     {workshop.city} &bull;{" "}
@@ -1138,7 +1347,7 @@ export default function WorkshopClient({
                                                 >
                                                     <Image
                                                         src={img}
-                                                        alt={`Location image ${i + 1}`}
+                                                        alt={`${wherePlace} – venue photo ${i + 1}`}
                                                         fill
                                                         className="object-cover"
                                                         sizes="(max-width: 640px) 50vw, 33vw"
@@ -1155,7 +1364,7 @@ export default function WorkshopClient({
                                         prefersReducedMotion ? { duration: 0 } : quickTransition
                                     }
                                 >
-                                    <WorkshopFAQ />
+                                    <WorkshopFAQ initialFaqs={initialFaqs} />
                                 </motion.div>
                             </motion.div>
                         </div>
@@ -1166,8 +1375,9 @@ export default function WorkshopClient({
                                 <WorkshopPastEventSidebar
                                     workshopDate={workshop.date}
                                     formattedWorkshopTime={formattedWorkshopTime}
-                                    workshopLocation={workshop.location}
+                                    workshopLocation={venueOrArea}
                                     workshopCity={workshop.city}
+                                    nextStep={pastNextStep}
                                     notifyState={notifyState}
                                     notifyLoadingMode={notifyLoadingMode}
                                     notifyMessage={notifyMessage}
@@ -1180,7 +1390,7 @@ export default function WorkshopClient({
                                     currentPricePerGuest={currentPricePerGuest}
                                     workshopDate={workshop.date}
                                     formattedWorkshopTime={formattedWorkshopTime}
-                                    workshopLocation={workshop.location}
+                                    workshopLocation={venueOrArea}
                                     maxSeats={workshop.maxSeats}
                                     guests={guests}
                                     setGuests={setGuests}
@@ -1289,8 +1499,9 @@ export default function WorkshopClient({
                     <WorkshopPastEventSidebar
                         workshopDate={workshop.date}
                         formattedWorkshopTime={formattedWorkshopTime}
-                        workshopLocation={workshop.location}
+                        workshopLocation={venueOrArea}
                         workshopCity={workshop.city}
+                        nextStep={pastNextStep}
                         notifyState={notifyState}
                         notifyLoadingMode={notifyLoadingMode}
                         notifyMessage={notifyMessage}
@@ -1304,7 +1515,7 @@ export default function WorkshopClient({
             {similarWorkshops && similarWorkshops.length > 0 && (
                 <section className="section-padding pt-16 pb-8 md:pb-16 lg:py-24 bg-cream-50">
                     <div className="max-w-[1200px] mx-auto">
-                        <div className="flex items-center justify-between mb-8 sm:mb-12">
+                        <div className="flex items-center justify-between gap-6 mb-8 sm:mb-12">
                             <div>
                                 <h2 className="heading-md md:heading-lg text-dark mb-3">
                                     Similar Workshops You Might Love
@@ -1313,11 +1524,16 @@ export default function WorkshopClient({
                                     Continue your creative journey with these related experiences.
                                 </p>
                             </div>
+                            {/* The activity page when there is one: a stable, indexable URL,
+                                where /explore canonicalises away. */}
                             <Link
-                                href="/explore"
-                                className="hidden sm:inline-flex items-center gap-2 text-sm font-inter font-semibold text-terracotta hover:text-terracotta/80 transition-colors"
+                                href={topicLink?.href ?? "/explore"}
+                                className="hidden sm:inline-flex items-center gap-2 text-right text-sm font-inter font-semibold text-terracotta hover:text-terracotta/80 transition-colors"
                             >
-                                Browse all <ArrowRight className="w-4 h-4" />
+                                {topicLink
+                                    ? `More ${topicLink.name.toLowerCase()} workshops in ${cityName}`
+                                    : "Browse all"}{" "}
+                                <ArrowRight className="w-4 h-4 shrink-0" />
                             </Link>
                         </div>
 
@@ -1334,8 +1550,13 @@ export default function WorkshopClient({
                         </div>
 
                         <div className="mt-8 text-center sm:hidden">
-                            <Link href="/explore" className="btn-secondary w-full">
-                                Browse all workshops
+                            <Link
+                                href={topicLink?.href ?? "/explore"}
+                                className="btn-secondary w-full"
+                            >
+                                {topicLink
+                                    ? `More ${topicLink.name.toLowerCase()} workshops in ${cityName}`
+                                    : "Browse all workshops"}
                             </Link>
                         </div>
                     </div>
