@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { NotCached, readThroughCache } from "@/lib/cache-success-only";
 import { getPlatformChatbotClient } from "@/lib/chatbot-clients";
 import {
     createSupabaseServiceClient,
@@ -109,50 +110,55 @@ export async function loadAdminFaqRows(client: SupabaseServerClient) {
     return (Array.isArray(data) ? data : []) as AdminFaqRow[];
 }
 
-export async function loadFaqRows(options?: { clientId?: string | null }) {
+/** The FAQ query; throws on any failure other than "no FAQ table yet". */
+async function queryFaqRows(options?: { clientId?: string | null }): Promise<PublicFaqRow[]> {
     if (!isSupabaseServiceConfigured) {
         return [];
     }
 
-    try {
-        const client = createSupabaseServiceClient({ requestTimeoutMs: 5000 });
-        const resolvedClientId =
-            options?.clientId || (await getOptionalPlatformChatbotClient(client))?.id || null;
+    const client = createSupabaseServiceClient({ requestTimeoutMs: 5000 });
+    const resolvedClientId =
+        options?.clientId || (await getOptionalPlatformChatbotClient(client))?.id || null;
 
-        if (resolvedClientId) {
-            const { data, error } = await client
-                .from("faq")
-                .select(FAQ_PUBLIC_SELECT_FIELDS)
-                .eq("client_id", resolvedClientId)
-                .order("created_at", { ascending: true });
-
-            if (!error) {
-                return (Array.isArray(data) ? data : []) as PublicFaqRow[];
-            }
-
-            if (isMissingFaqTableError(error)) {
-                return [];
-            }
-
-            if (!isFaqClientScopeUnavailableError(error)) {
-                throw error;
-            }
-        }
-
+    if (resolvedClientId) {
         const { data, error } = await client
             .from("faq")
             .select(FAQ_PUBLIC_SELECT_FIELDS)
+            .eq("client_id", resolvedClientId)
             .order("created_at", { ascending: true });
 
-        if (error) {
-            if (isMissingFaqTableError(error)) {
-                return [];
-            }
-
-            throw error;
+        if (!error) {
+            return (Array.isArray(data) ? data : []) as PublicFaqRow[];
         }
 
-        return (Array.isArray(data) ? data : []) as PublicFaqRow[];
+        if (isMissingFaqTableError(error)) {
+            return [];
+        }
+
+        if (!isFaqClientScopeUnavailableError(error)) {
+            throw error;
+        }
+    }
+
+    const { data, error } = await client
+        .from("faq")
+        .select(FAQ_PUBLIC_SELECT_FIELDS)
+        .order("created_at", { ascending: true });
+
+    if (error) {
+        if (isMissingFaqTableError(error)) {
+            return [];
+        }
+
+        throw error;
+    }
+
+    return (Array.isArray(data) ? data : []) as PublicFaqRow[];
+}
+
+export async function loadFaqRows(options?: { clientId?: string | null }) {
+    try {
+        return await queryFaqRows(options);
     } catch {
         return [];
     }
@@ -166,7 +172,23 @@ export const FAQS_TAG = "faqs";
  * renders these rows itself. The admin FAQ routes do not revalidate the tag, so an edit shows
  * within ten minutes, the same as the CDN cache on /api/faqs.
  */
-export const getCachedFaqRows = unstable_cache(() => loadFaqRows(), ["public-faqs"], {
-    tags: [FAQS_TAG],
-    revalidate: 600,
-});
+const cachedFaqRows = unstable_cache(
+    async () => {
+        try {
+            return await queryFaqRows();
+        } catch {
+            try {
+                return await queryFaqRows();
+            } catch {
+                // Not cached: an empty FAQ would otherwise stick for ten minutes.
+                throw new NotCached<PublicFaqRow[]>([]);
+            }
+        }
+    },
+    ["public-faqs"],
+    { tags: [FAQS_TAG], revalidate: 600 }
+);
+
+export function getCachedFaqRows(): Promise<PublicFaqRow[]> {
+    return readThroughCache(cachedFaqRows);
+}
