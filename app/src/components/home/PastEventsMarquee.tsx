@@ -15,7 +15,9 @@ export type PastEventImage = {
  *
  * - When motion is allowed the track is duplicated and animated with a pure-CSS
  *   marquee (see `.past-events-marquee-track` in globals.css). The duplicate copy
- *   is hidden from assistive tech and removed from the tab order.
+ *   is hidden from assistive tech, removed from the tab order and carries no text
+ *   of its own: its hover caption comes from a data attribute (CSS `content`), so
+ *   the page text does not repeat every title.
  * - When the user prefers reduced motion the images render as a static wrapped
  *   row with no duplication or animation.
  */
@@ -56,16 +58,23 @@ export default function PastEventsMarquee({
                             >
                                 <Image
                                     src={image.src}
-                                    alt={image.title}
+                                    alt={isDuplicate ? "" : image.title}
                                     fill
                                     className="object-cover transition-transform duration-500 group-hover:scale-105"
                                     sizes="(max-width: 640px) 176px, 208px"
                                     quality={70}
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/0 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                                <span className="absolute inset-x-2 bottom-2 truncate text-xs font-inter font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                                    {image.title}
-                                </span>
+                                {isDuplicate ? (
+                                    <span
+                                        data-caption={image.title}
+                                        className="absolute inset-x-2 bottom-2 truncate text-xs font-inter font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100 after:content-[attr(data-caption)]"
+                                    />
+                                ) : (
+                                    <span className="absolute inset-x-2 bottom-2 truncate text-xs font-inter font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                                        {image.title}
+                                    </span>
+                                )}
                             </Link>
                         );
                     })}

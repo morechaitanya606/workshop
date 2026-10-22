@@ -207,7 +207,7 @@ export default function HomePageClient({
             <section className="section-padding mt-24 sm:mt-16">
                 <div className="bg-white rounded-3xl shadow-card border border-clay/30 p-6 md:p-8">
                     <WorkshopGridSection
-                        title="Upcoming workshops"
+                        title="Upcoming workshops in Pune"
                         eyebrow="Upcoming workshops"
                         sectionClassName="mt-0"
                         gridClassName={upcomingGridClassName}

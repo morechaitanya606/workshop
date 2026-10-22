@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { getPlatformChatbotClient } from "@/lib/chatbot-clients";
 import {
     createSupabaseServiceClient,
@@ -156,3 +157,16 @@ export async function loadFaqRows(options?: { clientId?: string | null }) {
         return [];
     }
 }
+
+export const FAQS_TAG = "faqs";
+
+/**
+ * The public FAQ list for server-rendered pages, cached like the platform settings. The browser
+ * fetch of /api/faqs never reached Google (robots.txt disallows /api), so the workshop page
+ * renders these rows itself. The admin FAQ routes do not revalidate the tag, so an edit shows
+ * within ten minutes, the same as the CDN cache on /api/faqs.
+ */
+export const getCachedFaqRows = unstable_cache(() => loadFaqRows(), ["public-faqs"], {
+    tags: [FAQS_TAG],
+    revalidate: 600,
+});

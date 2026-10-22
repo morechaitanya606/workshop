@@ -385,7 +385,9 @@ async function fetchCityWorkshops(cityName: string): Promise<CityWorkshopsResult
             if (includeApprovalFilter) {
                 dbQuery = dbQuery.eq("approval_status", "approved");
             }
-            return dbQuery.order("date", { ascending: true }).limit(200);
+            // Newest first, like the sitemap: with an oldest-first limit the upcoming sessions
+            // were the rows that fell off once the city had more than the limit.
+            return dbQuery.order("date", { ascending: false }).limit(1000);
         };
 
         let { data, error } = await run(true);
@@ -396,8 +398,8 @@ async function fetchCityWorkshops(cityName: string): Promise<CityWorkshopsResult
         if (!error) {
             const workshops = (data || []).map((row) => mapWorkshopRowToWorkshop(row));
             return {
-                upcoming: workshops.filter((workshop) => workshop.date >= today),
-                past: workshops.filter((workshop) => workshop.date < today).reverse(),
+                upcoming: workshops.filter((workshop) => workshop.date >= today).reverse(),
+                past: workshops.filter((workshop) => workshop.date < today),
                 source: "supabase",
             };
         }

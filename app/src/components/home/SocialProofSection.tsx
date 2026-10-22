@@ -1,12 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import {
-    fadeIn,
-    fadeInUp,
-    standardTransition,
-    useMotionProps,
-} from "@/lib/motion-presets";
+import { fadeIn, fadeInUp, standardTransition, useMotionProps } from "@/lib/motion-presets";
 
 export default function SocialProofSection({
     shouldReduceMotion,
@@ -45,7 +40,7 @@ export default function SocialProofSection({
                         Join Creative Community
                     </h2>
                     <p className="mx-auto mb-6 max-w-xl text-sm leading-7 text-white/80 sm:mb-8 sm:text-base sm:leading-relaxed">
-                        Friends, couples and teams across the city are discovering new hobbies and
+                        Friends, couples and teams across Pune are discovering new hobbies and
                         meeting people through our workshops.
                     </p>
                     <a

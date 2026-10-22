@@ -1,8 +1,9 @@
 "use client";
 
 import type { ComponentProps, ReactNode } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
-import { Search, SlidersHorizontal, Sparkles, X } from "lucide-react";
+import { ArrowRight, Search, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import CategoryFilter from "@/components/CategoryFilter";
 
 type SortOption = "date_asc" | "date_desc" | "price_asc" | "price_desc" | "rating_desc";
@@ -14,7 +15,6 @@ export default function ExploreToolbarSection({
     filterBarMotionProps,
     filterPanelMotionProps,
     appliedFilterSummary,
-    exploreStats,
     searchQuery,
     onSearchQueryChange,
     onSearchEnter,
@@ -36,7 +36,6 @@ export default function ExploreToolbarSection({
     filterBarMotionProps: MotionDivProps;
     filterPanelMotionProps: MotionDivProps;
     appliedFilterSummary: string[];
-    exploreStats: Array<{ label: string; value: string }>;
     searchQuery: string;
     onSearchQueryChange: (value: string) => void;
     onSearchEnter: () => void;
@@ -64,30 +63,24 @@ export default function ExploreToolbarSection({
                     <Sparkles className="h-3.5 w-3.5" />
                     Browse Creative Experiences
                 </div>
-                <h1 className="heading-xl mt-4 mb-2">Explore Workshops</h1>
+                <h1 className="heading-xl mt-4 mb-2">Explore workshops in Pune</h1>
                 <p className="text-body text-dark-muted">
-                    Find your next creative adventure across categories and cities.
+                    Find your next creative workshop in Pune by date, price and activity.
                 </p>
                 {appliedFilterSummary.length > 0 && (
                     <p className="mt-3 text-xs font-inter text-dark-muted">
                         Using filters: {appliedFilterSummary.join(" | ")}
                     </p>
                 )}
-                <div className="mt-6 grid grid-cols-2 gap-3 sm:max-w-md">
-                    {exploreStats.map((stat) => (
-                        <div
-                            key={stat.label}
-                            className="rounded-2xl border border-gray-200 bg-white/85 px-4 py-3 text-center"
-                        >
-                            <p className="font-playfair text-xl font-bold text-dark">
-                                {stat.value}
-                            </p>
-                            <p className="text-[11px] font-inter font-semibold uppercase tracking-wider text-dark-muted">
-                                {stat.label}
-                            </p>
-                        </div>
-                    ))}
-                </div>
+                {/* No headline counts: fixed figures go stale, and the live count is already in
+                    the results header. The evergreen city page is the better next step. */}
+                <Link
+                    href="/workshops/pune"
+                    className="mt-6 inline-flex items-center gap-1.5 text-sm font-inter font-semibold text-terracotta hover:gap-2.5 transition-all duration-300"
+                >
+                    See all workshops in Pune
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
             </motion.div>
 
             <motion.div
