@@ -11,6 +11,7 @@ import {
     PencilLine,
     MapPin,
     CalendarDays,
+    Tag,
     Trash2,
     Users,
     XCircle,
@@ -19,12 +20,20 @@ import type { Workshop } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import AdminShell from "@/components/admin/AdminShell";
+import WorkshopTitleLink from "@/components/admin/WorkshopTitleLink";
+import BookingsSwitch, {
+    BookingsClosedBadge,
+    withConfirmedBookingsState,
+} from "@/components/admin/BookingsSwitch";
+import { offerAppliesToWorkshop } from "@/components/admin/offer-form";
 import {
     approveAdminWorkshop,
     deleteAdminWorkshop,
+    getAdminCoupons,
     getAdminWorkshops,
     rejectAdminWorkshop,
     toApiErrorMessage,
+    type AdminCoupon,
 } from "@/lib/api-client";
 
 function getApprovalBadgeClasses(status: Workshop["approvalStatus"]) {
@@ -49,6 +58,13 @@ function getApprovalLabel(status: Workshop["approvalStatus"]) {
     }
 }
 
+function bookedSeatsOf(workshop: Workshop): number | null {
+    const max = Number(workshop.maxSeats);
+    const remaining = Number(workshop.seatsRemaining);
+    if (!Number.isFinite(max) || !Number.isFinite(remaining)) return null;
+    return Math.max(0, max - remaining);
+}
+
 export default function AdminWorkshopsPage() {
     const { session } = useAuth();
     const [workshops, setWorkshops] = useState<Workshop[]>([]);
@@ -57,6 +73,36 @@ export default function AdminWorkshopsPage() {
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [processingApprovalId, setProcessingApprovalId] = useState<string | null>(null);
     const [reloadKey, setReloadKey] = useState(0);
+    // Fresh from the server with the list; false when it could not be read (switches disabled).
+    const [closedIds, setClosedIds] = useState<Set<string>>(() => new Set());
+    const [closedIdsKnown, setClosedIdsKnown] = useState(false);
+    // The offers, only for the count on each Offers button. A read of its own: the list must not
+    // wait for it, and without it the button just says "Offers".
+    const [offers, setOffers] = useState<AdminCoupon[] | null>(null);
+
+    useEffect(() => {
+        const accessToken = session?.access_token;
+        if (!accessToken) return;
+        let cancelled = false;
+        getAdminCoupons(accessToken, { limit: 100 })
+            .then((page) => {
+                if (!cancelled) setOffers(page.coupons ?? []);
+            })
+            .catch(() => {
+                if (!cancelled) setOffers(null);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [session, reloadKey]);
+
+    const offersButtonLabel = (workshopId: string) => {
+        if (!offers) return "Offers";
+        const active = offers.filter(
+            (offer) => offer.is_active && offerAppliesToWorkshop(offer, workshopId)
+        ).length;
+        return `Offers (${active})`;
+    };
 
     useEffect(() => {
         let cancelled = false;
@@ -70,6 +116,8 @@ export default function AdminWorkshopsPage() {
                 const result = await getAdminWorkshops(session.access_token);
                 if (!cancelled) {
                     setWorkshops(Array.isArray(result.data) ? result.data : []);
+                    setClosedIds(new Set(result.closedWorkshopIds ?? []));
+                    setClosedIdsKnown(result.closedWorkshopIdsOk === true);
                 }
             } catch {
                 if (!cancelled) {
@@ -115,6 +163,12 @@ export default function AdminWorkshopsPage() {
         setWorkshops((prev) =>
             prev.map((item) => (item.id === nextWorkshop.id ? nextWorkshop : item))
         );
+    };
+
+    // Only this workshop's confirmed state: each answer carries the list as it was when THAT save
+    // finished, and two quick saves can be answered out of order, which would reopen the other.
+    const handleBookingsChange = (workshopId: string, closed: boolean) => {
+        setClosedIds((prev) => withConfirmedBookingsState(prev, workshopId, closed));
     };
 
     const handleApproveWorkshop = async (workshop: Workshop) => {
@@ -216,9 +270,10 @@ export default function AdminWorkshopsPage() {
                                     >
                                         {getApprovalLabel(workshop.approvalStatus)}
                                     </span>
+                                    {closedIds.has(workshop.id) && <BookingsClosedBadge />}
                                 </div>
                                 <h2 className="font-playfair text-xl font-semibold text-dark mb-2">
-                                    {workshop.title}
+                                    <WorkshopTitleLink workshop={workshop} />
                                 </h2>
                                 <div className="text-sm font-inter text-dark-muted space-y-1 mb-4">
                                     <p className="inline-flex items-center gap-1.5">
@@ -230,6 +285,17 @@ export default function AdminWorkshopsPage() {
                                         {workshop.location}, {workshop.city}
                                     </p>
                                 </div>
+                                <BookingsSwitch
+                                    className="mb-4"
+                                    workshopId={workshop.id}
+                                    title={workshop.title}
+                                    closed={closedIds.has(workshop.id)}
+                                    known={closedIdsKnown}
+                                    bookedSeats={bookedSeatsOf(workshop)}
+                                    maxSeats={workshop.maxSeats}
+                                    accessToken={session?.access_token}
+                                    onChange={(closed) => handleBookingsChange(workshop.id, closed)}
+                                />
                                 <div className="flex items-center justify-between">
                                     <p className="font-inter font-semibold text-dark">
                                         {formatCurrency(workshop.price)}
@@ -267,6 +333,14 @@ export default function AdminWorkshopsPage() {
                                         >
                                             <Users className="w-4 h-4" />
                                             Attendees
+                                        </Link>
+                                        <Link
+                                            href={`/admin/workshops/${workshop.id}/edit#offers`}
+                                            className="btn-secondary !py-2 !px-4 text-sm"
+                                            title="Add or edit this workshop's offers"
+                                        >
+                                            <Tag className="w-4 h-4" />
+                                            {offersButtonLabel(workshop.id)}
                                         </Link>
                                         <Link
                                             href={`/admin/workshops/${workshop.id}/edit`}

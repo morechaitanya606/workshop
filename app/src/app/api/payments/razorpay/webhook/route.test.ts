@@ -624,6 +624,150 @@ describe("POST /api/payments/razorpay/webhook", () => {
         );
     });
 
+    describe("host earnings on the list price (the platform pays for discounts)", () => {
+        function earningsFixture(options: {
+            booking?: Record<string, unknown>;
+            price?: number | null;
+            orderNotes?: Record<string, unknown> | null;
+            orderFetchFails?: boolean;
+        }) {
+            const earningsChain = createChain({ data: null, error: null });
+            const serviceClient = {
+                from: vi.fn((table: string) => {
+                    if (table === "host_earnings") return earningsChain;
+                    if (table === "workshops") {
+                        return createChain({
+                            data: [
+                                {
+                                    id: "workshop-1",
+                                    title: "T",
+                                    date: "d",
+                                    time: "t",
+                                    location: "l",
+                                    city: "c",
+                                    host_id: "host-1",
+                                    price: options.price ?? null,
+                                },
+                            ],
+                            error: null,
+                        });
+                    }
+                    return createChain({
+                        data: [confirmedBookingRow(options.booking)],
+                        error: null,
+                    });
+                }),
+                rpc: vi.fn(),
+            };
+            vi.mocked(requireSupabaseService).mockReturnValue({
+                ok: true,
+                client: serviceClient as never,
+            });
+            const ordersFetch = options.orderFetchFails
+                ? vi.fn().mockRejectedValue(new Error("razorpay down"))
+                : vi.fn().mockResolvedValue({ id: "order_1", notes: options.orderNotes ?? {} });
+            vi.mocked(getRazorpayServerClient).mockReturnValue({
+                orders: { fetch: ordersFetch },
+            } as never);
+            return { earningsChain, ordersFetch, serviceClient };
+        }
+
+        function captured() {
+            return webhookRequest({
+                event: "payment.captured",
+                payload: { payment: { entity: { id: "pay_1", order_id: "order_1" } } },
+            });
+        }
+
+        it("pays the host on the order's list subtotal, not the discounted one", async () => {
+            const { earningsChain, ordersFetch } = earningsFixture({
+                booking: { subtotal: 2700 },
+                price: 1200,
+                orderNotes: { workshopId: "workshop-1", listSubtotal: "3000", subtotal: "2700" },
+            });
+
+            const response = await POST(captured());
+
+            expect(response.status).toBe(200);
+            expect(ordersFetch).toHaveBeenCalledWith("order_1");
+            expect(earningsChain.upsert).toHaveBeenCalledWith(
+                expect.objectContaining({ amount: 2700, fee_deducted: 300 }),
+                { onConflict: "booking_id", ignoreDuplicates: true }
+            );
+        });
+
+        it("confirms and credits a capture for a workshop whose bookings were closed since", async () => {
+            // The admin "Bookings closed" switch stops NEW holds and orders only: a payment that
+            // was already made is honoured, so the webhook never reads the closed list.
+            const { earningsChain, serviceClient } = earningsFixture({
+                booking: { subtotal: 2700 },
+                price: 1200,
+                orderNotes: { workshopId: "workshop-1", listSubtotal: "3000", subtotal: "2700" },
+            });
+
+            const response = await POST(captured());
+
+            expect(response.status).toBe(200);
+            expect(serviceClient.from).not.toHaveBeenCalledWith("platform_settings");
+            expect(earningsChain.upsert).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    booking_id: "booking-1",
+                    amount: 2700,
+                    status: "available",
+                }),
+                { onConflict: "booking_id", ignoreDuplicates: true }
+            );
+            expect(sendBookingConfirmation).toHaveBeenCalledWith("booking-1");
+        });
+
+        it("falls back to price x seats when the order has no snapshot", async () => {
+            const { earningsChain } = earningsFixture({
+                booking: { subtotal: 2700, guests: 2 },
+                price: 1500,
+                orderNotes: { serviceFee: "99" },
+            });
+
+            await POST(captured());
+
+            expect(earningsChain.upsert).toHaveBeenCalledWith(
+                expect.objectContaining({ amount: 2700, fee_deducted: 300 }),
+                expect.anything()
+            );
+        });
+
+        it("ignores a snapshot that does not describe this booking", async () => {
+            const { earningsChain } = earningsFixture({
+                booking: { subtotal: 2700, guests: 2 },
+                price: 1500,
+                orderNotes: { workshopId: "workshop-1", listSubtotal: "9000", subtotal: "8000" },
+            });
+
+            await POST(captured());
+
+            expect(earningsChain.upsert).toHaveBeenCalledWith(
+                expect.objectContaining({ amount: 2700, fee_deducted: 300 }),
+                expect.anything()
+            );
+        });
+
+        it("never pays the host less than the subtotal the customer paid", async () => {
+            const { earningsChain } = earningsFixture({
+                booking: { subtotal: 3000, guests: 2 },
+                // The price was lowered after the booking.
+                price: 1000,
+                orderFetchFails: true,
+            });
+
+            const response = await POST(captured());
+
+            expect(response.status).toBe(200);
+            expect(earningsChain.upsert).toHaveBeenCalledWith(
+                expect.objectContaining({ amount: 2700, fee_deducted: 300 }),
+                expect.anything()
+            );
+        });
+    });
+
     it("retries instead of marking the event processed when the host credit cannot be written", async () => {
         const earningsChain = createChain({ data: null, error: { message: "boom" } });
         const serviceClient = {

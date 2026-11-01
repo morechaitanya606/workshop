@@ -5,11 +5,16 @@ import { GET, PATCH } from "./route";
 import { requireAdminUser } from "@/lib/api-auth";
 import { createSupabaseServiceClient } from "@/lib/supabase-server";
 import { assertRateLimit } from "@/lib/rate-limit";
+import { mirrorImageFields } from "@/lib/image-mirror";
 import { revalidateTag } from "next/cache";
 
 vi.mock("@/lib/api-auth", () => ({
     requireAdminUser: vi.fn(),
     jsonError: vi.fn(),
+}));
+
+vi.mock("@/lib/image-mirror", () => ({
+    mirrorImageFields: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase-server", () => ({
@@ -160,6 +165,109 @@ describe("/api/settings", () => {
             expect(response.status).toBe(200);
             const rows = upsert.mock.calls[0][0] as Array<{ setting_value: unknown }>;
             expect(rows[0].setting_value).toBe("");
+        });
+
+        it.each([
+            ["closed_workshop_ids", ["pottery-wheel-1760000000000"]],
+            ["closed_workshop_ids", []],
+            ["coupon_offers", { "11111111-2222-4333-8444-555555555555": { visibility: "auto" } }],
+        ])(
+            "refuses %s (only its dedicated route writes it) and writes nothing",
+            async (key, value) => {
+                const { upsert } = mockSupabase({});
+
+                const response = await PATCH(
+                    patchRequest({ settings: { service_fee: 49, [key]: value } })
+                );
+                const body = await response.json();
+
+                expect(response.status).toBe(400);
+                expect(body.details).toEqual({ field: key });
+                expect(upsert).not.toHaveBeenCalled();
+                expect(revalidateTag).not.toHaveBeenCalled();
+            }
+        );
+
+        it("still saves the other settings the settings page sends", async () => {
+            const { upsert } = mockSupabase({});
+
+            const response = await PATCH(
+                patchRequest({
+                    settings: {
+                        service_fee: 49,
+                        whatsapp_community_message: "Join us",
+                        cafe_partners: [],
+                    },
+                })
+            );
+
+            expect(response.status).toBe(200);
+            const rows = upsert.mock.calls[0][0] as Array<{ setting_key: string }>;
+            expect(rows.map((row) => row.setting_key)).toEqual([
+                "service_fee",
+                "whatsapp_community_message",
+                "cafe_partners",
+            ]);
+        });
+
+        it("copies the hero image and every pasted partner logo in two batches, however many logos", async () => {
+            // Same contract as the real helper: swaps each string (or each item of an array).
+            vi.mocked(mirrorImageFields).mockImplementation(async (data, fields) => {
+                const record = data as Record<string, unknown>;
+                for (const field of fields as string[]) {
+                    const value = record[field];
+                    const copy = (item: unknown) =>
+                        typeof item === "string" ? `${item}#copied` : item;
+                    record[field] = Array.isArray(value) ? value.map(copy) : copy(value);
+                }
+            });
+            const { upsert } = mockSupabase({});
+            const partner = (id: string) => ({
+                id,
+                name: `Partner ${id}`,
+                logo_url: `https://drive.google.com/uc?id=${id}`,
+            });
+
+            const response = await PATCH(
+                patchRequest({
+                    settings: {
+                        hero_image_url: "https://drive.google.com/uc?id=hero",
+                        cafe_partners: [partner("a"), partner("b"), partner("c")],
+                    },
+                })
+            );
+
+            expect(response.status).toBe(200);
+            // Not one call per partner: one for the hero, one for all the logos.
+            expect(mirrorImageFields).toHaveBeenCalledTimes(2);
+            const logoCall = vi
+                .mocked(mirrorImageFields)
+                .mock.calls.find(([, fields]) => fields[0] === "logo_url");
+            expect(logoCall?.[0]).toEqual({
+                logo_url: [
+                    "https://drive.google.com/uc?id=a#copied",
+                    "https://drive.google.com/uc?id=b#copied",
+                    "https://drive.google.com/uc?id=c#copied",
+                ],
+            });
+            const rows = upsert.mock.calls[0][0] as Array<{
+                setting_key: string;
+                setting_value: unknown;
+            }>;
+            const stored = Object.fromEntries(
+                rows.map((row) => [row.setting_key, row.setting_value])
+            );
+            expect(stored.hero_image_url).toBe("https://drive.google.com/uc?id=hero#copied");
+            expect(
+                (stored.cafe_partners as Array<{ id: string; logo_url: string }>).map((item) => [
+                    item.id,
+                    item.logo_url,
+                ])
+            ).toEqual([
+                ["a", "https://drive.google.com/uc?id=a#copied"],
+                ["b", "https://drive.google.com/uc?id=b#copied"],
+                ["c", "https://drive.google.com/uc?id=c#copied"],
+            ]);
         });
 
         it("never echoes the raw database error", async () => {

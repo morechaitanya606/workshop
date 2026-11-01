@@ -1,6 +1,6 @@
 import type { Workshop } from "@/lib/data";
 import type { Tables } from "@/lib/database.types";
-import { resolveSupportChatReply } from "@/lib/support-chat";
+import { getSupportChatPricing, resolveSupportChatReply } from "@/lib/support-chat";
 import {
     isValidLeadName,
     isValidPhoneNumber,
@@ -19,8 +19,11 @@ import {
 import {
     buildChatbotMessages,
     buildRetrievalQuery,
+    isChatWorkshopClosed,
     normalizeChatHistory,
+    workshopPriceText,
     type ChatbotHistoryTurn,
+    type ChatPricing,
 } from "@/lib/chatbot-prompt";
 
 // Re-exported from the client-safe module so existing server imports of this file keep
@@ -63,6 +66,12 @@ type GenerateChatbotReplyInput = {
     retrieveRelevantFaqs?: (message: string) => Promise<ChatbotFaq[]>;
     workshops?: Workshop[];
     contextWorkshopId?: string | null;
+    /**
+     * Live offers and closed bookings for the prices and availability quoted. Omitted: the
+     * snapshot loadSupportChatWorkshops loaded with the workshops (getSupportChatPricing), the
+     * same default the rule-based replies use; null: Early Bird prices only, nothing closed.
+     */
+    pricing?: ChatPricing | null;
     /** Model providers in failover order (see getChatbotLlmProviders). */
     llmProviders?: ChatbotLlmProvider[];
     /** Single-provider shorthand; ignored when `llmProviders` is non-empty. */
@@ -344,10 +353,6 @@ function formatWorkshopTime(timeValue: string) {
     }).format(date);
 }
 
-function formatWorkshopPrice(amount: number) {
-    return `₹${new Intl.NumberFormat("en-IN").format(amount)}`;
-}
-
 function getWorkshopDateTime(workshop: Workshop) {
     const [hours, minutes] = workshop.time.split(":").map((value) => Number(value));
     const parsed = new Date(`${workshop.date}T00:00:00`);
@@ -395,7 +400,13 @@ function looksLikeLatestWorkshopRequest(message: string) {
     return asksForLatest && asksForWorkshop && asksForDetails;
 }
 
-function buildLatestWorkshopReply(workshop: Workshop) {
+function buildLatestWorkshopReply(workshop: Workshop, pricing: ChatPricing | null, now: Date) {
+    // Closed by the admin is not "sold out": seats may remain, but nobody can book them.
+    const availability = isChatWorkshopClosed(workshop, pricing)
+        ? "Bookings for it are closed."
+        : workshop.seatsRemaining <= 0
+          ? "It is sold out."
+          : `It currently has ${workshop.seatsRemaining} seats left.`;
     const learningSnippet =
         workshop.whatYouLearn.length > 0
             ? `You will learn ${workshop.whatYouLearn.slice(0, 3).join(", ")}.`
@@ -411,7 +422,7 @@ function buildLatestWorkshopReply(workshop: Workshop) {
     return [
         `The next upcoming workshop I can see is ${workshop.title}.`,
         `It is on ${formatWorkshopDate(workshop.date)} at ${formatWorkshopTime(workshop.time)} in ${workshop.location}.`,
-        `It costs ${formatWorkshopPrice(workshop.price)} and currently has ${workshop.seatsRemaining} seats left.`,
+        `It costs ${workshopPriceText(workshop, { pricing, now })}. ${availability}`,
         hostSnippet,
         learningSnippet,
         materialsSnippet,
@@ -424,21 +435,24 @@ function buildLatestWorkshopReply(workshop: Workshop) {
 function maybeResolveWorkshopReply(
     message: string,
     workshops: Workshop[] | undefined,
-    contextWorkshopId?: string | null
+    contextWorkshopId: string | null | undefined,
+    pricing: ChatPricing | null,
+    now: Date
 ) {
     if (!workshops || workshops.length === 0) {
         return null;
     }
 
     if (looksLikeLatestWorkshopRequest(message)) {
-        const nextWorkshop = getUpcomingWorkshops(workshops)[0];
+        const nextWorkshop = getUpcomingWorkshops(workshops, now)[0];
         if (nextWorkshop) {
-            return buildLatestWorkshopReply(nextWorkshop);
+            return buildLatestWorkshopReply(nextWorkshop, pricing, now);
         }
     }
 
     const resolution = resolveSupportChatReply(message, workshops, {
         contextWorkshopId,
+        pricing,
     });
 
     if (resolution.intent === "workshop_detail" || resolution.intent === "workshop_list") {
@@ -446,6 +460,30 @@ function maybeResolveWorkshopReply(
     }
 
     return null;
+}
+
+/**
+ * Asking to book a workshop whose bookings the admin closed gets that answer, not the name and
+ * phone steps that end in a Book button leading nowhere. The workshop is the one the visitor
+ * names, else the one whose page they are on (the same matching the booking reply uses).
+ */
+function closedBookingReply(
+    message: string,
+    workshops: Workshop[] | undefined,
+    contextWorkshopId: string | null | undefined,
+    pricing: ChatPricing | null
+) {
+    if (!workshops || workshops.length === 0 || !pricing?.closedWorkshopIds) {
+        return null;
+    }
+
+    const resolution = resolveSupportChatReply(message, workshops, { contextWorkshopId, pricing });
+    if (resolution.intent !== "booking" || !resolution.contextWorkshopId) {
+        return null;
+    }
+
+    const target = workshops.find((workshop) => workshop.id === resolution.contextWorkshopId);
+    return target && isChatWorkshopClosed(target, pricing) ? resolution.reply : null;
 }
 
 export function buildFaqContext(faqs: ChatbotFaq[]) {
@@ -548,8 +586,18 @@ export async function generateChatbotReply(
         return reply(strings.thanks);
     }
 
+    const pricing = input.pricing !== undefined ? input.pricing : getSupportChatPricing();
+
     if (detectBookingIntent(message)) {
-        return reply(strings.askName, { askName: true });
+        const closedReply = closedBookingReply(
+            message,
+            input.workshops,
+            input.contextWorkshopId,
+            pricing
+        );
+        return closedReply
+            ? reply(withEnglishNote(locale, strings, closedReply))
+            : reply(strings.askName, { askName: true });
     }
 
     const fetchImpl = input.fetchImpl || fetch;
@@ -591,6 +639,7 @@ export async function generateChatbotReply(
                 contextWorkshopId: input.contextWorkshopId,
                 clientName: input.clientName,
                 now: input.now,
+                pricing,
             }),
         });
 
@@ -609,7 +658,9 @@ export async function generateChatbotReply(
     const workshopReply = maybeResolveWorkshopReply(
         message,
         input.workshops,
-        input.contextWorkshopId
+        input.contextWorkshopId,
+        pricing,
+        input.now ?? new Date()
     );
     if (workshopReply) {
         return reply(withEnglishNote(locale, strings, workshopReply));

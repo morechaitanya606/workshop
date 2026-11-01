@@ -88,6 +88,38 @@ These are not hard-required for build success, but they matter for a stable live
 - `NEXT_PUBLIC_MEDIA_BASE_URL` (optional; leave unset. The hero videos are committed under
   `public/videos` and served from Vercel's CDN. Set it only to move them to a Cloudflare R2
   public bucket -- see `public/videos/README.md`)
+- `NEXT_PUBLIC_GA_MEASUREMENT_ID` (optional; Google Analytics 4, see below)
+
+## Google Analytics 4 (optional)
+
+Nothing is sent to Google until `NEXT_PUBLIC_GA_MEASUREMENT_ID` is set. Do steps 2-4 before
+step 5:
+
+1. In Google Analytics, create a GA4 property with a web data stream for
+   `https://www.onlyworkshops.com` and copy its measurement id (`G-` followed by capitals and
+   digits). A `UA-` or `GTM-` id is a different product: it fails the build, or, where
+   `SKIP_ENV_VALIDATION` is set, simply leaves analytics off.
+2. In that data stream, open Enhanced measurement > Page views > advanced settings and turn off
+   "Page changes based on browser history events". The site sends its own page views, without
+   query strings; left on, GA4 counts every client-side navigation a second time, with the full
+   address.
+3. In that data stream, open "Redact data", turn on URL query parameter redaction and list
+   `workshop, guests, hold, holdExpiresAt, coupon, redirect, next, code, error, notice`. Page
+   views already leave query strings out; this catches GA4's other automatic events (scrolls,
+   outbound clicks and so on) in case one reads the address bar itself. Booking, login and
+   OAuth URLs carry these parameters, and PostHog strips them too (`src/lib/analytics.ts`).
+4. Add Google Analytics to the privacy policy: the cookie banner already says analytics only
+   runs if the visitor accepts.
+5. In Vercel > Settings > Environment Variables, add the id for **Production** only, so preview
+   visits are not counted, and redeploy (`NEXT_PUBLIC_` values are inlined at build time).
+
+How it behaves: the root layout loads a small loader with `next/script` `lazyOnload`, which
+runs in idle time after the page has loaded, so it does not delay the main image or the first
+taps. gtag.js is fetched only for visitors who accepted cookies (or when they accept); declining
+switches it off. Ad storage and ad personalisation are always denied. The loader sends one
+`page_view` per path, on load and on each client-side navigation, with `page_location` and
+`page_referrer` cut to origin + path (the same rule as PostHog), and sets that bare address for
+GA4's later events. A change of query string alone (Explore filters) is not a new page view.
 
 ## Media
 
@@ -113,6 +145,7 @@ After deployment, check these URLs in the Vercel preview or production domain:
 - `/workshop/summer-family-retreat`
 - `/robots.txt`
 - `/sitemap.xml`
+- `/llms.txt`
 - `/chatbot/embed`
 
 ## Expected production behavior
@@ -121,8 +154,13 @@ After deployment, check these URLs in the Vercel preview or production domain:
 - `/workshop/summer-family-retreat` should use the dedicated OG image
 - `/robots.txt` should disallow auth, booking, admin, dashboard, host, profile, and join utility routes
 - `/sitemap.xml` should include `/workshop/summer-family-retreat`
+- `/llms.txt` should list the key pages, the indexable Pune activity pages and the upcoming
+  workshops with absolute live-domain URLs (it is regenerated in the background, like the Pune
+  hub, so new workshops show up without a deploy)
 - `/chatbot/embed` should stay embeddable
-- Security headers should be present on normal pages
+- Security headers should be present on normal pages, and no `X-Powered-By` header
+- Files under `/images`, `/videos`, `/uploads` and `/special-pages` should be served with
+  `Cache-Control: public, max-age=86400, stale-while-revalidate=604800`
 
 ## Special event asset check
 

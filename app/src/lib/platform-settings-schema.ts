@@ -9,6 +9,13 @@
  * form and the sold-out modal can all share the same rules.
  */
 
+import { validateCouponOffersSetting } from "@/lib/offers";
+import {
+    CLOSED_WORKSHOPS_SETTING_KEY,
+    parseClosedWorkshopIds,
+    validateClosedWorkshopIds,
+} from "@/lib/workshop-availability";
+
 export const SERVICE_FEE_MAX = 100_000;
 export const WHATSAPP_COMMUNITY_URL_MAX_LENGTH = 500;
 export const WHATSAPP_COMMUNITY_MESSAGE_MAX_LENGTH = 240;
@@ -34,13 +41,26 @@ export const WRITABLE_SETTING_KEYS = [
     "early_bird_offer",
     "whatsapp_community_url",
     "whatsapp_community_message",
+    // How each coupon is shown (src/lib/offers.ts). Left out of the app's public payloads, but
+    // NOT secret: platform_settings has an anon select policy, so anyone can read it from
+    // Supabase. It holds coupon ids, visibilities, labels and seat minimums. There is no code
+    // field (its validator rejects any other field), but this validator cannot see coupon
+    // codes: a route that saves it must also call findLabelsRevealingCodes (offers-server.ts)
+    // and refuse a label that contains its coupon's code. Never store anything secret in
+    // platform_settings.
+    "coupon_offers",
+    // Workshops whose bookings the admin switched off (src/lib/workshop-availability.ts).
+    // Saving the whole array here replaces it: the admin switch should use its own
+    // read-modify-write route (withBookingsClosed) instead.
+    "closed_workshop_ids",
 ] as const;
 
 /**
- * Keys that are safe to send to every visitor. Today this equals the writable set because
- * every known key is presentation or pricing data the site already renders publicly. It is
- * kept as its own list on purpose: the day someone adds a private key (a webhook secret, an
- * internal note) to WRITABLE_SETTING_KEYS it stays server-side until it is added here too.
+ * Keys that are sent to every visitor (root layout settings, GET /api/settings). Every key here
+ * is presentation or pricing data the site already renders publicly. It is kept as its own list
+ * on purpose: a key in WRITABLE_SETTING_KEYS that is not needed in the browser
+ * ("coupon_offers") stays out of the app's payloads until it is added here too. That keeps
+ * pages light; it is not secrecy, because the table itself is readable with the anon key.
  */
 export const PUBLIC_SETTING_KEYS = [
     "service_fee",
@@ -50,6 +70,8 @@ export const PUBLIC_SETTING_KEYS = [
     "early_bird_offer",
     "whatsapp_community_url",
     "whatsapp_community_message",
+    // Client pages show "Bookings closed" from the settings context.
+    "closed_workshop_ids",
 ] as const;
 
 export type WritableSettingKey = (typeof WRITABLE_SETTING_KEYS)[number];
@@ -331,6 +353,8 @@ const VALIDATORS: Record<WritableSettingKey, (value: unknown) => ValidationResul
     early_bird_offer: validateEarlyBirdOffer,
     whatsapp_community_url: validateWhatsAppCommunityUrl,
     whatsapp_community_message: validateWhatsAppCommunityMessage,
+    coupon_offers: validateCouponOffersSetting,
+    closed_workshop_ids: validateClosedWorkshopIds,
 };
 
 export function isWritableSettingKey(key: string): key is WritableSettingKey {
@@ -374,7 +398,7 @@ export function validateSettingsPatch(settings: unknown): SettingsPatchResult {
 /**
  * Keeps only public keys from a settings record. Use this at every boundary where settings
  * are handed to a browser. The community link is additionally re-validated so a bad stored
- * value is dropped instead of rendered.
+ * value is dropped instead of rendered, and the closed workshop ids are reduced to valid ids.
  */
 export function pickPublicSettings<T extends Record<string, unknown>>(
     record: T | null | undefined
@@ -391,6 +415,11 @@ export function pickPublicSettings<T extends Record<string, unknown>>(
     if ("whatsapp_community_url" in picked) {
         picked.whatsapp_community_url =
             sanitizeWhatsAppCommunityUrl(picked.whatsapp_community_url) ?? "";
+    }
+
+    // Only valid ids, as a plain array, whatever the stored value holds.
+    if (CLOSED_WORKSHOPS_SETTING_KEY in picked) {
+        picked.closed_workshop_ids = [...parseClosedWorkshopIds(picked.closed_workshop_ids)];
     }
 
     return picked;

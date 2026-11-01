@@ -8,6 +8,9 @@ import { profileUpdateSchema } from "@/lib/validators";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { mirrorImageFields } from "@/lib/image-mirror";
 
+// Pasted image links are copied into storage on save (see lib/image-mirror).
+export const maxDuration = 60;
+
 type ProfilePayload = {
     fullName: string | null;
     avatarUrl: string | null;

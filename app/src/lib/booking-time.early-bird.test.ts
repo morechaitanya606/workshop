@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import { computeEarlyBirdDiscount } from "@/lib/booking-time";
 
 /**
- * These assertions encode the contract in confirm_booking_from_hold
- * (20260714193000_early_bird_checkout_totals.sql). If they drift, checkout starts failing
- * with EARLY_BIRD_DISCOUNT_MISMATCH *after* the payment has been captured.
+ * These assertions encode the contract in confirm_booking_from_hold (latest:
+ * 20261001110400_confirm_booking_approval_check.sql). If they drift, checkout starts failing
+ * with EARLY_BIRD_DISCOUNT_MISMATCH *after* the payment has been captured. The function lives
+ * in src/lib/pricing.ts; booking-time re-exports it, which this file also checks.
  */
 describe("computeEarlyBirdDiscount", () => {
     const base = {
@@ -86,5 +87,15 @@ describe("computeEarlyBirdDiscount", () => {
 
     it("returns zero for zero guests", () => {
         expect(computeEarlyBirdDiscount({ ...base, guests: 0 })).toBe(0);
+    });
+
+    it("floors 1999 x 2 at 10% on the whole subtotal, not per guest", () => {
+        // 3998 * 10% = 399.8 => 399 (per guest would be 199 * 2 = 398)
+        expect(computeEarlyBirdDiscount({ ...base, price: 1999 })).toBe(399);
+    });
+
+    it("is the shared pricing module's function", async () => {
+        const pricing = await import("@/lib/pricing");
+        expect(computeEarlyBirdDiscount).toBe(pricing.computeEarlyBirdDiscount);
     });
 });

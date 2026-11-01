@@ -6,18 +6,35 @@ import { Calendar, Clock, Loader2, MapPin, ShieldCheck, Tag, Users, X } from "lu
 import type { Workshop } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { isWebUrl } from "@/lib/workshop-media";
-import type { AppliedCoupon } from "./types";
+import { formatOfferEnd, type BookingOfferItem, type BookingPriceLines } from "./booking-pricing";
+
+/** Shown while the service fee (and so the total) is not known yet: never a guessed amount. */
+function AmountPlaceholder({ label }: { label: string }) {
+    return (
+        <span
+            role="img"
+            aria-label={label}
+            className="inline-block h-4 w-12 animate-pulse rounded bg-cream-200 align-middle"
+        />
+    );
+}
+
+function OfferEnd({ endsAt, mounted }: { endsAt: string | null; mounted: boolean }) {
+    // The real end, rendered after mount only (no server clock in the markup).
+    const text = mounted ? formatOfferEnd(endsAt) : "";
+    if (!text) return null;
+    return <span className="block text-[11px] font-normal text-emerald-700/80">Ends {text}</span>;
+}
 
 export default function BookingOrderSummary({
     workshop,
-    guests,
-    subtotalOriginal,
-    isEbEligible,
-    earlyBirdDiscountTotal,
-    appliedCoupon,
-    discountAmount,
-    serviceFee,
-    total,
+    lines,
+    offerItems,
+    typedCodeNote,
+    appliedCode,
+    mounted,
+    bookingsClosed,
+    communityUrl,
     showCouponInput,
     couponCode,
     isApplyingCoupon,
@@ -25,17 +42,19 @@ export default function BookingOrderSummary({
     onShowCouponInput,
     onCouponCodeChange,
     onApplyCoupon,
+    onApplyOfferCode,
     onRemoveCoupon,
 }: {
     workshop: Workshop;
-    guests: number;
-    subtotalOriginal: number;
-    isEbEligible: boolean;
-    earlyBirdDiscountTotal: number;
-    appliedCoupon: AppliedCoupon | null;
-    discountAmount: number;
-    serviceFee: number;
-    total: number;
+    /** The price to show: the server's quote once an order exists, else the local quote. */
+    lines: BookingPriceLines | null;
+    offerItems: BookingOfferItem[];
+    typedCodeNote: string | null;
+    /** The code the customer applied (typed or tapped), whether or not it is in the price. */
+    appliedCode: string | null;
+    mounted: boolean;
+    bookingsClosed: boolean;
+    communityUrl?: string;
     showCouponInput: boolean;
     couponCode: string;
     isApplyingCoupon: boolean;
@@ -43,6 +62,7 @@ export default function BookingOrderSummary({
     onShowCouponInput: () => void;
     onCouponCodeChange: (value: string) => void;
     onApplyCoupon: () => void;
+    onApplyOfferCode: (code: string) => void;
     onRemoveCoupon: () => void;
 }) {
     const couponInputId = useId();
@@ -51,7 +71,11 @@ export default function BookingOrderSummary({
         workshop.eventAddress && !isWebUrl(workshop.eventAddress)
             ? workshop.eventAddress
             : `${workshop.location}, ${workshop.city}`;
+    const guests = lines?.guests ?? 1;
     const guestLabel = `${guests} ${guests === 1 ? "guest" : "guests"}`;
+    const savings = lines?.savings ?? 0;
+    const offerLine = lines?.offerLine ?? null;
+    const showOffers = !bookingsClosed && offerItems.length > 0;
 
     return (
         <div>
@@ -104,61 +128,171 @@ export default function BookingOrderSummary({
                 </li>
             </ul>
 
-            <dl className="space-y-2 border-t border-clay/40 pt-4 text-sm font-inter">
-                <div className="flex justify-between gap-3">
-                    <dt className="text-dark-secondary">
-                        {formatCurrency(workshop.price || 0)} &times; {guestLabel}
-                    </dt>
-                    <dd
-                        className={
-                            isEbEligible ? "text-dark-muted line-through" : "font-medium text-dark"
-                        }
-                    >
-                        {formatCurrency(subtotalOriginal)}
-                    </dd>
-                </div>
-                {isEbEligible && (
-                    <div className="flex justify-between gap-3 text-emerald-700">
-                        <dt className="flex items-center gap-1">
-                            <Tag className="h-3.5 w-3.5" aria-hidden="true" />
-                            Early Bird offer
+            {lines && (
+                <dl className="space-y-2 border-t border-clay/40 pt-4 text-sm font-inter">
+                    <div className="flex justify-between gap-3">
+                        <dt className="text-dark-secondary">
+                            {formatCurrency(lines.listUnitPrice)} &times; {guestLabel}
                         </dt>
-                        <dd className="font-medium">-{formatCurrency(earlyBirdDiscountTotal)}</dd>
+                        <dd
+                            className={
+                                savings > 0
+                                    ? "text-dark-muted line-through"
+                                    : "font-medium text-dark"
+                            }
+                        >
+                            {formatCurrency(lines.listSubtotal)}
+                        </dd>
                     </div>
-                )}
-                {appliedCoupon && (
-                    <div className="flex justify-between gap-3 text-emerald-700">
-                        <dt className="flex items-center gap-1">
-                            <Tag className="h-3.5 w-3.5" aria-hidden="true" />
-                            {appliedCoupon.code}
-                            <button
-                                type="button"
-                                onClick={onRemoveCoupon}
-                                className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                                aria-label={`Remove coupon ${appliedCoupon.code}`}
-                            >
-                                <X className="h-3 w-3" aria-hidden="true" />
-                            </button>
-                        </dt>
-                        <dd className="font-medium">-{formatCurrency(discountAmount)}</dd>
+                    {lines.earlyBirdDiscount > 0 && (
+                        <div className="flex justify-between gap-3 text-emerald-700">
+                            <dt className="min-w-0">
+                                <span className="flex items-center gap-1">
+                                    <Tag className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                    Early Bird offer
+                                </span>
+                                <OfferEnd endsAt={lines.earlyBirdEndsAt} mounted={mounted} />
+                            </dt>
+                            <dd className="shrink-0 font-medium">
+                                -{formatCurrency(lines.earlyBirdDiscount)}
+                            </dd>
+                        </div>
+                    )}
+                    {offerLine && offerLine.amount > 0 && (
+                        <div className="flex justify-between gap-3 text-emerald-700">
+                            <dt className="min-w-0">
+                                <span className="flex items-center gap-1">
+                                    <Tag className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                    <span className="min-w-0 break-words">{offerLine.label}</span>
+                                    {offerLine.code && (
+                                        <button
+                                            type="button"
+                                            onClick={onRemoveCoupon}
+                                            className="ml-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                            aria-label={`Remove coupon ${offerLine.code}`}
+                                        >
+                                            <X className="h-3 w-3" aria-hidden="true" />
+                                        </button>
+                                    )}
+                                </span>
+                                <OfferEnd endsAt={offerLine.endsAt} mounted={mounted} />
+                            </dt>
+                            <dd className="shrink-0 font-medium">
+                                -{formatCurrency(offerLine.amount)}
+                            </dd>
+                        </div>
+                    )}
+                    <div className="flex justify-between gap-3">
+                        <dt className="text-dark-secondary">Service fee</dt>
+                        <dd className="font-medium text-dark">
+                            {lines.serviceFee === null ? (
+                                <AmountPlaceholder label="Service fee loading" />
+                            ) : (
+                                formatCurrency(lines.serviceFee)
+                            )}
+                        </dd>
                     </div>
-                )}
-                <div className="flex justify-between gap-3">
-                    <dt className="text-dark-secondary">Service fee</dt>
-                    <dd className="font-medium text-dark">{formatCurrency(serviceFee)}</dd>
-                </div>
-                <div className="flex items-baseline justify-between gap-3 border-t border-clay/40 pt-3">
-                    <dt className="font-inter text-base font-bold text-dark">Total</dt>
-                    <dd className="font-playfair text-2xl font-medium text-dark">
-                        {formatCurrency(total)}
-                    </dd>
-                </div>
-            </dl>
+                    <div className="flex items-baseline justify-between gap-3 border-t border-clay/40 pt-3">
+                        <dt className="font-inter text-base font-bold text-dark">Total</dt>
+                        <dd className="font-playfair text-2xl font-medium text-dark">
+                            {lines.total === null ? (
+                                <AmountPlaceholder label="Total loading" />
+                            ) : (
+                                formatCurrency(lines.total)
+                            )}
+                        </dd>
+                    </div>
+                    {savings > 0 && (
+                        <div className="flex justify-end">
+                            <dt className="sr-only">Your savings</dt>
+                            <dd className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                                You save {formatCurrency(savings)}
+                            </dd>
+                        </div>
+                    )}
+                </dl>
+            )}
             <p className="mt-1 text-right text-xs font-inter text-dark-muted">
                 All prices are inclusive of GST.
             </p>
 
-            {!appliedCoupon && (
+            {typedCodeNote && (
+                <div
+                    role="status"
+                    className="mt-3 flex items-start justify-between gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-inter text-amber-900"
+                >
+                    <span className="min-w-0">{typedCodeNote}</span>
+                    {appliedCode && (
+                        <button
+                            type="button"
+                            onClick={onRemoveCoupon}
+                            className="shrink-0 rounded-full px-2 font-semibold underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                            aria-label={`Remove coupon ${appliedCode}`}
+                        >
+                            Remove
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {showOffers && (
+                <div className="mt-4 border-t border-clay/40 pt-4">
+                    <h4 className="mb-2 text-xs font-inter font-bold uppercase tracking-wider text-dark-muted">
+                        Available offers
+                    </h4>
+                    <ul className="space-y-2">
+                        {offerItems.map((item) => (
+                            <li
+                                key={item.id}
+                                className="flex items-start justify-between gap-3 rounded-xl border border-dashed border-emerald-300 bg-emerald-50/60 px-3 py-2.5 text-sm font-inter"
+                            >
+                                <div className="min-w-0">
+                                    <p className="flex items-center gap-1 font-semibold text-emerald-800">
+                                        <Tag className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                        <span className="min-w-0 break-words">{item.label}</span>
+                                    </p>
+                                    <p className="mt-0.5 text-xs text-dark-secondary">
+                                        {item.details}
+                                    </p>
+                                    {item.kind === "community" && (
+                                        <p className="mt-0.5 text-xs text-dark-muted">
+                                            The code is shared in our WhatsApp community.{" "}
+                                            {communityUrl && (
+                                                <a
+                                                    href={communityUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="font-semibold text-terracotta underline-offset-2 hover:underline"
+                                                >
+                                                    Join the community
+                                                </a>
+                                            )}
+                                        </p>
+                                    )}
+                                    {mounted && formatOfferEnd(item.endsAt) && (
+                                        <p className="mt-0.5 text-[11px] text-dark-muted">
+                                            Ends {formatOfferEnd(item.endsAt)}
+                                        </p>
+                                    )}
+                                </div>
+                                {item.code && (
+                                    <button
+                                        type="button"
+                                        onClick={() => item.code && onApplyOfferCode(item.code)}
+                                        disabled={isApplyingCoupon}
+                                        aria-label={`Apply ${item.label}`}
+                                        className="shrink-0 rounded-full border border-emerald-600 px-3 py-1 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50"
+                                    >
+                                        Apply
+                                    </button>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {!bookingsClosed && !appliedCode && (
                 <div className="mt-4 border-t border-clay/40 pt-4">
                     {!showCouponInput ? (
                         <button

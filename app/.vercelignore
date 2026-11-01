@@ -1,6 +1,7 @@
 public/uploads/uploads/
 public/videos/*.mp4
-!public/videos/hero-triptych.mp4
 !public/videos/hero-1-mobile.mp4
 !public/videos/hero-2-mobile.mp4
 !public/videos/hero-3-mobile.mp4
+!public/videos/hero-4-mobile.mp4
+!public/videos/hero-5-mobile.mp4

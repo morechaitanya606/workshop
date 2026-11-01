@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 
 import MobileNav from "@/components/MobileNav";
 import Navbar from "@/components/Navbar";
+import OptionalWidgetBoundary from "@/components/OptionalWidgetBoundary";
+import { usePageIdle } from "@/lib/run-when-page-idle";
 const BackToTop = dynamic(() => import("@/components/ui/BackToTop"), { ssr: false });
 const ScrollProgress = dynamic(() => import("@/components/ui/ScrollProgress"), { ssr: false });
 const CommandPalette = dynamic(() => import("@/components/ui/CommandPalette"), { ssr: false });
@@ -13,6 +15,11 @@ const CookieConsentBanner = dynamic(() => import("@/components/CookieConsentBann
 });
 
 export default function AppShell({ children }: { children: ReactNode }) {
+    // Scroll progress, back-to-top and the Ctrl+K palette are extras: they (and their chunks)
+    // wait until the page has loaded and the browser is idle, and look the same once shown. Each
+    // sits in its own boundary: one whose script fails to download just does not appear.
+    const showExtras = usePageIdle();
+
     return (
         <>
             <Navbar />
@@ -23,10 +30,22 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 {children}
             </main>
             <MobileNav />
-            <CookieConsentBanner />
-            <BackToTop />
-            <ScrollProgress />
-            <CommandPalette />
+            <OptionalWidgetBoundary name="cookie-consent">
+                <CookieConsentBanner />
+            </OptionalWidgetBoundary>
+            {showExtras && (
+                <>
+                    <OptionalWidgetBoundary name="back-to-top">
+                        <BackToTop />
+                    </OptionalWidgetBoundary>
+                    <OptionalWidgetBoundary name="scroll-progress">
+                        <ScrollProgress />
+                    </OptionalWidgetBoundary>
+                    <OptionalWidgetBoundary name="command-palette">
+                        <CommandPalette />
+                    </OptionalWidgetBoundary>
+                </>
+            )}
         </>
     );
 }

@@ -3,11 +3,76 @@ import { CANCELLATION_POLICY } from "@/lib/cancellation-policy";
 import { CONTACT_EMAILS, CONTACT_PAGE_HREF, CONTACT_PHONE_NUMBERS } from "@/lib/contact";
 import { SUPPORT_CHAT_POLICY } from "@/lib/support-chat-config";
 import type { ChatLocale } from "@/lib/chatbot-language";
+import { cardOfferFor, type CardOffer, type PublicOffer } from "@/lib/offers";
+import { formatIstDateTime } from "@/lib/seo";
+import { isBookingClosed } from "@/lib/workshop-availability";
 
 /**
  * Prompt and context building for the chatbot LLM call. Pure functions, no I/O, so they can
  * be unit tested without a model.
  */
+
+/**
+ * What chat answers need besides the workshop rows to state the price charged today. Early Bird
+ * needs neither (it is on each workshop row), so without this a price still includes it.
+ */
+export type ChatPricing = {
+    /** Live public coupon offers (loadPublicOffers); auto offers lower the card price. */
+    offers?: readonly PublicOffer[] | null;
+    /** Workshops whose bookings the admin closed (loadClosedWorkshopIds). */
+    closedWorkshopIds?: ReadonlySet<string> | readonly string[] | null;
+};
+
+/** True when the admin switched this workshop's bookings off. */
+export function isChatWorkshopClosed(workshop: Pick<Workshop, "id">, pricing?: ChatPricing | null) {
+    return isBookingClosed(workshop.id, pricing?.closedWorkshopIds ?? null);
+}
+
+/**
+ * The price per person as chat text, computed like the cards and checkout (Early Bird plus the
+ * best auto offer for one guest). Replies are cached, quoted and read later, so an offer price
+ * always carries its end and the regular price and stays true after the offer ends:
+ * "₹1,799 per person until Sat, 31 Oct 2026, 5:30 am (Early bird 10% off; regular ₹1,999)".
+ * A per-booking discount stays per booking: "₹1,999 per person; ₹200 off per booking until ...".
+ * A closed or past workshop has no offer: just the list price per person.
+ */
+export function workshopPriceText(
+    workshop: Workshop,
+    options: {
+        pricing?: ChatPricing | null;
+        now?: Date | number;
+        formatAmount?: (amount: number) => string;
+    } = {}
+) {
+    const format = options.formatAmount ?? formatRupees;
+    const regular = format(workshop.price);
+    const listText = `${regular} per person`;
+    if (isChatWorkshopClosed(workshop, options.pricing)) return listText;
+
+    const now = options.now ?? Date.now();
+    if (workshop.date < getIndiaNow(new Date(now)).date) return listText;
+    let offer: CardOffer | null = null;
+    try {
+        offer = cardOfferFor(workshop, options.pricing?.offers ?? [], now);
+    } catch {
+        offer = null;
+    }
+    if (!offer || offer.listPrice !== workshop.price || !(offer.offerPrice < workshop.price)) {
+        return listText;
+    }
+
+    const label = cleanPromptText(offer.label, 60);
+    const until = offer.endsAt ? formatIstDateTime(offer.endsAt) : "";
+    if (offer.perBooking) {
+        const ending = until
+            ? `until ${until}`
+            : "with the current offer, which can end at any time";
+        return `${listText}; ${offer.discountText} ${ending} (${label})`;
+    }
+    return until
+        ? `${format(offer.offerPrice)} per person until ${until} (${label}; regular ${regular})`
+        : `${format(offer.offerPrice)} per person with the current offer (${label}; regular ${regular}; it can end at any time)`;
+}
 
 export type ChatbotHistoryTurn = {
     role: "user" | "assistant";
@@ -221,11 +286,13 @@ function relevanceScore(workshop: Workshop, queryTokens: string[]) {
     return queryTokens.reduce((total, token) => total + (haystack.includes(token) ? 1 : 0), 0);
 }
 
-function buildWorkshopLine(workshop: Workshop) {
-    const seats =
-        workshop.seatsRemaining <= 0
-            ? "SOLD OUT"
-            : `${workshop.seatsRemaining} of ${workshop.maxSeats} seats left`;
+function buildWorkshopLine(workshop: Workshop, pricing: ChatPricing | null, now: Date) {
+    // Closed by the admin is not "sold out": seats may remain, but nobody can book them.
+    const seats = isChatWorkshopClosed(workshop, pricing)
+        ? "BOOKINGS CLOSED (cannot be booked)"
+        : workshop.seatsRemaining <= 0
+          ? "SOLD OUT"
+          : `${workshop.seatsRemaining} of ${workshop.maxSeats} seats left`;
     const learn = (workshop.whatYouLearn || [])
         .slice(0, 3)
         .map((item) => cleanPromptText(item, 60))
@@ -244,7 +311,7 @@ function buildWorkshopLine(workshop: Workshop) {
         [cleanPromptText(workshop.city, 40), cleanPromptText(workshop.location, 80)]
             .filter(Boolean)
             .join(", "),
-        formatRupees(workshop.price),
+        workshopPriceText(workshop, { pricing, now }),
         seats,
         cleanPromptText(workshop.duration, 30),
         workshop.hostName ? `Host: ${cleanPromptText(workshop.hostName, 50)}` : "",
@@ -262,6 +329,8 @@ export function buildWorkshopContext(options: {
     contextWorkshopId?: string | null;
     query?: string;
     now?: Date;
+    /** Offers and closed bookings; without it prices include Early Bird only. */
+    pricing?: ChatPricing | null;
 }) {
     const upcoming = selectUpcomingWorkshops(options.workshops, options.now);
     if (upcoming.length === 0) {
@@ -294,12 +363,20 @@ export function buildWorkshopContext(options: {
 
     const header = `Upcoming workshops (${selected.length}${
         upcoming.length > selected.length ? ` of ${upcoming.length}` : ""
-    }, soonest first). Format: [id] title | category | day date time (24h, India) | city, venue | price | seats | duration | host | details | link`;
+    }, soonest first). Format: [id] title | category | day date time (24h, India) | city, venue | price per person | seats | duration | host | details | link`;
     const focusLine = focus
         ? `The visitor is currently viewing this workshop page: [${cleanPromptText(focus.id, 80)}] ${cleanPromptText(focus.title, 100)}. "this workshop" or "it" refers to it.`
         : "";
+    const now = options.now ?? new Date();
+    const pricing = options.pricing ?? null;
 
-    return [header, focusLine, ...selected.map(buildWorkshopLine)].filter(Boolean).join("\n");
+    return [
+        header,
+        focusLine,
+        ...selected.map((workshop) => buildWorkshopLine(workshop, pricing, now)),
+    ]
+        .filter(Boolean)
+        .join("\n");
 }
 
 export function buildPlatformInfo() {
@@ -341,6 +418,7 @@ export function buildChatbotContext(options: {
     contextWorkshopId?: string | null;
     query?: string;
     now?: Date;
+    pricing?: ChatPricing | null;
 }) {
     return [buildWorkshopContext(options), buildPlatformInfo(), buildFaqContext(options.faqs)]
         .filter(Boolean)
@@ -378,8 +456,9 @@ HOW TO ANSWER
 - Use ONLY the facts inside <context>. Never invent workshops, dates, prices, seats, venues, policies or links. Write prices in rupees like ₹1,800.
 - Use the earlier conversation to resolve follow-ups ("how much is it?", "and in Pune?", "that one", "this weekend"). Work out relative dates ("tomorrow", "this weekend") from today's date above.
 - Never offer, promise or hint at something the context cannot back up (for example, recommending upcoming workshops when none are listed). Before answering, check that every sentence agrees with the context and with your other sentences.
-- Recommendations and comparisons: pick only from the upcoming workshops in the context that fit the person's need (kids, beginners, budget, city, date). Give 1 to 3 options with title, date and time, city, price and seats left, and link each as [Title](/workshop/ID) using the id from the context. If none fit, say so and mention the closest option or [Explore](/explore).
-- Booking: explain the steps from the context and link the workshop page. Do not take payment or personal details yourself. Mention if seats are low or sold out.
+- Recommendations and comparisons: pick only from the upcoming workshops in the context that fit the person's need (kids, beginners, budget, city, date) and can still be booked: skip any marked BOOKINGS CLOSED or sold out unless the user asks about it, and then say it cannot be booked. Give 1 to 3 options with title, date and time, city, price and seats left, and link each as [Title](/workshop/ID) using the id from the context. If none fit, say so and mention the closest option or [Explore](/explore).
+- Booking: explain the steps from the context and link the workshop page. Do not take payment or personal details yourself. Mention if seats are low or sold out. A workshop marked BOOKINGS CLOSED cannot be booked: say bookings are closed and never suggest booking it.
+- Offer prices: quote them exactly as the context gives them, with their end date and the regular price. Never invent a discount, an end date or a price for more guests.
 - Refunds, cancellation, payment problems: apply the policy from the context to what the user told you and say what it allows in their case. Convert the timing first: compare how long before the start they would cancel with the 48-hour line (2 days = 48 hours; 3 days is more than 48 hours, tomorrow is less), and say what applies with and without the Early Bird window if they did not say which. Do not promise a refund: the final decision is support's. For a specific booking, point to support.
 - "Why book here?" and comparisons with other platforms (BookMyShow, Insider and the like) are on-topic: answer warmly from "About OnlyWorkshop" in the context, never criticise or make claims about the other platform, and invite them to explore. Do not treat this as off-topic.
 - Greetings and small talk: answer briefly and warmly, then offer help.
@@ -402,6 +481,8 @@ export function buildChatbotMessages(options: {
     contextWorkshopId?: string | null;
     clientName?: string | null;
     now?: Date;
+    /** Offers and closed bookings (see ChatPricing); optional. */
+    pricing?: ChatPricing | null;
 }): ChatbotLlmMessage[] {
     const history = normalizeChatHistory(options.history);
     const message = sanitizeTurnText(options.message, CHATBOT_MAX_USER_CHARS);
@@ -427,6 +508,7 @@ export function buildChatbotMessages(options: {
         contextWorkshopId: options.contextWorkshopId,
         query: buildRetrievalQuery(message, history),
         now: options.now,
+        pricing: options.pricing,
     })}\n</context>`;
 
     return [

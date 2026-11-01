@@ -6,12 +6,14 @@ import Link from "next/link";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
 import { useReducedMotion } from "framer-motion";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, CircleSlash, Loader2, WifiOff } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SeatMap from "@/components/booking/SeatMap";
 import { useToast } from "@/components/ToastProvider";
 import { parseDurationToMinutes, type CalendarEventData } from "@/lib/calendar";
+import { usePlatformSettings } from "@/lib/platform-settings-context";
+import { BOOKINGS_CLOSED_MESSAGE } from "@/lib/workshop-availability";
 import { googleMapsLinkOf, isWebUrl } from "@/lib/workshop-media";
 import BookingConfirmation from "./BookingConfirmation";
 import BookingGuestForm, { BookingContinueButton } from "./BookingGuestForm";
@@ -23,7 +25,7 @@ import BookingReview from "./BookingReview";
 import BookingStepIndicator from "./BookingStepIndicator";
 import type { RazorpayInstance, RazorpayOptions } from "./types";
 
-import { useBookingWorkflow } from "./useBookingWorkflow";
+import { useBookingWorkflow, type ConfirmStatus } from "./useBookingWorkflow";
 
 declare global {
     interface Window {
@@ -33,19 +35,39 @@ declare global {
 
 type BookingView = "details" | "review";
 
+/** Title and line for the "payment received" panel, by confirmation state. */
+function recoveryCopy(status: ConfirmStatus): { title: string; busy: boolean } {
+    switch (status) {
+        case "stalled":
+            return { title: "Payment received, waiting for a connection", busy: false };
+        case "signin":
+            return { title: "Payment received, please log in again", busy: false };
+        case "support":
+            return { title: "Payment received, but we need to check it", busy: false };
+        default:
+            return { title: "Payment received, confirming your booking...", busy: true };
+    }
+}
+
 function BookingContent() {
     const router = useRouter();
     const prefersReducedMotion = Boolean(useReducedMotion());
     const toast = useToast();
+    const { settings } = usePlatformSettings();
     const [view, setView] = useState<BookingView>("details");
     const contentRef = useRef<HTMLDivElement>(null);
+    const recoveryRef = useRef<HTMLDivElement>(null);
     const hasMountedRef = useRef(false);
 
     const {
         workshop,
+        workshopId,
         workshopLoading,
+        workshopError,
+        retryWorkshop,
         loading,
         user,
+        isOffline,
         holdId,
         holdExpired,
         holdRemainingMs,
@@ -55,6 +77,7 @@ function BookingContent() {
         submitting,
         error,
         setError,
+        notice,
         formErrors,
         formData,
         handleFormFieldChange,
@@ -64,7 +87,12 @@ function BookingContent() {
         retryCheckoutLabel,
         isCheckoutDisabled,
         validateDetails,
+        mounted,
         awaitingConfirmation,
+        confirmStatus,
+        confirmBusy,
+        recoveryUnsaved,
+        bookingsClosed,
         guests,
         selectedGuests,
         seatsRemaining,
@@ -75,12 +103,10 @@ function BookingContent() {
         isUpdatingSeats,
         seatError,
         reholdSeats,
-        serviceFee,
-        isEbEligible,
-        earlyBirdDiscountTotal,
-        subtotalOriginal,
+        priceLines,
+        price,
         total,
-        discountAmount,
+        priceChange,
         appliedCoupon,
         showCouponInput,
         setShowCouponInput,
@@ -92,6 +118,8 @@ function BookingContent() {
         handleApplyCoupon,
         removeCoupon,
         confirmedBooking,
+        confirmedGuests,
+        confirmedAttendeeName,
     } = useBookingWorkflow();
 
     const stepLabels = ["Details", "Review & pay", "Confirmation"];
@@ -111,6 +139,19 @@ function BookingContent() {
         }
         contentRef.current?.focus({ preventScroll: true });
     }, [view]);
+
+    // A paid order is being confirmed, or needs the customer (offline, log in, support): the
+    // panel sits at the top of the page, and on a phone the customer is usually scrolled down at
+    // the bottom bar, so bring it into view when it appears and when it asks for something.
+    const recoveryNeedsAction =
+        confirmStatus === "stalled" || confirmStatus === "signin" || confirmStatus === "support";
+    useEffect(() => {
+        if (!awaitingConfirmation) return;
+        recoveryRef.current?.scrollIntoView?.({
+            block: "center",
+            behavior: prefersReducedMotion ? "auto" : "smooth",
+        });
+    }, [awaitingConfirmation, recoveryNeedsAction, prefersReducedMotion]);
 
     const goToView = (next: BookingView) => {
         setView(next);
@@ -136,7 +177,9 @@ function BookingContent() {
         />
     );
 
-    if (loading || !user || workshopLoading) {
+    // Also until this browser's saved payment / confirmation has been looked up (`mounted`): the
+    // "closed" or details screens must never flash for a customer who has already paid.
+    if (loading || !user || workshopLoading || !mounted) {
         return (
             <>
                 {razorpayScript}
@@ -146,19 +189,56 @@ function BookingContent() {
     }
 
     if (!workshop) {
+        // A slow or dropped connection is not "not found": offer a retry (it also retries by
+        // itself when the browser comes back online).
+        const unavailable = workshopError === "unavailable";
         return (
             <>
                 {razorpayScript}
                 <main className="min-h-screen bg-cream">
                     <Navbar />
                     <div className="pt-28 pb-16 section-padding text-center">
-                        <h1 className="heading-lg mb-3">Workshop not found</h1>
-                        <p className="text-body text-dark-muted mb-8">
-                            The workshop in this booking link is unavailable.
-                        </p>
-                        <Link href="/explore" className="btn-primary">
-                            Back to Explore
-                        </Link>
+                        {unavailable ? (
+                            <>
+                                <WifiOff
+                                    className="mx-auto mb-4 h-10 w-10 text-dark-muted"
+                                    aria-hidden="true"
+                                />
+                                <h1 className="heading-lg mb-3">We could not load this booking</h1>
+                                <p className="text-body mx-auto mb-8 max-w-md text-dark-muted">
+                                    {isOffline
+                                        ? "You seem to be offline. We will try again when you are back online."
+                                        : "The connection is slow or the server did not answer in time. Your seat hold is still safe for now."}
+                                </p>
+                                <div className="flex flex-col justify-center gap-3 sm:flex-row">
+                                    <button
+                                        type="button"
+                                        onClick={retryWorkshop}
+                                        className="btn-primary"
+                                    >
+                                        Retry
+                                    </button>
+                                    {workshopId && (
+                                        <Link
+                                            href={`/workshop/${workshopId}`}
+                                            className="btn-secondary"
+                                        >
+                                            Back to workshop
+                                        </Link>
+                                    )}
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <h1 className="heading-lg mb-3">Workshop not found</h1>
+                                <p className="text-body text-dark-muted mb-8">
+                                    The workshop in this booking link is unavailable.
+                                </p>
+                                <Link href="/explore" className="btn-primary">
+                                    Back to Explore
+                                </Link>
+                            </>
+                        )}
                     </div>
                     <Footer />
                 </main>
@@ -189,8 +269,8 @@ function BookingContent() {
             durationMinutes: parseDurationToMinutes(workshop.duration),
         };
 
-        const attendeeName = `${formData.firstName} ${formData.lastName}`.trim() || "Guest";
-        const bookingLocation = locationDetails;
+        const attendeeName =
+            confirmedAttendeeName || `${formData.firstName} ${formData.lastName}`.trim() || "Guest";
 
         return (
             <>
@@ -206,16 +286,68 @@ function BookingContent() {
                             bookingWorkshopTitle={bookingWorkshopTitle}
                             bookingWorkshopDate={bookingWorkshopDate}
                             bookingWorkshopTime={bookingWorkshopTime}
-                            bookingTotal={confirmedBooking?.total ?? total}
-                            guests={guests}
+                            bookingTotal={confirmedBooking?.total ?? total ?? 0}
+                            guests={confirmedGuests}
                             calendarData={calendarData}
                             workshopId={workshop.id}
                             prefersReducedMotion={prefersReducedMotion}
                             onBack={() => router.back()}
                             attendeeName={attendeeName}
-                            location={bookingLocation}
-                            bookingId={confirmedBooking?.id || workshop.id}
+                            location={locationDetails}
+                            bookingId={confirmedBooking?.id ?? ""}
                         />
+                    </div>
+                    <Footer />
+                </main>
+            </>
+        );
+    }
+
+    const backToWorkshop = (
+        <Link
+            href={`/workshop/${workshop.id}`}
+            className="mb-5 inline-flex items-center gap-2 rounded text-sm font-inter text-dark-muted transition-colors hover:text-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+        >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Back to workshop
+        </Link>
+    );
+
+    // The admin closed bookings: never show the payment step. A payment already taken for an
+    // order created before the switch is still confirmed (the recovery panel below).
+    if (bookingsClosed && !awaitingConfirmation) {
+        return (
+            <>
+                {razorpayScript}
+                <main className="min-h-screen bg-cream">
+                    <Navbar />
+                    <div className="pt-24 pb-16 section-padding">
+                        <div className="mx-auto max-w-xl">
+                            {backToWorkshop}
+                            <div className="card-section !p-6 text-center" role="status">
+                                <CircleSlash
+                                    className="mx-auto mb-4 h-10 w-10 text-dark-muted"
+                                    aria-hidden="true"
+                                />
+                                <h1 className="heading-sm mb-2">
+                                    Bookings for this workshop are closed
+                                </h1>
+                                <p className="text-body-sm mb-1 text-dark-muted">
+                                    {workshop.title}
+                                </p>
+                                <p className="text-body-sm mb-6 text-dark-muted">
+                                    {BOOKINGS_CLOSED_MESSAGE} You have not been charged.
+                                </p>
+                                <div className="flex flex-col justify-center gap-3 sm:flex-row">
+                                    <Link href={`/workshop/${workshop.id}`} className="btn-primary">
+                                        Back to the workshop
+                                    </Link>
+                                    <Link href="/explore" className="btn-secondary">
+                                        Explore other workshops
+                                    </Link>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <Footer />
                 </main>
@@ -225,9 +357,14 @@ function BookingContent() {
 
     const seatsLocked = submitting || awaitingConfirmation || step === 2;
     const holdReady = Boolean(holdId) && !holdExpired;
-    // The duplicate "seat hold expired" error is already covered by the timer panel.
+    // The duplicate "seat hold expired" error is already covered by the timer panel, and a
+    // paid order's messages live in the recovery panel.
     const showGenericError =
-        Boolean(error) && !(holdExpired && !awaitingConfirmation && /seat hold/i.test(error || ""));
+        Boolean(error) && !awaitingConfirmation && !(holdExpired && /seat hold/i.test(error || ""));
+    const recovery = recoveryCopy(confirmStatus);
+    const loginHref = `/auth/login?redirect=${encodeURIComponent(
+        `/booking?workshop=${workshop.id}`
+    )}`;
 
     const detailsCtaLabel = isUpdatingSeats
         ? "Updating seats..."
@@ -237,18 +374,18 @@ function BookingContent() {
             ? "Hold your seats first"
             : "Continue to review";
     const detailsCtaDisabled = isUpdatingSeats || seatChangePending || !holdReady;
+    const communityUrl = settings.whatsapp_community_url?.trim() || undefined;
 
     const summary = (
         <BookingOrderSummary
             workshop={workshop}
-            guests={guests}
-            subtotalOriginal={subtotalOriginal}
-            isEbEligible={isEbEligible}
-            earlyBirdDiscountTotal={earlyBirdDiscountTotal}
-            appliedCoupon={appliedCoupon}
-            discountAmount={discountAmount}
-            serviceFee={serviceFee}
-            total={total}
+            lines={priceLines}
+            offerItems={price?.offerItems ?? []}
+            typedCodeNote={price?.typedCodeNote ?? null}
+            appliedCode={appliedCoupon?.code ?? null}
+            mounted={mounted}
+            bookingsClosed={bookingsClosed}
+            communityUrl={communityUrl}
             showCouponInput={showCouponInput}
             couponCode={couponCode}
             isApplyingCoupon={isApplyingCoupon}
@@ -259,6 +396,7 @@ function BookingContent() {
                 setCouponError("");
             }}
             onApplyCoupon={() => void handleApplyCoupon()}
+            onApplyOfferCode={(code) => void handleApplyCoupon(code)}
             onRemoveCoupon={removeCoupon}
         />
     );
@@ -316,21 +454,89 @@ function BookingContent() {
         <>
             {razorpayScript}
             {/* The fixed checkout bar (below lg) is reserved under the footer, not above it:
-                176px above the footer left an empty band and the bar still hid the footer. */}
-            <main className="min-h-screen bg-cream pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
+                176px above the footer left an empty band and the bar still hid the footer. The
+                bar grows by a "You save" row when a discount applies. */}
+            <main
+                className={`min-h-screen bg-cream lg:pb-0 ${
+                    (priceLines?.savings ?? 0) > 0
+                        ? "pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))]"
+                        : "pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))]"
+                }`}
+            >
                 <Navbar />
                 <div className="pt-24 pb-8 md:pb-16 section-padding">
                     <div className="mx-auto max-w-6xl">
-                        <Link
-                            href={`/workshop/${workshop.id}`}
-                            className="mb-5 inline-flex items-center gap-2 rounded text-sm font-inter text-dark-muted transition-colors hover:text-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
-                        >
-                            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-                            Back to workshop
-                        </Link>
+                        {backToWorkshop}
 
                         <h1 className="sr-only">Book {workshop.title}</h1>
                         <BookingStepIndicator labels={stepLabels} step={displayStep} />
+
+                        {awaitingConfirmation && (
+                            <div
+                                ref={recoveryRef}
+                                role={recovery.busy ? "status" : "alert"}
+                                className="mb-6 scroll-mt-24 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3.5 text-sm font-inter text-emerald-900"
+                            >
+                                <p className="flex items-center gap-2 font-semibold">
+                                    {recovery.busy && (
+                                        <Loader2
+                                            className="h-4 w-4 shrink-0 animate-spin"
+                                            aria-hidden="true"
+                                        />
+                                    )}
+                                    {recovery.title}
+                                </p>
+                                <p className="mt-1 text-emerald-800">
+                                    {recovery.busy
+                                        ? "Please keep this page open. You will not be charged again."
+                                        : error ||
+                                          "We will keep trying. You will not be charged again."}
+                                </p>
+                                {recoveryUnsaved && (
+                                    <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                                        This browser would not save your payment details. Keep this
+                                        page open until your booking is confirmed: do not refresh or
+                                        close it.
+                                    </p>
+                                )}
+                                {confirmStatus === "stalled" && (
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleRetryCheckout()}
+                                        disabled={submitting}
+                                        className="mt-3 inline-flex items-center justify-center rounded-full border border-emerald-400 bg-white px-4 py-1.5 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50"
+                                    >
+                                        {retryCheckoutLabel}
+                                    </button>
+                                )}
+                                {confirmStatus === "signin" && (
+                                    <Link
+                                        href={loginHref}
+                                        className="mt-3 inline-flex items-center justify-center rounded-full border border-emerald-400 bg-white px-4 py-1.5 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
+                                    >
+                                        Log in again
+                                    </Link>
+                                )}
+                                {confirmStatus === "support" && (
+                                    <Link
+                                        href="/contact"
+                                        className="mt-3 inline-flex items-center justify-center rounded-full border border-emerald-400 bg-white px-4 py-1.5 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
+                                    >
+                                        Contact support
+                                    </Link>
+                                )}
+                            </div>
+                        )}
+
+                        {isOffline && !awaitingConfirmation && (
+                            <p
+                                role="status"
+                                className="mb-6 flex items-center gap-2 rounded-2xl border border-clay/60 bg-white px-4 py-3 text-sm font-inter text-dark-secondary"
+                            >
+                                <WifiOff className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                You are offline. Your details are kept; reconnect to continue.
+                            </p>
+                        )}
 
                         <BookingHoldTimer
                             remainingMs={holdRemainingMs}
@@ -347,14 +553,15 @@ function BookingContent() {
                                 className="mb-6 flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-inter text-red-700 sm:flex-row sm:items-center sm:justify-between"
                             >
                                 <span>{error}</span>
-                                {canRetryCheckout && (
+                                {canRetryCheckout && view === "review" && (
                                     <button
                                         type="button"
                                         onClick={() => {
                                             setError(null);
                                             void handleRetryCheckout();
                                         }}
-                                        className="inline-flex items-center justify-center rounded-full border border-red-300 bg-white px-4 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                                        disabled={isCheckoutDisabled}
+                                        className="inline-flex items-center justify-center rounded-full border border-red-300 bg-white px-4 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50"
                                     >
                                         {retryCheckoutLabel}
                                     </button>
@@ -445,7 +652,7 @@ function BookingContent() {
                                         </div>
                                         <BookingContinueButton
                                             isBusy={isUpdatingSeats}
-                                            disabled={detailsCtaDisabled}
+                                            disabled={detailsCtaDisabled || awaitingConfirmation}
                                             label={detailsCtaLabel}
                                         />
                                     </>
@@ -461,7 +668,10 @@ function BookingContent() {
                                             isRazorpayReady={isRazorpayReady}
                                             submitting={submitting}
                                             awaitingConfirmation={awaitingConfirmation}
+                                            confirmBusy={confirmBusy}
                                             total={total}
+                                            priceChange={priceChange}
+                                            notice={notice}
                                         />
                                     </div>
                                 )}
@@ -488,15 +698,20 @@ function BookingContent() {
 
                 <BookingMobileBar
                     total={total}
+                    savings={priceLines?.savings ?? 0}
                     guests={guests}
                     holdRemainingMs={holdRemainingMs}
-                    mode={view === "details" ? "details" : "pay"}
+                    mode={view === "details" && !awaitingConfirmation ? "details" : "pay"}
                     busy={isUpdatingSeats}
-                    disabled={view === "details" ? detailsCtaDisabled : isCheckoutDisabled}
+                    disabled={
+                        awaitingConfirmation ||
+                        (view === "details" ? detailsCtaDisabled : isCheckoutDisabled)
+                    }
                     ctaLabel={view === "details" ? detailsCtaLabel : undefined}
                     isRazorpayReady={isRazorpayReady}
                     submitting={submitting}
                     awaitingConfirmation={awaitingConfirmation}
+                    confirmBusy={confirmBusy}
                     onPay={() => void handleCheckout()}
                 />
 

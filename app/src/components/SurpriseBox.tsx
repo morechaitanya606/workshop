@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Gift, X } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { useSitePathname } from "@/lib/use-site-pathname";
 import Link from "next/link";
 
 import { usePlatformSettings } from "@/lib/platform-settings-context";
@@ -16,7 +16,7 @@ import {
 
 export default function SurpriseBox() {
     const prefersReducedMotion = Boolean(useReducedMotion());
-    const pathname = usePathname();
+    const pathname = useSitePathname();
     const { settings, loading } = usePlatformSettings();
     const [showCard, setShowCard] = useState(false);
     const isWorkshopPage = pathname.startsWith("/workshop/");

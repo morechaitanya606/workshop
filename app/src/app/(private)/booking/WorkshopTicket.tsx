@@ -31,7 +31,9 @@ export type WorkshopTicketProps = {
     prefersReducedMotion?: boolean;
 };
 
+/** "" while the booking id is unknown: a number made from nothing would be wrong. */
 function generateTicketNumber(bookingId: string) {
+    if (!bookingId) return "";
     const hash = bookingId
         .split("")
         .reduce((sum, char, index) => sum + char.charCodeAt(0) * (index + 1), 0);
@@ -68,9 +70,11 @@ function buildShareMessage(
         `${attendeeName} is attending "${workshopTitle}"`,
         `${formatDate(workshopDate)} at ${formatTicketTime(workshopTime)}`,
         location,
-        `Ticket ${ticketNumber}`,
+        ticketNumber ? `Ticket ${ticketNumber}` : "",
         "Booked on Only Workshops",
-    ].join("\n");
+    ]
+        .filter(Boolean)
+        .join("\n");
 }
 
 export default function WorkshopTicket({
@@ -245,9 +249,11 @@ export default function WorkshopTicket({
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-3 border-t border-dashed border-dark/10 pt-4">
-                                    <div className="rounded-full bg-dark-text px-3 py-1 text-[11px] font-inter font-semibold uppercase tracking-[0.18em] text-white">
-                                        {ticketNumber}
-                                    </div>
+                                    {ticketNumber && (
+                                        <div className="rounded-full bg-dark-text px-3 py-1 text-[11px] font-inter font-semibold uppercase tracking-[0.18em] text-white">
+                                            {ticketNumber}
+                                        </div>
+                                    )}
                                     <div className="inline-flex items-center gap-2 rounded-full bg-terracotta-50 px-3 py-1 text-[11px] font-inter font-semibold uppercase tracking-[0.16em] text-terracotta-700">
                                         <Armchair className="h-3.5 w-3.5" aria-hidden="true" />
                                         Admit {guests}
@@ -269,7 +275,7 @@ export default function WorkshopTicket({
                                 Booking ID
                             </p>
                             <p className="mt-2 break-all text-sm font-semibold text-dark-text">
-                                {bookingId}
+                                {bookingId || "Shown in My Tickets"}
                             </p>
                         </div>
 

@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireSupabaseService } from "@/lib/api-helpers";
@@ -52,6 +53,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
                 {
                     headers: WORKSHOP_DETAIL_CACHE_HEADERS,
                 }
+            );
+        }
+        if (error) {
+            // A database hiccup is not "not found": the booking page would tell the customer
+            // the workshop is gone instead of offering a retry.
+            Sentry.captureException(error, {
+                level: "warning",
+                tags: { layer: "api", route: "workshop_detail" },
+            });
+            return NextResponse.json(
+                { error: "Could not load the workshop right now. Please try again." },
+                { status: 503, headers: { "Cache-Control": "no-store" } }
             );
         }
     } catch (error) {

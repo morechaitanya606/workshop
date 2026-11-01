@@ -249,3 +249,95 @@ describe("buildLandingFaqs", () => {
         expect(json).not.toMatch(/rating|review/i);
     });
 });
+
+describe("search-phrased city questions", () => {
+    const questionsOf = (faqs: { question: string }[]) => faqs.map((faq) => faq.question);
+
+    it("asks 'near me' and 'join' the way people search", () => {
+        const questions = questionsOf(
+            buildLandingFaqs({ city: PUNE, upcoming: UPCOMING, past: PAST })
+        );
+        expect(questions).toContain("Where can I find workshops near me in Pune?");
+        expect(questions).toContain("How do I join a workshop?");
+    });
+
+    it("names the workshops in the next seven days", () => {
+        // 22 Oct 2026: the ice plunge (24 Oct) and chocolate (25 Oct) are both within a week.
+        const faqs = buildLandingFaqs({
+            city: PUNE,
+            upcoming: UPCOMING,
+            past: PAST,
+            todayIso: "2026-10-22",
+        });
+        expect(faqs.find((faq) => faq.question.endsWith("this week?"))).toEqual({
+            question: "What workshops are happening in Pune this week?",
+            answer: "In the next seven days: Ice Plunge Experience (Sat, 24 Oct 2026) and Chocolate Making Workshop (Sun, 25 Oct 2026). Every upcoming date is listed on this page.",
+        });
+    });
+
+    it("gives the next date when nothing falls in the next seven days", () => {
+        const later = workshopFixture({
+            id: "later",
+            title: "Macaron Workshop",
+            date: "2026-11-14",
+        });
+        const faqs = buildLandingFaqs({
+            city: PUNE,
+            upcoming: [later],
+            past: PAST,
+            todayIso: "2026-10-22",
+        });
+        expect(faqs.find((faq) => faq.question.endsWith("this week?"))?.answer).toBe(
+            "Nothing is scheduled in the next seven days yet. The next workshop is Macaron Workshop (Sat, 14 Nov 2026)."
+        );
+    });
+
+    it("skips the week question without a date, without upcoming rows, and on topic pages", () => {
+        const week = (faqs: { question: string }[]) =>
+            questionsOf(faqs).some((question) => question.endsWith("this week?"));
+        expect(week(buildLandingFaqs({ city: PUNE, upcoming: UPCOMING, past: PAST }))).toBe(false);
+        expect(
+            week(buildLandingFaqs({ city: PUNE, upcoming: [], past: PAST, todayIso: "2026-10-22" }))
+        ).toBe(false);
+        expect(
+            week(
+                buildLandingFaqs({
+                    city: PUNE,
+                    upcoming: UPCOMING,
+                    past: PAST,
+                    todayIso: "2026-10-22",
+                    topic: topic("ice-plunge"),
+                })
+            )
+        ).toBe(false);
+    });
+});
+
+describe("place clean-up", () => {
+    it("lists Camp and Pune Cantonment as one area", () => {
+        const babka = workshopFixture({
+            id: "babka",
+            title: "Babka & Foccacia Workshop",
+            eventAddress: "Mirelle Patisserie, East Street, Camp, Pune, Maharashtra 411001",
+        });
+        const mindful = workshopFixture({
+            id: "mindful",
+            title: "Health Based Mindful Baking",
+            eventAddress:
+                "Mirelle Patisserie, 2 Floor, EH Jaffar rd, Agarwal Colony, Pune Cantonment, Pune, Maharashtra 411001",
+        });
+        expect(areasOf([babka, mindful])).toEqual(["Camp"]);
+    });
+
+    it("never prints a Maps link typed without https:// as a venue", () => {
+        const baking = topic("baking");
+        const linked = workshopFixture({
+            id: "linked",
+            title: "Sourdough Starter Workshop",
+            location: "maps.app.goo.gl/UXEiDjhdRibZegzu5",
+            date: "2026-10-04",
+        });
+        const faqs = buildLandingFaqs({ city: PUNE, upcoming: [], past: [linked], topic: baking });
+        expect(faqs[0].answer).not.toMatch(/goo\.gl/);
+    });
+});

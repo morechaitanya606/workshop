@@ -1,5 +1,11 @@
 import { z } from "zod";
 import {
+    OFFER_LABEL_MAX_LENGTH,
+    OFFER_MIN_GUESTS_MAX,
+    OFFER_VISIBILITIES,
+    offerLabelRevealsCode,
+} from "@/lib/offers";
+import {
     isSupportedWorkshopImageUrl,
     normalizeUrlInput,
     normalizeWorkshopImageUrlInput,
@@ -135,6 +141,33 @@ const workshopCreateBaseSchema = z.object({
     earlyBirdDaysAfterListing: z.coerce.number().int().min(0).max(365).optional().default(0),
 });
 
+/**
+ * A percentage Early Bird above 100 makes the workshop free (the booking confirmation clamps the
+ * discount to the subtotal), so it is refused whenever the payload carries both the type and the
+ * value and does not switch the offer off. A partial update that sends only one of them cannot
+ * be checked here.
+ */
+function getEarlyBirdIssues(value: {
+    earlyBirdEnabled?: boolean;
+    earlyBirdDiscountType?: "percentage" | "fixed";
+    earlyBirdDiscountValue?: number;
+}) {
+    if (value.earlyBirdEnabled === false) return [];
+    if (
+        value.earlyBirdDiscountType === "percentage" &&
+        typeof value.earlyBirdDiscountValue === "number" &&
+        value.earlyBirdDiscountValue > 100
+    ) {
+        return [
+            {
+                message: "A percentage Early Bird discount cannot exceed 100.",
+                path: ["earlyBirdDiscountValue"],
+            },
+        ];
+    }
+    return [];
+}
+
 type ResolvedSession = { date: string; time: string; maxSeats: number };
 
 function resolveCreateSessions(value: {
@@ -178,6 +211,9 @@ function buildWorkshopCreateSchema(allowPastSessions: boolean) {
                     path = issue.field === "time" ? ["time"] : ["date"];
                 }
                 ctx.addIssue({ code: "custom", message: issue.message, path });
+            }
+            for (const issue of getEarlyBirdIssues(value)) {
+                ctx.addIssue({ code: "custom", ...issue });
             }
         })
         .transform((value) => {
@@ -229,6 +265,11 @@ export const workshopUpdateSchema = z
         earlyBirdDiscountType: z.enum(["percentage", "fixed"]).optional(),
         earlyBirdDiscountValue: z.coerce.number().int().min(0).max(100000).optional(),
         earlyBirdDaysAfterListing: z.coerce.number().int().min(0).max(365).optional(),
+    })
+    .superRefine((value, ctx) => {
+        for (const issue of getEarlyBirdIssues(value)) {
+            ctx.addIssue({ code: "custom", ...issue });
+        }
     })
     .refine((value) => Object.keys(value).length > 0, {
         message: "Provide at least one field to update.",
@@ -714,6 +755,68 @@ const couponBaseFields = {
     is_active: z.boolean().optional(),
 };
 
+const couponLabel = z
+    .union([z.string().max(200), z.null()])
+    .optional()
+    .transform((value) => (typeof value === "string" ? value.trim() : value))
+    .refine(
+        (value) => typeof value !== "string" || value.length <= OFFER_LABEL_MAX_LENGTH,
+        `Keep the label to ${OFFER_LABEL_MAX_LENGTH} characters or fewer.`
+    )
+    .refine(
+        (value) => typeof value !== "string" || !/[\u0000-\u001f\u007f]/.test(value),
+        "The label must be a single line."
+    )
+    // "" clears the label, like null.
+    .transform((value) => (value === "" ? null : value));
+
+/**
+ * How a coupon is shown to customers. Not coupon columns: the routes store them in the
+ * "coupon_offers" platform setting (src/lib/offers.ts), which needs no migration.
+ */
+const couponDisplayFields = {
+    visibility: z.enum(OFFER_VISIBILITIES).optional(),
+    label: couponLabel,
+    /** Minimum seats per booking; 1 or null means none. */
+    min_guests: z.coerce.number().int().min(1).max(OFFER_MIN_GUESTS_MAX).nullable().optional(),
+    show_end_date: z.boolean().optional(),
+};
+
+function getCouponDisplayIssues(value: {
+    code?: string;
+    visibility?: (typeof OFFER_VISIBILITIES)[number];
+    label?: string | null;
+    show_end_date?: boolean;
+    valid_until?: string | null;
+}) {
+    const issues: Array<{ message: string; path: string[] }> = [];
+
+    // Labels are publicly readable, so one that spells out a hidden or community code leaks
+    // it. Only a create knows the code here; updates are checked by the route
+    // (findLabelsRevealingCodes in src/lib/offers-server.ts).
+    if (
+        value.code &&
+        value.label &&
+        value.visibility !== "listed" &&
+        offerLabelRevealsCode(value.label, value.code)
+    ) {
+        issues.push({
+            message:
+                "The label contains the coupon code, and labels are public. Remove the code from the label, or make the offer Listed.",
+            path: ["label"],
+        });
+    }
+
+    if (value.show_end_date && value.valid_until === null) {
+        issues.push({
+            message: "Add an end date to show it to customers.",
+            path: ["valid_until"],
+        });
+    }
+
+    return issues;
+}
+
 function getCouponRuleIssues(value: {
     discount_type?: "percentage" | "fixed";
     discount_value?: number;
@@ -745,9 +848,16 @@ function getCouponRuleIssues(value: {
 }
 
 export const couponCreateSchema = z
-    .object({ code: couponCode, ...couponBaseFields })
+    .object({ code: couponCode, ...couponBaseFields, ...couponDisplayFields })
     .superRefine((value, ctx) => {
         for (const issue of getCouponRuleIssues(value)) {
+            ctx.addIssue({ code: "custom", ...issue });
+        }
+        // A new coupon without an end has none (valid_until absent = null).
+        for (const issue of getCouponDisplayIssues({
+            ...value,
+            valid_until: value.valid_until ?? null,
+        })) {
             ctx.addIssue({ code: "custom", ...issue });
         }
     });
@@ -765,9 +875,14 @@ export const couponUpdateSchema = z
         applicable_categories: couponBaseFields.applicable_categories,
         applicable_workshop_ids: couponBaseFields.applicable_workshop_ids,
         is_active: couponBaseFields.is_active,
+        ...couponDisplayFields,
     })
     .superRefine((value, ctx) => {
         for (const issue of getCouponRuleIssues(value)) {
+            ctx.addIssue({ code: "custom", ...issue });
+        }
+        // Only an explicit valid_until: null here (a stored end is not visible to a partial update).
+        for (const issue of getCouponDisplayIssues(value)) {
             ctx.addIssue({ code: "custom", ...issue });
         }
     })

@@ -1,13 +1,15 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { isImageDownloadTooSlowForVideo } from "@/lib/hero-video-bandwidth";
 import { heroVideoUrl } from "@/lib/media";
 import { fadeIn, quickTransition, useMotionProps } from "@/lib/motion-presets";
 import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
+import HeroVideoPanel from "./HeroVideoPanel";
 
 const HERO_MOBILE_QUERY = "(max-width: 640px)";
 
@@ -15,44 +17,43 @@ const HERO_MOBILE_QUERY = "(max-width: 640px)";
  * The renditions are committed under public/videos and served from Vercel's CDN; `@/lib/media`
  * resolves the origin (and how to move it to R2 later). Keep the file names here in step with
  * the exceptions in .gitignore and .vercelignore, or a deploy ships without them.
- */
-
-/**
- * Desktop shows all three clips at once as a pre-composited 1920x1080 triptych, so the
- * vertical footage keeps its full frame instead of being cropped to a narrow 16:9 band.
- * It is a single looping file — there is no sequence to advance on wide screens.
- */
-const HERO_VIDEO_DESKTOP = heroVideoUrl("hero-triptych.mp4");
-
-/**
- * A phone is too narrow for three panels, so it plays the portrait clips one at a time,
- * in order, looping back to the first.
- */
-const HERO_MOBILE_CLIPS = [
-    heroVideoUrl("hero-1-mobile.mp4"),
-    heroVideoUrl("hero-2-mobile.mp4"),
-    heroVideoUrl("hero-3-mobile.mp4"),
-];
-
-/**
- * How long to wait for a clip to actually start playing before giving up on it.
  *
- * A slow connection does not fire `error` - the request just hangs, so the poster stays up
- * while the browser keeps pulling megabytes the visitor will never see. Past this deadline
- * the element is unmounted, which aborts the download and leaves the poster as the final
- * state instead of a permanently "loading" hero.
+ * All five are 720x1280 portrait clips (see public/videos/README.md).
  */
-const HERO_PLAYBACK_DEADLINE_MS = 8000;
+const CLIP_1 = heroVideoUrl("hero-1-mobile.mp4");
+const CLIP_2 = heroVideoUrl("hero-2-mobile.mp4");
+const CLIP_3 = heroVideoUrl("hero-3-mobile.mp4");
+const CLIP_4 = heroVideoUrl("hero-4-mobile.mp4");
+const CLIP_5 = heroVideoUrl("hero-5-mobile.mp4");
+
+/**
+ * Desktop is three portrait panels side by side, so the vertical footage keeps its full frame
+ * instead of being cropped to a narrow 16:9 band. The side panels each loop their own clip;
+ * the middle plays its clips one after another and loops back to the first. The arrays are
+ * module constants so the panels see the same list on every render.
+ */
+const HERO_LEFT_CLIPS = [CLIP_4];
+const HERO_MIDDLE_CLIPS = [CLIP_1, CLIP_2, CLIP_3];
+const HERO_RIGHT_CLIPS = [CLIP_5];
+
+/**
+ * A phone is too narrow for three panels, so it plays all the clips one at a time, in order,
+ * looping back to the first. Each clip is fetched only when its turn comes.
+ */
+const HERO_MOBILE_CLIPS = [CLIP_1, CLIP_2, CLIP_3, CLIP_4, CLIP_5];
 
 /** Scroll-linked parallax only where it is cheap: a mouse/trackpad on a wide screen. */
 const HERO_PARALLAX_QUERY = "(pointer: fine) and (min-width: 768px)";
 
 type NetworkInformationLike = { saveData?: boolean; effectiveType?: string };
 
+function getNetworkInformation() {
+    return (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
+}
+
 /** Data saver on, or a 2G/3G connection: the poster image is the better hero there. */
 function prefersNoHeroVideo() {
-    const connection = (navigator as Navigator & { connection?: NetworkInformationLike })
-        .connection;
+    const connection = getNetworkInformation();
     if (!connection) return false;
     return (
         connection.saveData === true ||
@@ -94,15 +95,13 @@ export default function HeroSection({
     const heroImageSrc = heroImageUrl?.trim() || "/images/background.webp";
 
     // Rendition is resolved after mount so the server render always emits the poster
-    // image only. `readySrc`/`failedSrc` are tracked per-source so advancing to the next
-    // clip (or switching crop on resize) re-runs the fade instead of flashing a
-    // half-loaded frame.
+    // image only. Each video panel tracks its own clips (HeroVideoPanel), so switching between
+    // the phone player and the three desktop panels on resize starts them afresh.
     const [isMobileRendition, setIsMobileRendition] = useState<boolean | null>(null);
-    const [clipIndex, setClipIndex] = useState(0);
-    const [readySrc, setReadySrc] = useState<string | null>(null);
-    const [failedSrcs, setFailedSrcs] = useState<ReadonlySet<string>>(() => new Set());
     const [isHeroInView, setIsHeroInView] = useState(true);
     const [isParallaxEnabled, setIsParallaxEnabled] = useState(false);
+    // Set once a playing clip keeps rebuffering; the poster image stays for the rest of the visit.
+    const [hasVideoStalledOut, setHasVideoStalledOut] = useState(false);
 
     useEffect(() => {
         // Read the preference directly here: `shouldReduceMotion` starts false for hydration, and
@@ -117,6 +116,14 @@ export default function HeroSection({
         // Start the video only once the page itself has loaded, so megabytes of clip do not
         // compete with the photos and scripts the visitor is waiting for.
         const start = () => {
+            // No navigator.connection (iOS Safari, Firefox): judge the link by how fast the hero
+            // image came down, which by `load` it has. Unmeasured or fast enough, nothing changes.
+            if (
+                !getNetworkInformation() &&
+                isImageDownloadTooSlowForVideo(heroRef.current?.querySelector("img"))
+            ) {
+                return;
+            }
             applyRendition();
             mediaQuery.addEventListener("change", applyRendition);
         };
@@ -149,60 +156,18 @@ export default function HeroSection({
         if (!node || typeof IntersectionObserver === "undefined") return;
 
         const observer = new IntersectionObserver(
-            ([entry]) => {
-                setIsHeroInView(entry.isIntersecting);
-                // A remounted clip must fade in again once it actually plays.
-                if (!entry.isIntersecting) setReadySrc(null);
-            },
+            ([entry]) => setIsHeroInView(entry.isIntersecting),
             { threshold: 0.05 }
         );
         observer.observe(node);
         return () => observer.disconnect();
     }, []);
 
-    const videoSrc =
-        isMobileRendition === null || !isHeroInView
-            ? null
-            : isMobileRendition
-              ? HERO_MOBILE_CLIPS[clipIndex]
-              : HERO_VIDEO_DESKTOP;
+    // Video plays only once the rendition is known, while the hero is on screen, and until a clip
+    // has run dry too often. Scrolling away unmounts the panels, which stops the downloads.
+    const isVideoActive = isMobileRendition !== null && isHeroInView && !hasVideoStalledOut;
     const parallaxActive = isParallaxEnabled && !shouldReduceMotion;
-
-    const advanceClip = useCallback(
-        () => setClipIndex((index) => (index + 1) % HERO_MOBILE_CLIPS.length),
-        []
-    );
-
-    const hasCurrentFailed = Boolean(videoSrc) && failedSrcs.has(videoSrc!);
-    // Desktop is a single file, so one failure is already the end of the road there.
-    const haveAllFailed = isMobileRendition
-        ? HERO_MOBILE_CLIPS.every((src) => failedSrcs.has(src))
-        : hasCurrentFailed;
-
-    // Skip past a clip that could not load, but stop once every clip has failed so the
-    // sequence cannot spin forever — the poster image is the fallback at that point.
-    useEffect(() => {
-        if (!hasCurrentFailed || haveAllFailed) return;
-        advanceClip();
-    }, [advanceClip, hasCurrentFailed, haveAllFailed]);
-
-    // Treat "never started playing" the same as a load error. Without this a stalled
-    // request keeps downloading a multi-megabyte clip on a connection too slow to ever
-    // show it, which is the worst outcome for the visitor: no video AND wasted data.
-    useEffect(() => {
-        if (!videoSrc || readySrc === videoSrc || failedSrcs.has(videoSrc)) return;
-
-        const timer = setTimeout(() => {
-            setFailedSrcs((previous) => new Set(previous).add(videoSrc));
-        }, HERO_PLAYBACK_DEADLINE_MS);
-
-        return () => clearTimeout(timer);
-    }, [videoSrc, readySrc, failedSrcs]);
-
-    // Autoplay can be refused (data saver, low power mode) without firing `error`,
-    // so the poster stays visible underneath until the video actually plays.
-    const isVideoVisible = Boolean(videoSrc) && readySrc === videoSrc;
-    const shouldRenderVideo = Boolean(videoSrc) && !hasCurrentFailed;
+    const dropVideo = () => setHasVideoStalledOut(true);
 
     return (
         <section
@@ -225,29 +190,37 @@ export default function HeroSection({
                     className="object-cover"
                     sizes="100vw"
                 />
-                {shouldRenderVideo && videoSrc && (
-                    // No `poster`: the optimised hero image underneath already shows that frame, and
-                    // the raw poster file was a second, unoptimised download of it.
-                    <video
-                        key={videoSrc}
-                        src={videoSrc}
-                        autoPlay
-                        muted
-                        loop={!isMobileRendition}
-                        playsInline
-                        // Never "auto": that races the full file down before playback starts, which is
-                        // exactly what stalls a hero on a slow mobile connection.
-                        preload="metadata"
-                        aria-hidden="true"
-                        tabIndex={-1}
-                        onPlaying={() => setReadySrc(videoSrc)}
-                        onEnded={isMobileRendition ? advanceClip : undefined}
-                        onError={() => setFailedSrcs((previous) => new Set(previous).add(videoSrc))}
-                        className={`absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-700 ease-out ${
-                            isVideoVisible ? "opacity-100" : "opacity-0"
-                        }`}
-                    />
-                )}
+                {isVideoActive &&
+                    (isMobileRendition ? (
+                        <HeroVideoPanel sources={HERO_MOBILE_CLIPS} onStalledOut={dropVideo} />
+                    ) : (
+                        // Three portrait panels, each in a cell of its own: where a panel's clip
+                        // cannot play, the hero image underneath shows through that third of the
+                        // screen and the other two stay where they are.
+                        <div
+                            className="absolute inset-0 grid grid-cols-3"
+                            data-testid="hero-panels"
+                        >
+                            <div className="relative h-full">
+                                <HeroVideoPanel
+                                    sources={HERO_LEFT_CLIPS}
+                                    onStalledOut={dropVideo}
+                                />
+                            </div>
+                            <div className="relative h-full">
+                                <HeroVideoPanel
+                                    sources={HERO_MIDDLE_CLIPS}
+                                    onStalledOut={dropVideo}
+                                />
+                            </div>
+                            <div className="relative h-full">
+                                <HeroVideoPanel
+                                    sources={HERO_RIGHT_CLIPS}
+                                    onStalledOut={dropVideo}
+                                />
+                            </div>
+                        </div>
+                    ))}
                 <div className="absolute inset-0 hero-gradient-mesh" />
                 {/* A plain warm tint. Blend modes (soft-light, multiply grain) over a playing video
                     had to be recomposited on every frame. */}

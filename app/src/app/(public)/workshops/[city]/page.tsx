@@ -3,11 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import Footer from "@/components/Footer";
-import WorkshopCard from "@/components/WorkshopCard";
+import WorkshopCard, { WorkshopPriceTag } from "@/components/WorkshopCard";
 import { getCachedPlatformSettings } from "@/lib/cached-reads";
 import { buildLandingFaqs, faqPageJsonLd, topicGroups } from "@/lib/city-faqs";
 import { getAbsoluteUrl } from "@/lib/env";
-import { getIstTodayIso } from "@/lib/ist-date";
+import { getIstTodayIso, isDateBetween, istWeekendRange } from "@/lib/ist-date";
 import { serializeJsonLd } from "@/lib/json-ld";
 import {
     DEFAULT_OG_IMAGES,
@@ -15,12 +15,22 @@ import {
     SEO_CITIES,
     SITE_NAME,
     breadcrumbJsonLd,
+    cityHubH1,
+    cityMetaTitle,
     cityPagePath,
+    displayVenue,
     firstSentence,
+    formatWorkshopDate,
+    formatWorkshopTime,
     getSeoCityBySlug,
 } from "@/lib/seo";
 import { topicPagePath } from "@/lib/seo-topics";
-import { loadCityWorkshops } from "@/lib/workshop-page-data";
+import {
+    failRenderOnDataError,
+    loadCardPricing,
+    loadCityWorkshops,
+    workshopCardExtras,
+} from "@/lib/workshop-page-data";
 
 export const revalidate = 300;
 export const dynamicParams = false;
@@ -36,12 +46,14 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     if (!city) return {};
 
     const canonicalUrl = getAbsoluteUrl(cityPagePath(city));
+    // Rendered at most every 5 minutes (revalidate), so the year turns over on 1 January.
+    const title = cityMetaTitle(city, getIstTodayIso().slice(0, 4));
     return {
-        title: city.metaTitle,
+        title,
         description: city.metaDescription,
         alternates: { canonical: canonicalUrl },
         openGraph: {
-            title: city.metaTitle,
+            title,
             description: city.metaDescription,
             url: canonicalUrl,
             type: "website",
@@ -52,7 +64,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
         },
         twitter: {
             card: "summary_large_image",
-            title: city.metaTitle,
+            title,
             description: city.metaDescription,
         },
     };
@@ -62,14 +74,28 @@ export default async function CityWorkshopsPage({ params }: Params) {
     const city = getSeoCityBySlug((await params).city);
     if (!city) notFound();
 
-    const [{ upcoming, past }, settings] = await Promise.all([
+    const [{ upcoming, past, source }, settings, cardPricing] = await Promise.all([
         loadCityWorkshops(city.name),
         getCachedPlatformSettings(),
+        loadCardPricing(),
     ]);
+    // Keeps the last good page instead of caching empty lists for five minutes.
+    failRenderOnDataError(source, cityPagePath(city));
     const todayIso = getIstTodayIso();
+    const { cardOffers, closedWorkshopIds } = workshopCardExtras(upcoming, cardPricing, todayIso);
+    const closed = new Set(closedWorkshopIds);
+    const offerFor = (workshopId: string) =>
+        Object.hasOwn(cardOffers, workshopId) ? cardOffers[workshopId] : null;
     const whatsappUrl = settings.whatsapp_community_url?.trim() || undefined;
     const recentPast = past.slice(0, 12);
-    const faqs = buildLandingFaqs({ city, upcoming, past, whatsappUrl });
+    const faqs = buildLandingFaqs({ city, upcoming, past, whatsappUrl, todayIso });
+    const weekendRange = istWeekendRange(todayIso);
+    const thisWeekend = upcoming.filter((workshop) =>
+        isDateBetween(workshop.date, weekendRange.from, weekendRange.to)
+    );
+    const nextWorkshop = [...upcoming]
+        .filter((workshop) => isDateBetween(workshop.date, todayIso, "9999-12-31"))
+        .sort((a, b) => a.date.localeCompare(b.date))[0];
     // Activity pages that pass the thin-content rule; the others stay unlinked from here.
     const topics = topicGroups(upcoming, past).filter((group) => group.indexable);
 
@@ -121,9 +147,7 @@ export default async function CityWorkshopsPage({ params }: Params) {
                         </span>
                     </nav>
                     <span className="eyebrow-label">{city.name}</span>
-                    <h1 className="heading-lg !text-4xl sm:!text-5xl mb-4">
-                        Workshops &amp; Creative Events in {city.name}
-                    </h1>
+                    <h1 className="heading-lg !text-4xl sm:!text-5xl mb-4">{cityHubH1(city)}</h1>
                     <div className="max-w-3xl space-y-3">
                         {city.intro.map((paragraph) => (
                             <p key={paragraph} className="text-body text-dark-muted">
@@ -157,6 +181,62 @@ export default async function CityWorkshopsPage({ params }: Params) {
                 </div>
             </section>
 
+            {nextWorkshop && (
+                <section className="section-padding pb-14" aria-labelledby="weekend-heading">
+                    <div className="max-w-7xl mx-auto">
+                        <h2 id="weekend-heading" className="heading-md mb-4">
+                            Workshops in {city.name} this weekend
+                        </h2>
+                        {thisWeekend.length > 0 ? (
+                            <ul className="divide-y divide-clay/30 rounded-2xl border border-gray-200 bg-white font-inter">
+                                {thisWeekend.map((workshop) => (
+                                    <li
+                                        key={workshop.id}
+                                        className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6"
+                                    >
+                                        <div className="min-w-0">
+                                            <Link
+                                                href={`/workshop/${workshop.id}`}
+                                                className="font-semibold text-dark hover:text-terracotta transition-colors"
+                                            >
+                                                {workshop.title}
+                                            </Link>
+                                            <p className="text-sm text-dark-muted">
+                                                {[
+                                                    formatWorkshopDate(workshop.date),
+                                                    formatWorkshopTime(workshop.time),
+                                                    displayVenue(workshop),
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(" · ")}
+                                            </p>
+                                        </div>
+                                        <WorkshopPriceTag
+                                            className="shrink-0 text-sm font-semibold text-dark"
+                                            price={workshop.price}
+                                            offer={offerFor(workshop.id)}
+                                            bookingsClosed={closed.has(workshop.id)}
+                                            soldOut={workshop.seatsRemaining <= 0}
+                                        />
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-body text-dark-muted">
+                                Nothing is scheduled for this weekend yet. The next workshop is{" "}
+                                <Link
+                                    href={`/workshop/${nextWorkshop.id}`}
+                                    className="font-semibold text-terracotta hover:underline"
+                                >
+                                    {nextWorkshop.title}
+                                </Link>{" "}
+                                on {formatWorkshopDate(nextWorkshop.date)}.
+                            </p>
+                        )}
+                    </div>
+                </section>
+            )}
+
             <section className="section-padding pb-14" aria-labelledby="upcoming-heading">
                 <div className="max-w-7xl mx-auto">
                     <h2 id="upcoming-heading" className="heading-md mb-6">
@@ -170,6 +250,8 @@ export default async function CityWorkshopsPage({ params }: Params) {
                                     workshop={workshop}
                                     todayIso={todayIso}
                                     index={index}
+                                    offer={offerFor(workshop.id)}
+                                    bookingsClosed={closed.has(workshop.id)}
                                 />
                             ))}
                         </div>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import * as Sentry from "@sentry/nextjs";
+import { retryAfterError } from "@/lib/chunk-load-recovery";
+import { reportError } from "@/lib/sentry-client";
 
 export default function AdminError({
     error,
@@ -11,12 +12,7 @@ export default function AdminError({
     reset: () => void;
 }) {
     useEffect(() => {
-        Sentry.captureException(error, {
-            tags: {
-                route: "admin",
-                layer: "web",
-            },
-        });
+        reportError(error, { route: "admin", layer: "web" });
     }, [error]);
 
     return (
@@ -26,7 +22,7 @@ export default function AdminError({
                 <p className="mt-4 text-body text-dark-muted">
                     The admin dashboard encountered an issue. Please try again.
                 </p>
-                <button onClick={reset} className="btn-primary mt-8">
+                <button onClick={() => retryAfterError(error, reset)} className="btn-primary mt-8">
                     Try again
                 </button>
             </div>

@@ -13,6 +13,9 @@ import { communityPhotoCreateSchema } from "@/lib/validators";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { mirrorImageFields } from "@/lib/image-mirror";
 
+// Pasted image links are copied into storage on save (see lib/image-mirror).
+export const maxDuration = 60;
+
 export async function GET(request: NextRequest) {
     const limited = await enforceRateLimit(request, "publicRead", "api-admin-photos-list");
     if (!limited.ok) return limited.response;

@@ -5,7 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Menu, X, LogOut } from "lucide-react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useSitePathname } from "@/lib/use-site-pathname";
 import { useAuth } from "@/lib/auth-context";
 import { CONTACT_PAGE_HREF } from "@/lib/contact";
 import { useModalA11y } from "@/lib/use-modal-a11y";
@@ -95,7 +96,7 @@ export default function Navbar() {
     const [query, setQuery] = useState("");
     const [showSuggestions, setShowSuggestions] = useState(false);
     const searchContainerRef = useRef<HTMLDivElement | null>(null);
-    const pathname = usePathname();
+    const pathname = useSitePathname();
     const { user, role, roleLoading, loading, signOut } = useAuth();
     const isHomePage = pathname === "/";
 

@@ -44,6 +44,39 @@ vi.mock("@sentry/nextjs", () => ({
     setTag: vi.fn(),
 }));
 
+// The "Bookings closed" read (workshop-availability-server.ts) runs for real against each test's
+// service client; these stubs only keep it from building a real Supabase client or cache.
+vi.mock("@/lib/supabase-server", () => ({
+    isSupabaseServiceConfigured: false,
+    createSupabaseServiceClient: () => {
+        throw new Error("No real Supabase client in tests.");
+    },
+}));
+
+vi.mock("@/lib/cached-reads", () => ({
+    PLATFORM_SETTINGS_TAG: "platform-settings",
+    getCachedPlatformSettings: vi.fn(async () => ({})),
+}));
+
+/**
+ * The service client with the "closed_workshop_ids" read answered by `closedRead` (no row by
+ * default: nothing closed); every other table goes to the test's own `from`.
+ */
+function withClosedList<T extends { from: (table: string) => unknown }>(
+    client: T,
+    closedRead: { data: unknown; error: unknown } = { data: null, error: null }
+): T {
+    const from = client.from;
+    return {
+        ...client,
+        from: vi.fn((table: string) =>
+            table === "platform_settings"
+                ? { select: vi.fn(() => createQueryBuilder(closedRead)) }
+                : from(table)
+        ),
+    };
+}
+
 function createQueryBuilder<T>(result: T) {
     const builder = {
         eq: vi.fn(),
@@ -157,7 +190,7 @@ describe("POST /api/bookings/hold", () => {
         vi.mocked(assertRateLimit).mockResolvedValue({ ok: true } as any);
         vi.mocked(requireSupabaseService).mockReturnValue({
             ok: true,
-            client: serviceClient as any,
+            client: withClosedList(serviceClient) as any,
         });
         vi.mocked(ensureWorkshopSeededFromMock).mockResolvedValue(true);
 
@@ -249,7 +282,7 @@ describe("POST /api/bookings/hold", () => {
         vi.mocked(assertRateLimit).mockResolvedValue({ ok: true } as any);
         vi.mocked(requireSupabaseService).mockReturnValue({
             ok: true,
-            client: serviceClient as any,
+            client: withClosedList(serviceClient) as any,
         });
         vi.mocked(ensureWorkshopSeededFromMock).mockResolvedValue(true);
 
@@ -319,7 +352,7 @@ describe("POST /api/bookings/hold", () => {
         vi.mocked(assertRateLimit).mockResolvedValue({ ok: true } as any);
         vi.mocked(requireSupabaseService).mockReturnValue({
             ok: true,
-            client: serviceClient as any,
+            client: withClosedList(serviceClient) as any,
         });
         vi.mocked(ensureWorkshopSeededFromMock).mockResolvedValue(true);
 
@@ -376,7 +409,7 @@ describe("POST /api/bookings/hold", () => {
         vi.mocked(assertRateLimit).mockResolvedValue({ ok: true } as any);
         vi.mocked(requireSupabaseService).mockReturnValue({
             ok: true,
-            client: serviceClient as any,
+            client: withClosedList(serviceClient) as any,
         });
         vi.mocked(ensureWorkshopSeededFromMock).mockResolvedValue(true);
 
@@ -396,5 +429,105 @@ describe("POST /api/bookings/hold", () => {
         } finally {
             vi.unstubAllEnvs();
         }
+    });
+
+    function closedListFixture(closedRead: { data: unknown; error: unknown }) {
+        const workshopTimingBuilder = createQueryBuilder({
+            data: { id: "workshop-1", date: "2099-05-10", time: "11:00" },
+            error: null,
+        });
+        const holdRecordBuilder = createQueryBuilder({
+            data: { id: "hold-1", guests: 2, expires_at: "2099-05-10T12:15:00.000Z" },
+            error: null,
+        });
+        const serviceClient = {
+            from: vi
+                .fn()
+                .mockImplementationOnce(() => ({ select: vi.fn(() => workshopTimingBuilder) }))
+                .mockImplementationOnce(() => ({ select: vi.fn(() => holdRecordBuilder) })),
+            rpc: vi.fn().mockResolvedValue({ data: "hold-1", error: null }),
+        };
+
+        vi.mocked(requireAuthenticatedUser).mockResolvedValue({
+            ok: true,
+            user: { id: "user-1" } as any,
+            accessToken: "token",
+        });
+        vi.mocked(assertRateLimit).mockResolvedValue({ ok: true } as any);
+        vi.mocked(requireSupabaseService).mockReturnValue({
+            ok: true,
+            client: withClosedList(serviceClient, closedRead) as any,
+        });
+
+        return serviceClient;
+    }
+
+    function holdRequest() {
+        return new NextRequest("http://localhost/api/bookings/hold", {
+            method: "POST",
+            body: JSON.stringify({ workshopId: "workshop-1", guests: 2 }),
+        });
+    }
+
+    /** The admin "Bookings closed" switch: no new hold (nor re-hold) starts. */
+    it("refuses a hold with BOOKINGS_CLOSED when the admin closed the workshop", async () => {
+        const serviceClient = closedListFixture({
+            data: { setting_value: ["other-workshop", "workshop-1"] },
+            error: null,
+        });
+
+        const response = await POST(holdRequest());
+        const body = await response.json();
+
+        expect(response.status).toBe(409);
+        expect(body.code).toBe("BOOKINGS_CLOSED");
+        expect(body.message).toBe("Bookings for this workshop are closed.");
+        expect(serviceClient.rpc).not.toHaveBeenCalled();
+    });
+
+    it("keeps bookings open when the closed-list read outlives its deadline", async () => {
+        // Only the timers are faked: the request body is still read for real.
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+            // A read that never answers, as a database too slow to matter.
+            const serviceClient = closedListFixture(new Promise(() => {}) as never);
+
+            let settled = false;
+            const pending = POST(holdRequest()).finally(() => {
+                settled = true;
+            });
+            for (let step = 0; step < 40 && !settled; step += 1) {
+                await vi.advanceTimersByTimeAsync(500);
+            }
+            const response = await pending;
+
+            expect(settled).toBe(true);
+            expect(response.status).toBe(200);
+            expect(serviceClient.rpc).toHaveBeenCalledWith(
+                "create_booking_hold",
+                expect.objectContaining({ p_workshop_id: "workshop-1" })
+            );
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it.each([
+        { name: "a failed read", closedRead: { data: null, error: { message: "boom" } } },
+        { name: "a malformed setting", closedRead: { data: { setting_value: "{" }, error: null } },
+        {
+            name: "another workshop closed",
+            closedRead: { data: { setting_value: ["other-workshop"] }, error: null },
+        },
+    ])("keeps bookings open on $name", async ({ closedRead }) => {
+        const serviceClient = closedListFixture(closedRead);
+
+        const response = await POST(holdRequest());
+
+        expect(response.status).toBe(200);
+        expect(serviceClient.rpc).toHaveBeenCalledWith(
+            "create_booking_hold",
+            expect.objectContaining({ p_workshop_id: "workshop-1" })
+        );
     });
 });

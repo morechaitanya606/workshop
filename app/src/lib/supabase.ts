@@ -1,6 +1,6 @@
 import { createBrowserClient } from "@supabase/ssr";
 import type { Database } from "@/lib/database.types";
-import { getPublicSupabaseConfig } from "@/lib/env";
+import { getPublicSupabaseConfig } from "@/lib/public-env";
 
 const supabasePublicConfig = getPublicSupabaseConfig();
 
