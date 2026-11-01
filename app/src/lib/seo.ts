@@ -1,5 +1,6 @@
 import type { Workshop } from "@/lib/data";
 import { CONTACT_PHONE_NUMBERS } from "@/lib/contact";
+import type { CardOffer } from "@/lib/offers";
 import { formatCurrency } from "@/lib/utils";
 import { isWebUrl } from "@/lib/workshop-media";
 // Type only: the topic catalogue itself stays out of client bundles that import this file.
@@ -38,7 +39,10 @@ export type SeoCity = {
     slug: string;
     name: string;
     region: string;
-    /** <title>, kept under ~60 characters so Google does not cut it. */
+    /**
+     * <title>, kept under ~60 characters so Google does not cut it. `{year}` becomes the current
+     * IST year (cityMetaTitle), so the title never shows a stale one.
+     */
     metaTitle: string;
     /** Meta description, ~150 characters: the snippet Google shows when it agrees. */
     metaDescription: string;
@@ -55,11 +59,13 @@ export const SEO_CITIES: readonly SeoCity[] = [
         slug: "pune",
         name: "Pune",
         region: "Maharashtra",
-        metaTitle: "Workshops in Pune: Baking, Pottery, Chocolate & More",
+        // "Near you" and the year mirror how the marketplaces ranking for "workshops near me" in
+        // Pune title their pages; every workshop listed here is in Pune.
+        metaTitle: "Workshops in Pune Near You ({year}): Pottery, Baking & More",
         metaDescription:
-            "Hands-on workshops in Pune: baking, sourdough, chocolate making, macarons, pottery, terrariums, ice baths and more, led by local hosts. Book online.",
+            "Find creative workshops and hobby classes near you in Pune: pottery, baking, sourdough, chocolate making, macarons, terrariums and ice baths. Book online.",
         intro: [
-            "Only Workshops brings hands-on workshops and creative experiences to Pune: sessions where a local chef, maker or guide teaches you a skill in a few hours. Workshops so far have ranged from baking, sourdough bread and pizza to chocolate making, French macarons and charcuterie boards, alongside crafts such as pottery and terrarium making and wellness experiences such as a guided ice plunge.",
+            "Only Workshops brings hands-on workshops, hobby classes and creative experiences to Pune: sessions where a local chef, maker or guide teaches you a skill in a few hours. Workshops so far have ranged from baking, sourdough bread and pizza to chocolate making, French macarons and charcuterie boards, alongside crafts such as pottery and terrarium making and wellness experiences such as a guided ice plunge.",
             "Sessions have been hosted at partner studios, cafés and kitchens across the city, from Baner and Kharadi to Koregaon Park and Camp. Every workshop page shows the venue, what you will learn and how many seats are left, and booking takes a couple of minutes online.",
         ],
     },
@@ -77,6 +83,16 @@ export function getSeoCityByName(name: string | null | undefined) {
 
 export function cityPagePath(city: SeoCity) {
     return `/workshops/${city.slug}`;
+}
+
+/** The city hub's <title> for an IST year ("2026"). */
+export function cityMetaTitle(city: Pick<SeoCity, "metaTitle">, year: string) {
+    return city.metaTitle.replace("{year}", year);
+}
+
+/** The city hub's H1. Kept apart from metaTitle: a <title> equal to the H1 is flagged by audits. */
+export function cityHubH1(city: Pick<SeoCity, "name">) {
+    return `Creative Workshops & Hobby Classes in ${city.name}`;
 }
 
 /**
@@ -287,6 +303,45 @@ export function formatWorkshopTime(time: string | null | undefined) {
     return `${hours % 12 || 12}:${match[2]} ${hours < 12 ? "am" : "pm"}`;
 }
 
+const SHORT_MONTHS = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+] as const;
+
+/** Beyond this a Date is invalid and toISOString throws. */
+const MAX_DATE_MS = 8.64e15;
+
+/**
+ * An instant (ISO text or epoch ms) as IST wall-clock text, for offer end dates: "Sat, 31 Oct
+ * 2026, 5:30 am", or with `short` "31 Oct, 5:30 am". The time is always given: an Early Bird
+ * ends at 5:30 am, so a bare date would promise most of a day that is not on offer. "" when
+ * the instant cannot be read. Built by hand, not with Intl, so server and browser agree.
+ */
+export function formatIstDateTime(
+    value: string | number | null | undefined,
+    options: { short?: boolean } = {}
+) {
+    const ms = typeof value === "number" ? value : value ? Date.parse(value) : NaN;
+    if (!Number.isFinite(ms) || Math.abs(ms) > MAX_DATE_MS - 86_400_000) return "";
+    const ist = toIstIso(ms);
+    const time = formatWorkshopTime(ist.slice(11, 16));
+    if (options.short) {
+        const month = SHORT_MONTHS[Number(ist.slice(5, 7)) - 1];
+        return `${Number(ist.slice(8, 10))} ${month}, ${time}`;
+    }
+    return `${formatWorkshopDate(ist.slice(0, 10))}, ${time}`;
+}
+
 type SeoDescriptionFields = Pick<
     Workshop,
     "id" | "title" | "category" | "city" | "date" | "time" | "price" | "description"
@@ -408,8 +463,38 @@ export type EventUrls = {
     imageUrl?: string;
 };
 
-/** schema.org Event for a workshop page (Google's event rich result fields). */
-export function workshopEventJsonLd(workshop: Workshop, urls: EventUrls) {
+type EventOfferPrice = Pick<CardOffer, "listPrice" | "offerPrice" | "endsAt"> &
+    Partial<Pick<CardOffer, "perBooking">>;
+
+/**
+ * What the page sells at render time, so the markup matches the visible price (both are cached
+ * for the same window).
+ */
+export type EventOfferInput = {
+    /**
+     * The admin closed bookings (src/lib/workshop-availability.ts): availability SoldOut and
+     * the list price, with no discount, whatever `offer` says.
+     */
+    bookingsClosed?: boolean;
+    /**
+     * cardOfferFor(workshop, offers, now) for this render, or null: offers.price becomes what
+     * ONE guest pays now (Early Bird plus the best auto offer, before the service fee, which is
+     * per booking), valid until the advertised end when there is one. A per-booking discount (a
+     * fixed coupon) has no honest per-person price, so it is ignored: the page shows the list
+     * price beside the offer's name, and so does the markup.
+     */
+    offer?: EventOfferPrice | null;
+};
+
+/**
+ * schema.org Event for a workshop page (Google's event rich result fields). `pricing` is
+ * optional: without it the offer is the list price, as before.
+ */
+export function workshopEventJsonLd(
+    workshop: Workshop,
+    urls: EventUrls,
+    pricing: EventOfferInput = {}
+) {
     const durationMinutes = parseDurationMinutes(workshop.duration);
     // A pasted Maps link is not an address. Leaving streetAddress out costs a Rich Results
     // warning; repeating the venue name there would be a wrong address.
@@ -433,6 +518,21 @@ export function workshopEventJsonLd(workshop: Workshop, urls: EventUrls) {
     }));
     // Same @id as the Organization in siteJsonLd, so Google joins the two.
     const siteRoot = `${urls.siteUrl.replace(/\/$/, "")}/`;
+    const bookingsClosed = pricing.bookingsClosed === true;
+    // Only a real discount on this workshop's own list price: never a reference price.
+    const offer = pricing.offer;
+    const offerPrice =
+        !bookingsClosed &&
+        offer &&
+        !offer.perBooking &&
+        offer.listPrice === workshop.price &&
+        Number.isFinite(offer.offerPrice) &&
+        offer.offerPrice >= 0 &&
+        offer.offerPrice < workshop.price
+            ? offer.offerPrice
+            : null;
+    const offerEndMs = offerPrice !== null && offer?.endsAt ? Date.parse(offer.endsAt) : NaN;
+    const offerEnd = Number.isFinite(offerEndMs) ? toIstIso(offerEndMs) : null;
 
     return {
         "@context": "https://schema.org",
@@ -483,14 +583,19 @@ export function workshopEventJsonLd(workshop: Workshop, urls: EventUrls) {
               : {}),
         offers: {
             "@type": "Offer",
-            price: workshop.price,
+            price: offerPrice ?? workshop.price,
             priceCurrency: "INR",
+            // Closed bookings have no schema.org value of their own; SoldOut is the one that
+            // says "cannot be booked" (seats may remain, which the page itself says).
             availability:
-                workshop.seatsRemaining > 0
+                workshop.seatsRemaining > 0 && !bookingsClosed
                     ? "https://schema.org/InStock"
                     : "https://schema.org/SoldOut",
             url: urls.canonicalUrl,
             ...(Number.isFinite(createdAt) ? { validFrom: toIstIso(createdAt) } : {}),
+            // The discounted price ends then (the list price applies after it): a page served
+            // from cache a little later still tells the truth. priceValidUntil is a Date.
+            ...(offerEnd ? { priceValidUntil: offerEnd.slice(0, 10), validThrough: offerEnd } : {}),
         },
     };
 }
@@ -539,14 +644,16 @@ export function siteJsonLd(siteUrl: string) {
                 },
                 areaServed: { "@type": "City", name: "Pune" },
                 sameAs: [INSTAGRAM_URL],
-                contactPoint: {
+                // Both support lines the footer and /contact print. Organization, never
+                // LocalBusiness: there are no premises of its own for customers to visit.
+                contactPoint: CONTACT_PHONE_NUMBERS.map((phone) => ({
                     "@type": "ContactPoint",
                     contactType: "customer support",
                     email: CONTACT_EMAIL,
-                    telephone: CONTACT_PHONE_NUMBERS[0].value,
+                    telephone: phone.value,
                     areaServed: "IN",
                     availableLanguage: ["English"],
-                },
+                })),
             },
             {
                 "@type": "WebSite",

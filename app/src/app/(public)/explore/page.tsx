@@ -5,7 +5,11 @@ import { loadPublicCommunities } from "@/lib/community-page-data";
 import { getAbsoluteUrl } from "@/lib/env";
 import { DEFAULT_OG_IMAGES } from "@/lib/seo";
 import { getIstTodayIso } from "@/lib/ist-date";
-import { loadExploreWorkshops } from "@/lib/workshop-page-data";
+import {
+    loadCardPricing,
+    loadExploreWorkshops,
+    workshopCardExtras,
+} from "@/lib/workshop-page-data";
 import ExploreClient from "./ExploreClient";
 
 // Dates and prices are what this page has that the evergreen /workshops/pune hub does not, so
@@ -33,10 +37,10 @@ export default async function ExplorePage({
 }) {
     const resolvedSearchParams = await searchParams;
     const todayIso = getIstTodayIso();
-    const [{ data, total, source }, { data: featuredCommunities }] = await Promise.all([
-        loadExploreWorkshops(resolvedSearchParams),
-        loadPublicCommunities(3),
-    ]);
+    const [{ data, total, source }, { data: featuredCommunities }, cardPricing] = await Promise.all(
+        [loadExploreWorkshops(resolvedSearchParams), loadPublicCommunities(3), loadCardPricing()]
+    );
+    const { cardOffers, closedWorkshopIds } = workshopCardExtras(data, cardPricing, todayIso);
 
     return (
         <Suspense
@@ -52,6 +56,8 @@ export default async function ExplorePage({
                 total={total}
                 source={source}
                 todayIso={todayIso}
+                cardOffers={cardOffers}
+                closedWorkshopIds={closedWorkshopIds}
             />
         </Suspense>
     );

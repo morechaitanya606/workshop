@@ -9,6 +9,17 @@ import { assertRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { pickPublicSettings, validateSettingsPatch } from "@/lib/platform-settings-schema";
 import { mirrorImageFields } from "@/lib/image-mirror";
 
+// Pasted image links are copied into storage on save (see lib/image-mirror).
+export const maxDuration = 60;
+
+/** Writable keys this route refuses: only their dedicated routes may write them. */
+const DEDICATED_SETTING_KEYS: Record<string, string> = {
+    // POST /api/admin/workshops/[id]/booking-status (compare-and-set on the stored list).
+    closed_workshop_ids: "Bookings are opened and closed per workshop on the Workshops page.",
+    // /api/coupons and /api/coupons/[id] (compare-and-set plus the label-code check).
+    coupon_offers: "Offer settings are saved with each coupon on the Offers page.",
+};
+
 export async function GET(request: NextRequest) {
     const limit = await assertRateLimit({
         key: getRateLimitKey(request, "api-settings-get"),
@@ -71,22 +82,42 @@ export async function PATCH(request: NextRequest) {
         body && typeof body === "object" && !Array.isArray(body)
             ? (body as { settings?: unknown }).settings
             : undefined;
+
+    // These keys have their own routes, which read the stored value fresh and change one entry.
+    // Saved here, the whole value would be replaced from the page's snapshot: closing workshop B
+    // from a stale page could reopen workshop A, and an old coupon list could drop offers.
+    if (settings && typeof settings === "object" && !Array.isArray(settings)) {
+        for (const [key, message] of Object.entries(DEDICATED_SETTING_KEYS)) {
+            if (Object.prototype.hasOwnProperty.call(settings, key)) {
+                return jsonError(message, 400, { field: key });
+            }
+        }
+    }
+
     const parsed = validateSettingsPatch(settings);
     if (!parsed.ok) {
         return jsonError(parsed.error, 400, parsed.key ? { field: parsed.key } : undefined);
     }
 
     try {
-        // Pasted Drive/Photos/Unsplash links are copied into our storage at full resolution.
-        await mirrorImageFields(parsed.values, ["hero_image_url"]);
-        const partners = parsed.values.cafe_partners;
-        if (Array.isArray(partners)) {
-            for (const partner of partners) {
-                if (partner && typeof partner === "object" && !Array.isArray(partner)) {
-                    await mirrorImageFields(partner, ["logo_url"]);
-                }
-            }
-        }
+        // Pasted Drive/Photos/Unsplash links are copied into our storage at full resolution. The
+        // hero image and ALL the partner logos go side by side (the logos in one batch, a few at
+        // a time) so several freshly pasted images still fit in maxDuration.
+        const partners: unknown[] = Array.isArray(parsed.values.cafe_partners)
+            ? parsed.values.cafe_partners
+            : [];
+        const partnerRecords = partners.filter(
+            (partner): partner is Record<string, unknown> =>
+                typeof partner === "object" && partner !== null && !Array.isArray(partner)
+        );
+        const logos = { logo_url: partnerRecords.map((partner) => partner.logo_url) };
+        await Promise.all([
+            mirrorImageFields(parsed.values, ["hero_image_url"]),
+            mirrorImageFields(logos, ["logo_url"]),
+        ]);
+        partnerRecords.forEach((partner, index) => {
+            partner.logo_url = logos.logo_url[index];
+        });
 
         const supabase = createSupabaseServiceClient();
 

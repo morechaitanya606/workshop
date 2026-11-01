@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import WorkshopCard from "@/components/WorkshopCard";
 import type { Workshop } from "@/lib/data";
+import type { CardOffer } from "@/lib/offers";
 import { quickTransition, useMotionProps } from "@/lib/motion-presets";
 import { EmptyWorkshopState, SectionHeader } from "@/components/home/HomeSectionShared";
 
@@ -31,6 +32,8 @@ export default function WorkshopGridSection({
     onTryAnotherCategory,
     showCardBadgeLabels = true,
     cardImageSizes,
+    cardOffers,
+    closedWorkshopIds,
 }: {
     title: string;
     eyebrow?: string;
@@ -50,7 +53,17 @@ export default function WorkshopGridSection({
     onTryAnotherCategory: () => void;
     showCardBadgeLabels?: boolean;
     cardImageSizes?: string;
+    /** Server-computed card offers by workshop id; a card without one shows its list price. */
+    cardOffers?: Readonly<Record<string, CardOffer>>;
+    /** Workshops whose bookings the admin closed. */
+    closedWorkshopIds?: ReadonlySet<string>;
 }) {
+    // Own keys only (no Object.hasOwn: older phone browsers lack it).
+    const offerFor = (workshopId: string) =>
+        cardOffers && Object.prototype.hasOwnProperty.call(cardOffers, workshopId)
+            ? cardOffers[workshopId]
+            : null;
+
     const gridSwapMotionProps = useMotionProps(
         shouldReduceMotion,
         gridSwapVariants,
@@ -100,6 +113,8 @@ export default function WorkshopGridSection({
                                         animateOnScroll={false}
                                         showBadgeLabels={showCardBadgeLabels}
                                         imageSizes={cardImageSizes}
+                                        offer={offerFor(workshop.id)}
+                                        bookingsClosed={closedWorkshopIds?.has(workshop.id)}
                                     />
                                 );
                             }
@@ -112,6 +127,8 @@ export default function WorkshopGridSection({
                                         animateOnScroll={false}
                                         showBadgeLabels={showCardBadgeLabels}
                                         imageSizes={cardImageSizes}
+                                        offer={offerFor(workshop.id)}
+                                        bookingsClosed={closedWorkshopIds?.has(workshop.id)}
                                     />
                                 </div>
                             );

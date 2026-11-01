@@ -1,8 +1,10 @@
 import { BOOKING_HOLD_MINUTES } from "@/lib/booking-time";
 import { CANCELLATION_POLICY } from "@/lib/cancellation-policy";
 import type { Workshop } from "@/lib/data";
+import { addDaysIso, isDateBetween } from "@/lib/ist-date";
 import {
     displayVenue,
+    formatWorkshopDate,
     parseDurationMinutes,
     postalCodeOf,
     workshopArea,
@@ -111,34 +113,79 @@ function distinctPlaces(places: Place[]) {
     return kept.sort((a, b) => b.count - a.count).map((entry) => entry.label);
 }
 
+/** Two names addresses use for one area; a list shows it once, under the name on the right. */
+const AREA_ALIASES: Readonly<Record<string, string>> = { "Pune Cantonment": "Camp" };
+
+/** workshopArea with the aliases folded, so every list and label names an area one way. */
+export function areaOf(workshop: PlaceFields) {
+    const area = workshopArea(workshop);
+    return area ? (AREA_ALIASES[area] ?? area) : null;
+}
+
 /** Pune areas the rows' addresses state ("Baner", "Koregaon Park"), most frequent first. */
 export function areasOf(workshops: readonly PlaceFields[]) {
     return distinctPlaces(
         workshops
-            .map((workshop) => workshopArea(workshop))
+            .map((workshop) => areaOf(workshop))
             .filter((area): area is string => Boolean(area))
             .map((area) => ({ name: area, label: area }))
     );
 }
 
+/** Links pasted without the https:// that displayVenue already rejects ("maps.app.goo.gl/..."). */
+const LINK_LIKE = /\bwww\.|\bgoo\.gl\b|\bgoogle\.[a-z.]+\/maps\b|\/\//i;
+
 /** A venue name fit for a sentence: no pasted link, PIN code or full street address. */
 function venueName(workshop: PlaceFields) {
     const venue = displayVenue(workshop);
-    return venue && !postalCodeOf(venue) && venue.split(",").length <= 2 ? venue : "";
+    return venue && !LINK_LIKE.test(venue) && !postalCodeOf(venue) && venue.split(",").length <= 2
+        ? venue
+        : "";
 }
 
 /** "Studio Creo in Koregaon Park"; just the venue when its name already says the area. */
 function venuePlace(workshop: PlaceFields): Place | null {
     const venue = venueName(workshop);
     if (!venue) return null;
-    const area = workshopArea(workshop);
+    const area = areaOf(workshop);
     const label = area && !workshopArea({ location: venue }) ? `${venue} in ${area}` : venue;
     return { name: venue.split(",")[0], label };
 }
 
 function areaPlace(workshop: PlaceFields): Place | null {
-    const area = workshopArea(workshop);
+    const area = areaOf(workshop);
     return area ? { name: area, label: area } : null;
+}
+
+/** At most this many workshops are named in one answer; the page lists the rest. */
+const MAX_LISTED = 4;
+
+/** "Chocolate Making Workshop (Sun, 25 Oct 2026)", for answers that name upcoming dates. */
+function datedList(rows: readonly Pick<Workshop, "title" | "date">[]) {
+    const names = rows.map((row) => {
+        const date = formatWorkshopDate(row.date);
+        return date ? `${row.title} (${date})` : row.title;
+    });
+    return names.length > MAX_LISTED
+        ? `${names.slice(0, MAX_LISTED).join(", ")} and ${names.length - MAX_LISTED} more`
+        : joinList(names);
+}
+
+/**
+ * "What workshops are happening in Pune this week?", answered from the upcoming dates in the
+ * seven days from `todayIso`, or with the next date when none falls in them.
+ */
+function thisWeekAnswer(upcoming: readonly Pick<Workshop, "title" | "date">[], todayIso: string) {
+    const weekEnd = addDaysIso(todayIso, 6);
+    const dated = upcoming
+        .filter((workshop) => isDateBetween(workshop.date, todayIso, "9999-12-31"))
+        .sort((a, b) => a.date.localeCompare(b.date));
+    if (!dated.length) return "";
+    const thisWeek = dated.filter((workshop) => isDateBetween(workshop.date, todayIso, weekEnd));
+    if (thisWeek.length) {
+        return `In the next seven days: ${datedList(thisWeek)}. Every upcoming date is listed on this page.`;
+    }
+    return `Nothing is scheduled in the next seven days yet. The next workshop is ${datedList(dated.slice(0, 1))}.`;
 }
 
 const MAX_PLACES = 6;
@@ -202,7 +249,7 @@ function withArticle(phrase: string) {
 }
 
 type FaqWorkshop = TopicRow &
-    Pick<Workshop, "price" | "maxSeats" | "duration"> &
+    Pick<Workshop, "price" | "maxSeats" | "duration" | "date"> &
     Partial<Pick<Workshop, "eventAddress" | "location">>;
 
 export type LandingFaqInput = {
@@ -212,6 +259,8 @@ export type LandingFaqInput = {
     whatsappUrl?: string;
     /** Set on an activity page: the questions are about this topic and its own Q&As are added. */
     topic?: SeoTopic | null;
+    /** The IST date the page renders on; enables "What workshops are happening ... this week?". */
+    todayIso?: string;
 };
 
 /**
@@ -224,6 +273,7 @@ export function buildLandingFaqs({
     past,
     whatsappUrl,
     topic = null,
+    todayIso,
 }: LandingFaqInput): Faq[] {
     const workshops = [...upcoming, ...past];
     const hasPast = past.length > 0;
@@ -254,6 +304,15 @@ export function buildLandingFaqs({
                     : `Hands-on ${joinList(categories)} workshops led by local hosts.`,
             });
         }
+
+        // Asked the way people search ("what workshops are happening in Pune today").
+        const thisWeek = todayIso ? thisWeekAnswer(upcoming, todayIso) : "";
+        if (thisWeek) {
+            faqs.push({
+                question: `What workshops are happening in ${city.name} this week?`,
+                answer: thisWeek,
+            });
+        }
     }
 
     const addressNote = "The exact venue and address are on each workshop's page.";
@@ -278,7 +337,7 @@ export function buildLandingFaqs({
     } else {
         const areas = areasOf(workshops).slice(0, MAX_PLACES);
         faqs.push({
-            question: `Where do the workshops in ${city.name} take place?`,
+            question: `Where can I find workshops near me in ${city.name}?`,
             answer: areas.length
                 ? `At partner studios, cafés and kitchens around ${city.name}, in areas such as ${joinList(areas)}. ${addressNote}`
                 : `At partner studios, cafés and kitchens around ${city.name}. ${addressNote}`,
@@ -326,7 +385,7 @@ export function buildLandingFaqs({
     faqs.push(...(topic?.faqs ?? []));
 
     faqs.push({
-        question: "How do I book a seat?",
+        question: "How do I join a workshop?",
         answer: `Pick a workshop and the number of seats, then pay online with UPI, cards or net banking. Your seats are held for ${BOOKING_HOLD_MINUTES} minutes while you pay, and your confirmation arrives by email.`,
     });
 

@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
+import type { PlatformSettings } from "@/lib/api-client";
+import { getCachedPlatformSettings } from "@/lib/cached-reads";
 import type { Workshop } from "@/lib/data";
 import { getAbsoluteUrl, getAppUrl } from "@/lib/env";
 import { getCachedFaqRows, type PublicFaqRow } from "@/lib/faqs";
 import { getIstTodayIso } from "@/lib/ist-date";
 import { serializeJsonLd } from "@/lib/json-ld";
+import { cardOfferFor, offersForWorkshop, type CardOffer } from "@/lib/offers";
+import { loadPublicOffers } from "@/lib/offers-server";
+import { parseServiceFee } from "@/lib/pricing";
 import {
     breadcrumbJsonLd,
     cityPagePath,
@@ -26,10 +31,13 @@ import {
     type SeoTopic,
 } from "@/lib/seo-topics";
 import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/supabase-server";
+import { isBookingClosed } from "@/lib/workshop-availability";
+import { loadClosedWorkshopIds } from "@/lib/workshop-availability-server";
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
-import { getPlatformSettings } from "@/lib/workshop-page-data";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import WorkshopClient, { type NextSession, type TopicLink } from "./WorkshopClient";
+import { eventMarkupOffer, toPricingWorkshop } from "./workshop-pricing";
+import { loadWorkshop, WORKSHOP_READ_TIMEOUT_MS } from "./workshop-read";
 
 export const revalidate = 60;
 
@@ -82,9 +90,15 @@ function normalizedTitle(title: string) {
 /**
  * Same template first, then a shared activity, then the same category; the rest follow by date
  * so the section still fills up. City is not scored: every workshop is in Pune, so it ranked
- * nothing and "similar" used to mean "the next three dates".
+ * nothing and "similar" used to mean "the next three dates". Workshops whose bookings the admin
+ * closed stay eligible (they stay visible everywhere) but come after every open one.
  */
-function rankSimilarWorkshops(workshops: Workshop[], currentWorkshop: Workshop, todayIso: string) {
+function rankSimilarWorkshops(
+    workshops: Workshop[],
+    currentWorkshop: Workshop,
+    todayIso: string,
+    closedIds: ReadonlySet<string>
+) {
     const currentTopics = new Set(topicsForWorkshop(currentWorkshop).map((topic) => topic.slug));
     return workshops
         .filter(
@@ -101,6 +115,7 @@ function rankSimilarWorkshops(workshops: Workshop[], currentWorkshop: Workshop, 
             return {
                 candidate,
                 sharedTopics,
+                closed: isBookingClosed(candidate.id, closedIds),
                 score:
                     Number(isSameTemplate(candidate, currentWorkshop)) * 4 +
                     Number(sharedTopics > 0) * 3 +
@@ -108,6 +123,7 @@ function rankSimilarWorkshops(workshops: Workshop[], currentWorkshop: Workshop, 
             };
         })
         .sort((a, b) => {
+            if (a.closed !== b.closed) return a.closed ? 1 : -1;
             if (b.score !== a.score) return b.score - a.score;
             if (b.sharedTopics !== a.sharedTopics) return b.sharedTopics - a.sharedTopics;
             return a.candidate.date.localeCompare(b.candidate.date);
@@ -119,18 +135,22 @@ function rankSimilarWorkshops(workshops: Workshop[], currentWorkshop: Workshop, 
 /**
  * Where a past session's page sends people next: another date of the same workshop (same
  * template, else the same title), else the soonest upcoming workshop of its activity. The rows
- * are already sorted by date.
+ * are already sorted by date. The link says "Book", so a session whose bookings the admin closed
+ * is skipped.
  */
 function findNextSession(
     upcoming: Workshop[],
     currentWorkshop: Workshop,
-    topic: SeoTopic | null
+    topic: SeoTopic | null,
+    closedIds: ReadonlySet<string>
 ): NextSession | null {
     const title = normalizedTitle(currentWorkshop.title);
     // "Upcoming" is by date only: a session later today may already be past its booking cutoff.
     const now = new Date();
     const bookable = upcoming.filter(
-        (candidate) => !isBookingClosedNow(candidate.date, candidate.time, now)
+        (candidate) =>
+            !isBookingClosedNow(candidate.date, candidate.time, now) &&
+            !isBookingClosed(candidate.id, closedIds)
     );
     const sameWorkshop =
         bookable.find((candidate) => isSameTemplate(candidate, currentWorkshop)) ??
@@ -194,40 +214,19 @@ export async function generateMetadata({
     };
 }
 
-const getWorkshop = cache(async (id: string) => {
-    if (isSupabaseServiceConfigured) {
-        try {
-            const serviceClient = createSupabaseServiceClient();
-            let { data, error } = await serviceClient
-                .from("workshops")
-                .select("*")
-                .eq("id", id)
-                .eq("approval_status", "approved")
-                .maybeSingle();
-
-            if (error && isMissingApprovalStatusColumnError(error)) {
-                ({ data, error } = await serviceClient
-                    .from("workshops")
-                    .select("*")
-                    .eq("id", id)
-                    .maybeSingle());
-            }
-
-            if (!error && data) {
-                return mapWorkshopRowToWorkshop(data);
-            }
-        } catch {
-            // fallback
-        }
-    }
-    return null;
-});
+/**
+ * Null only when the workshop does not exist (a real 404); a failed read throws, so a database
+ * blip never turns a live workshop into a cached "not found" (see loadWorkshop).
+ */
+const getWorkshop = cache((id: string) => loadWorkshop(id));
 
 /** Up to 30 bookable upcoming workshops by date: the pool for "similar" and "next date". */
 async function getUpcomingWorkshops(workshop: Workshop, todayIso: string): Promise<Workshop[]> {
     if (isSupabaseServiceConfigured) {
         try {
-            const serviceClient = createSupabaseServiceClient();
+            const serviceClient = createSupabaseServiceClient({
+                requestTimeoutMs: WORKSHOP_READ_TIMEOUT_MS,
+            });
             let { data, error } = await serviceClient
                 .from("workshops")
                 .select("*")
@@ -268,31 +267,76 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
     if (!workshop) {
         notFound();
     }
+    // One instant for everything priced in this render. The client renders with it until mount
+    // (then with its own clock), so the server HTML and the first client render agree.
+    const renderedAtMs = Date.now();
 
-    const [upcomingWorkshops, platformSettings, faqs] = await Promise.all([
+    const [upcomingWorkshops, platformSettings, faqs, publicOffers, closedIds] = await Promise.all([
         getUpcomingWorkshops(workshop, todayIso),
-        getPlatformSettings(),
+        // Cached and public keys only (the old uncached read sent every settings row to
+        // the browser). A failed read prices with checkout's own fallback fee.
+        getCachedPlatformSettings().catch((): PlatformSettings => ({})),
         // Server-rendered so the answers are in the HTML; WorkshopFAQ fetches only without them.
         getCachedFaqRows().catch((): PublicFaqRow[] => []),
+        // Both never throw: a failed read means no offers / nothing closed (today's page).
+        loadPublicOffers(),
+        loadClosedWorkshopIds(),
     ]);
+    const bookingsClosed = isBookingClosed(workshop.id, closedIds);
+    const pricingWorkshop = toPricingWorkshop(workshop);
+    // A closed workshop shows no offers at all (src/lib/offers.ts).
+    const workshopOffers = bookingsClosed
+        ? []
+        : offersForWorkshop(publicOffers, pricingWorkshop, renderedAtMs);
+    // Inside the automatic cut-off the page says "Booking closed" and has no Book button.
+    const pastCutoff = isBookingClosedNow(workshop.date, workshop.time, new Date(renderedAtMs));
+    // No discount is advertised on a workshop nobody can book (the page itself shows the plain
+    // price then, see WorkshopClient canBookNow), so the Event markup states none either.
+    const sellingNow = !bookingsClosed && workshop.seatsRemaining > 0 && !pastCutoff;
+    const headlineOffer = sellingNow
+        ? cardOfferFor(pricingWorkshop, publicOffers, renderedAtMs)
+        : null;
+    const serviceFee = parseServiceFee(platformSettings.service_fee);
     const canonicalUrl = getAbsoluteUrl(`/workshop/${workshop.id}`);
     const seoCity = getSeoCityByName(workshop.city);
     const topic = primaryTopicFor(workshop);
     // Plain data: a SeoTopic holds a RegExp, which cannot be passed to a client component.
     const topicLink: TopicLink | null =
         seoCity && topic ? { name: topic.name, href: topicPagePath(seoCity, topic) } : null;
-    const similarWorkshops = rankSimilarWorkshops(upcomingWorkshops, workshop, todayIso);
-    const nextSession = findNextSession(upcomingWorkshops, workshop, topic);
+    const similarWorkshops = rankSimilarWorkshops(upcomingWorkshops, workshop, todayIso, closedIds);
+    const nextSession = findNextSession(upcomingWorkshops, workshop, topic, closedIds);
+    // The similar cards price like every other card; a closed one shows no offer.
+    const closedSimilarIds = similarWorkshops
+        .filter((item) => isBookingClosed(item.id, closedIds))
+        .map((item) => item.id);
+    const similarWorkshopOffers: Record<string, CardOffer | null> = Object.fromEntries(
+        similarWorkshops.map((item) => [
+            item.id,
+            closedSimilarIds.includes(item.id)
+                ? null
+                : cardOfferFor(toPricingWorkshop(item), publicOffers, renderedAtMs),
+        ])
+    );
 
     // Event data only while the workshop is still ahead: Google ignores ended events, and the
     // markup ("scheduled", "in stock") would contradict the page's own "Past Event" label.
+    // The offer price is the one-guest price this page shows, from the same render instant (and
+    // only a per-person discount: see eventMarkupOffer). Closed by the admin or past the cut-off
+    // both read "cannot be booked" (availability SoldOut at the list price), like the page.
     const jsonLd =
         workshop.date >= todayIso
-            ? workshopEventJsonLd(workshop, {
-                  canonicalUrl,
-                  imageUrls: workshopImageUrls(workshop, getAbsoluteUrl),
-                  siteUrl: getAppUrl(),
-              })
+            ? workshopEventJsonLd(
+                  workshop,
+                  {
+                      canonicalUrl,
+                      imageUrls: workshopImageUrls(workshop, getAbsoluteUrl),
+                      siteUrl: getAppUrl(),
+                  },
+                  {
+                      bookingsClosed: bookingsClosed || pastCutoff,
+                      offer: eventMarkupOffer(headlineOffer),
+                  }
+              )
             : null;
     // Mirrors the visible breadcrumb in WorkshopClient: Home > city > activity > workshop. A
     // workshop that fits no activity page skips that level rather than linking /explore, which
@@ -319,7 +363,12 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
             <WorkshopClient
                 workshop={workshop}
                 similarWorkshops={similarWorkshops}
-                platformSettings={platformSettings}
+                similarWorkshopOffers={similarWorkshopOffers}
+                closedSimilarIds={closedSimilarIds}
+                offers={workshopOffers}
+                bookingsClosed={bookingsClosed}
+                serviceFee={serviceFee}
+                renderedAtMs={renderedAtMs}
                 todayIso={todayIso}
                 topicLink={topicLink}
                 nextSession={nextSession}

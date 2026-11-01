@@ -36,6 +36,8 @@ type RazorpayWebhookPayload = {
         payment?: {
             entity?: {
                 id?: string;
+                /** The Razorpay order this payment paid; its notes hold checkout's quote. */
+                order_id?: string;
                 /** Paise. Present on payment.* events. */
                 amount?: number;
                 /** Paise already refunded against this payment. */
@@ -77,9 +79,98 @@ type BookingNotificationRow = {
         city: string;
         host_id: string | null;
     } | null;
+    /**
+     * The workshop's current price per seat, for the host's payout. Kept off `workshop`, which
+     * is sent with every notification as it was before.
+     */
+    workshop_price: number | null;
 };
 
 const HOST_PLATFORM_FEE_PERCENT = 0.1;
+
+/** Largest list subtotal an order note may claim (rupees); anything else is ignored. */
+const MAX_NOTED_SUBTOTAL = 100_000_000;
+
+/**
+ * The quote checkout wrote into the Razorpay order notes at order creation (server-side only,
+ * so it can be trusted), or null when the order predates it or a note is not sane.
+ */
+type OrderQuoteSnapshot = {
+    workshopId: string | null;
+    listSubtotal: number;
+    subtotal: number;
+};
+
+function notedRupees(value: unknown): number | null {
+    if (value === undefined || value === null || String(value).trim() === "") return null;
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed >= 0 && parsed <= MAX_NOTED_SUBTOTAL ? parsed : null;
+}
+
+function parseOrderQuoteSnapshot(notes: unknown): OrderQuoteSnapshot | null {
+    if (!notes || typeof notes !== "object" || Array.isArray(notes)) return null;
+    const record = notes as Record<string, unknown>;
+    const listSubtotal = notedRupees(record.listSubtotal);
+    const subtotal = notedRupees(record.subtotal);
+    if (listSubtotal === null || subtotal === null || listSubtotal < subtotal) return null;
+    return {
+        workshopId: typeof record.workshopId === "string" ? record.workshopId : null,
+        listSubtotal,
+        subtotal,
+    };
+}
+
+/**
+ * The order's quote snapshot, fetched from Razorpay. The payment entity's own notes are not
+ * used: they can be set by the browser at checkout. Best effort: any failure answers null and
+ * the payout falls back to the workshop's current price.
+ */
+async function loadOrderQuoteSnapshot(orderId: unknown): Promise<OrderQuoteSnapshot | null> {
+    if (typeof orderId !== "string" || !orderId.trim()) return null;
+    try {
+        const order = await withRazorpayTimeout(() =>
+            getRazorpayServerClient().orders.fetch(orderId.trim())
+        );
+        return parseOrderQuoteSnapshot((order as { notes?: unknown } | null)?.notes);
+    } catch (error) {
+        Sentry.captureException(error, {
+            level: "warning",
+            tags: {
+                layer: "payments",
+                provider: "razorpay",
+                route: "razorpay_webhook",
+                action: "order_quote_snapshot",
+            },
+            extra: { orderId },
+        });
+        return null;
+    }
+}
+
+/**
+ * What the host is paid on, in rupees: the LIST subtotal (price x seats), because the platform
+ * funds every discount (Early Bird, offers, coupons). The order's snapshot when it describes
+ * this booking (same workshop, same charged subtotal), else the workshop's price x the
+ * booking's seats. Never below what the customer actually paid for the seats (booking.subtotal),
+ * and never including the platform's service fee.
+ */
+function hostGrossFor(booking: BookingNotificationRow, snapshot: OrderQuoteSnapshot | null) {
+    const paidSubtotal = Math.max(0, Number(booking.subtotal ?? 0) || 0);
+
+    let listSubtotal: number | null = null;
+    if (
+        snapshot &&
+        snapshot.subtotal === paidSubtotal &&
+        (!snapshot.workshopId || snapshot.workshopId === booking.workshop_id)
+    ) {
+        listSubtotal = snapshot.listSubtotal;
+    } else if (booking.workshop_price !== null) {
+        listSubtotal =
+            booking.workshop_price * Math.max(0, Math.trunc(Number(booking.guests) || 0));
+    }
+
+    return Math.max(paidSubtotal, listSubtotal ?? 0);
+}
 
 /**
  * Statuses a late-arriving `payment.captured` or `payment.failed` must never overwrite.
@@ -127,17 +218,21 @@ function roundCurrency(value: number) {
 
 async function upsertHostEarningsForBookings(
     serviceClient: SupabaseServerClient,
-    bookings: BookingNotificationRow[]
+    bookings: BookingNotificationRow[],
+    orderId: unknown
 ) {
-    for (const booking of bookings) {
+    const credited = bookings.filter((booking) => booking.workshop?.host_id);
+    // One payment buys one booking, so the order's snapshot can only describe a single row.
+    const snapshot = credited.length === 1 ? await loadOrderQuoteSnapshot(orderId) : null;
+
+    for (const booking of credited) {
         if (!booking.workshop?.host_id) {
             continue;
         }
 
-        // The host's share is workshop revenue only. Falling back to `total` folded the
-        // platform service fee into the payout, so a fully discounted booking paid the host
-        // out of the platform's own fee.
-        const hostGross = Math.max(0, Number(booking.subtotal ?? 0));
+        // The host's share is workshop revenue only, never the platform service fee, and it is
+        // the list price: the platform pays for discounts (hostGrossFor).
+        const hostGross = hostGrossFor(booking, snapshot);
         const feeDeducted = roundCurrency(hostGross * HOST_PLATFORM_FEE_PERCENT);
         const netAmount = roundCurrency(Math.max(0, hostGross - feeDeducted));
 
@@ -328,7 +423,7 @@ async function loadBookingsByPaymentId(
     const workshopIds = Array.from(new Set(rows.map((row) => row.workshop_id).filter(Boolean)));
     const { data: workshopRows, error: workshopRowsError } = await serviceClient
         .from("workshops")
-        .select("id, title, date, time, location, city, host_id")
+        .select("id, title, date, time, location, city, host_id, price")
         .in("id", workshopIds);
 
     // Without the workshop row there is no host_id, and the host's credit would be skipped
@@ -352,9 +447,17 @@ async function loadBookingsByPaymentId(
         ])
     );
 
+    const priceById = new Map(
+        (workshopRows || []).map((workshop) => {
+            const price = Number(workshop.price);
+            return [workshop.id, Number.isFinite(price) && price >= 0 ? price : null] as const;
+        })
+    );
+
     return rows.map((row) => ({
         ...row,
         workshop: workshopById.get(row.workshop_id) || null,
+        workshop_price: priceById.get(row.workshop_id) ?? null,
     })) as BookingNotificationRow[];
 }
 
@@ -547,7 +650,11 @@ export async function POST(request: Request) {
 
             // Credit first: it is the one step here whose loss costs the host money, and it
             // now throws (and so retries) instead of being swallowed.
-            await upsertHostEarningsForBookings(serviceClient, freshlyConfirmedBookings);
+            await upsertHostEarningsForBookings(
+                serviceClient,
+                freshlyConfirmedBookings,
+                event.payload?.payment?.entity?.order_id
+            );
 
             await notifyBookingStatusTransitions(
                 "booking.confirmed",

@@ -217,6 +217,91 @@ describe("validateSettingsPatch", () => {
             false
         );
     });
+
+    it("accepts coupon_offers from admins and stores the normalised value", () => {
+        const couponId = "11111111-1111-4111-8111-111111111111";
+        expect(
+            validateSettingsPatch({
+                coupon_offers: {
+                    [couponId.toUpperCase()]: {
+                        visibility: "auto",
+                        label: " Limited-time offer ",
+                        show_end_date: true,
+                    },
+                },
+            })
+        ).toEqual({
+            ok: true,
+            values: {
+                coupon_offers: {
+                    [couponId]: {
+                        visibility: "auto",
+                        label: "Limited-time offer",
+                        show_end_date: true,
+                    },
+                },
+            },
+        });
+    });
+
+    it("rejects malformed coupon_offers and names the key", () => {
+        expect(
+            validateSettingsPatch({
+                coupon_offers: { "not-a-coupon-id": { visibility: "auto" } },
+            })
+        ).toMatchObject({ ok: false, key: "coupon_offers" });
+        expect(validateSettingsPatch({ coupon_offers: [] }).ok).toBe(false);
+    });
+
+    it("never lets a coupon code into coupon_offers (the table is readable with the anon key)", () => {
+        const couponId = "11111111-1111-4111-8111-111111111111";
+        expect(
+            validateSettingsPatch({
+                coupon_offers: { [couponId]: { visibility: "community", code: "WHATSAPP15" } },
+            })
+        ).toMatchObject({ ok: false, key: "coupon_offers" });
+    });
+
+    it("accepts closed_workshop_ids as a list of workshop ids, trimmed and de-duplicated", () => {
+        expect(
+            validateSettingsPatch({
+                closed_workshop_ids: [
+                    " pottery-wheel-1760000000000 ",
+                    "pottery-wheel-1760000000000",
+                    "11111111-1111-4111-8111-111111111111",
+                ],
+            })
+        ).toEqual({
+            ok: true,
+            values: {
+                closed_workshop_ids: [
+                    "pottery-wheel-1760000000000",
+                    "11111111-1111-4111-8111-111111111111",
+                ],
+            },
+        });
+        expect(validateSettingsPatch({ closed_workshop_ids: [] })).toEqual({
+            ok: true,
+            values: { closed_workshop_ids: [] },
+        });
+    });
+
+    it.each([
+        ["an object", { "pottery-1": true }],
+        ["text", "pottery-1"],
+        ["null", null],
+        ["a number id", [42]],
+        ["an empty id", [""]],
+        ["an id with spaces", ["pottery 1"]],
+        ["an id with a comma", ["a,b"]],
+        ["a long id", ["x".repeat(121)]],
+        ["too many ids", Array.from({ length: 501 }, (_, index) => `workshop-${index}`)],
+    ])("rejects closed_workshop_ids that is %s", (_label, value) => {
+        expect(validateSettingsPatch({ closed_workshop_ids: value })).toMatchObject({
+            ok: false,
+            key: "closed_workshop_ids",
+        });
+    });
 });
 
 describe("pickPublicSettings", () => {
@@ -240,6 +325,20 @@ describe("pickPublicSettings", () => {
         });
     });
 
+    it("sends closed_workshop_ids to visitors, reduced to valid ids", () => {
+        expect(WRITABLE_SETTING_KEYS).toContain("closed_workshop_ids");
+        expect(PUBLIC_SETTING_KEYS).toContain("closed_workshop_ids");
+        expect(
+            pickPublicSettings({
+                closed_workshop_ids: ["pottery-1", 7, "bad id", "pottery-1", "baking-2"],
+            })
+        ).toEqual({ closed_workshop_ids: ["pottery-1", "baking-2"] });
+        expect(pickPublicSettings({ closed_workshop_ids: "garbage" })).toEqual({
+            closed_workshop_ids: [],
+        });
+        expect(pickPublicSettings({ service_fee: 99 })).toEqual({ service_fee: 99 });
+    });
+
     it("handles null and empty records", () => {
         expect(pickPublicSettings(null)).toEqual({});
         expect(pickPublicSettings({})).toEqual({});
@@ -249,5 +348,18 @@ describe("pickPublicSettings", () => {
         for (const key of PUBLIC_SETTING_KEYS) {
             expect(WRITABLE_SETTING_KEYS).toContain(key);
         }
+    });
+
+    it("keeps coupon_offers out of the app's public payloads (it holds no codes)", () => {
+        expect(WRITABLE_SETTING_KEYS).toContain("coupon_offers");
+        expect(PUBLIC_SETTING_KEYS as readonly string[]).not.toContain("coupon_offers");
+        expect(
+            pickPublicSettings({
+                service_fee: 99,
+                coupon_offers: {
+                    "11111111-1111-4111-8111-111111111111": { visibility: "community" },
+                },
+            })
+        ).toEqual({ service_fee: 99 });
     });
 });

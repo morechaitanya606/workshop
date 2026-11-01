@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, CalendarDays, IndianRupee, MapPin, Star, Users } from "lucide-react";
 import AdminShell from "@/components/admin/AdminShell";
+import WorkshopTitleLink from "@/components/admin/WorkshopTitleLink";
 import type { Workshop } from "@/lib/data";
 import {
     loadAdminDashboardData,
@@ -10,6 +11,8 @@ import {
 } from "@/lib/admin-dashboard-data";
 import { requireAdminSupabaseRscClient } from "@/lib/supabase-rsc";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { BOOKINGS_CLOSED_LABEL } from "@/lib/workshop-availability";
+import { loadClosedWorkshopIds } from "@/lib/workshop-availability-server";
 
 export default async function AdminDashboardPage() {
     const supabase = await requireAdminSupabaseRscClient("/admin/dashboard");
@@ -23,6 +26,8 @@ export default async function AdminDashboardPage() {
     let workshops: Workshop[] = [];
     let error: string | null = null;
     let applications: AdminHostApplication[] = [];
+    // Shown as a badge only (the switch is on the Workshops page); never throws, empty on error.
+    const closedIdsPromise = loadClosedWorkshopIds();
 
     try {
         const loaded = await loadAdminDashboardData(supabase);
@@ -32,6 +37,7 @@ export default async function AdminDashboardPage() {
     } catch {
         error = "Unable to load dashboard right now. Please try again.";
     }
+    const closedIds = await closedIdsPromise;
 
     const statCards = [
         {
@@ -145,8 +151,13 @@ export default async function AdminDashboardPage() {
                                         </div>
                                         <div className="min-w-0 flex-1">
                                             <p className="text-sm font-inter font-semibold text-dark truncate">
-                                                {workshop.title}
+                                                <WorkshopTitleLink workshop={workshop} />
                                             </p>
+                                            {closedIds.has(workshop.id) && (
+                                                <span className="mt-1 inline-flex rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-[10px] font-inter font-semibold uppercase tracking-wide text-red-700">
+                                                    {BOOKINGS_CLOSED_LABEL}
+                                                </span>
+                                            )}
                                             <p className="text-xs text-dark-muted font-inter mt-1 truncate">
                                                 By {workshop.hostName}
                                             </p>

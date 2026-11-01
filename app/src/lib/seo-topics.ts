@@ -18,7 +18,10 @@ export type SeoTopic = {
     /** Descriptive anchor text for links to the page from elsewhere on the site. */
     linkLabel: string;
     h1: string;
-    /** The full <title>: at most 60 characters and always naming Pune. */
+    /**
+     * The full <title> (the root layout has no title template): at most 60 characters, always
+     * naming Pune, and never the H1 word for word.
+     */
     metaTitle: string;
     /** ~150 characters. */
     metaDescription: string;
@@ -125,8 +128,9 @@ export const SEO_TOPICS: readonly SeoTopic[] = [
         name: "Charcuterie & Grazing Table",
         linkLabel: "Charcuterie & grazing table workshop",
         h1: "Charcuterie & Grazing Table Workshops in Pune",
-        // The site name does not fit in 60 characters here.
-        metaTitle: "Charcuterie & Grazing Table Workshops in Pune",
+        // The site name does not fit in 60 characters here, and without it the title would
+        // repeat the H1 word for word; "board" is also how people search for it.
+        metaTitle: "Charcuterie Board & Grazing Table Workshops in Pune",
         metaDescription:
             "Charcuterie board and grazing table workshops in Pune: pair cheeses, meats, fruit, dips and crackers and style a sharing spread for a party. Book online.",
         intro: [

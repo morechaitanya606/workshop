@@ -1,12 +1,13 @@
 "use client";
 
-import type { ComponentProps } from "react";
+import { useMemo, type ComponentProps } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Info, Loader2 } from "lucide-react";
 import WorkshopCard from "@/components/WorkshopCard";
 import { Skeleton } from "@/components/ui";
 import type { Workshop } from "@/lib/data";
 import { quickTransition } from "@/lib/motion-presets";
+import type { CardOffer } from "@/lib/offers";
 
 type MotionDivProps = ComponentProps<typeof motion.div>;
 
@@ -28,12 +29,15 @@ function SkeletonCard() {
 }
 
 export default function ExploreResultsSection({
+    heading,
     isPending,
     total,
     source,
     todayIso,
     errorBannerMotionProps,
     workshops,
+    cardOffers,
+    closedWorkshopIds,
     clearFilters,
     onRetry,
     gridKey,
@@ -44,12 +48,18 @@ export default function ExploreResultsSection({
     onPrevious,
     onNext,
 }: {
+    /** Visible section title (h2): the card titles are h3s and must not follow the h1 directly. */
+    heading: string;
     isPending: boolean;
     total: number;
     source: "supabase" | "error";
     todayIso: string;
     errorBannerMotionProps: MotionDivProps;
     workshops: Workshop[];
+    /** Server-computed card offers by workshop id; a card without one shows its list price. */
+    cardOffers?: Record<string, CardOffer>;
+    /** Listed workshops whose bookings the admin closed. */
+    closedWorkshopIds?: string[];
     clearFilters: () => void;
     onRetry: () => void;
     gridKey: string;
@@ -60,9 +70,19 @@ export default function ExploreResultsSection({
     onPrevious: () => void;
     onNext: () => void;
 }) {
+    const closedWorkshops = useMemo(() => new Set(closedWorkshopIds ?? []), [closedWorkshopIds]);
+    // Own keys only (no Object.hasOwn: older phone browsers lack it).
+    const offerFor = (workshopId: string) =>
+        cardOffers && Object.prototype.hasOwnProperty.call(cardOffers, workshopId)
+            ? cardOffers[workshopId]
+            : null;
+
     return (
-        <section className="section-padding mt-8">
+        <section className="section-padding mt-8" aria-labelledby="explore-results-heading">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-5">
+                <h2 id="explore-results-heading" className="heading-md">
+                    {heading}
+                </h2>
                 <p className="text-sm font-inter text-dark-muted flex items-center gap-2">
                     {isPending && <Loader2 className="w-4 h-4 animate-spin text-terracotta" />}
                     {isPending ? "Updating..." : `${total} workshop${total === 1 ? "" : "s"} found`}
@@ -90,7 +110,7 @@ export default function ExploreResultsSection({
 
             {!isPending && workshops.length === 0 && (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 text-center">
-                    <h2 className="heading-sm mb-2">No workshops match your filters</h2>
+                    <h3 className="heading-sm mb-2">No workshops match your filters</h3>
                     <p className="text-body text-dark-muted mb-6">
                         Try broadening your search or resetting filters.
                     </p>
@@ -143,6 +163,8 @@ export default function ExploreResultsSection({
                                     todayIso={todayIso}
                                     index={index}
                                     animateOnScroll={false}
+                                    offer={offerFor(workshop.id)}
+                                    bookingsClosed={closedWorkshops.has(workshop.id)}
                                 />
                             </motion.div>
                         ))}

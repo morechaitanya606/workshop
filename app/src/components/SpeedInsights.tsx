@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useParams, usePathname } from "next/navigation";
+import { useParams } from "next/navigation";
+import { useSitePathname } from "@/lib/use-site-pathname";
 import { SPEED_INSIGHTS_SCRIPT_SRC, speedInsightsRoute } from "@/lib/speed-insights";
 
 /**
@@ -13,7 +14,7 @@ import { SPEED_INSIGHTS_SCRIPT_SRC, speedInsightsRoute } from "@/lib/speed-insig
  * cookie consent. Collects nothing until Speed Insights is enabled for the project in Vercel.
  */
 export default function SpeedInsights() {
-    const pathname = usePathname();
+    const pathname = useSitePathname();
     const params = useParams<Record<string, string | string[]>>();
     const scriptRef = useRef<HTMLScriptElement | null>(null);
     const route = pathname ? speedInsightsRoute(pathname, params) : null;

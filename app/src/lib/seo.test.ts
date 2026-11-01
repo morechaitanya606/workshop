@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { CONTACT_PHONE_NUMBERS } from "@/lib/contact";
 import type { Workshop } from "@/lib/data";
 import {
     KNOWN_PUNE_AREAS,
     SEO_CITIES,
     areaWithCity,
+    cityHubH1,
+    cityMetaTitle,
     displayVenue,
     firstSentence,
+    formatIstDateTime,
     formatWorkshopDate,
     formatWorkshopTime,
     getSeoCityByName,
@@ -224,15 +228,31 @@ describe("city lookup", () => {
         expect(getSeoCityByName(undefined)).toBeNull();
     });
 
-    it("keeps the city title short enough for Google", () => {
+    it("keeps the city title short enough for Google, with this year in it", () => {
         for (const city of SEO_CITIES) {
-            expect(city.metaTitle.length).toBeLessThanOrEqual(60);
-            expect(city.metaTitle).toContain(city.name);
+            const title = cityMetaTitle(city, "2026");
+            expect(title).toContain("(2026)");
+            expect(title).not.toContain("{year}");
+            expect(title.length).toBeLessThanOrEqual(60);
+            expect(title).toContain(city.name);
             expect(city.metaDescription.length).toBeLessThanOrEqual(160);
             expect(city.intro.join(" ")).not.toMatch(/\d/);
         }
     });
+
+    it("gives the city hub a <title> that differs from its H1", () => {
+        for (const city of SEO_CITIES) {
+            expect(normalizeHeading(cityMetaTitle(city, "2026"))).not.toBe(
+                normalizeHeading(cityHubH1(city))
+            );
+        }
+    });
 });
+
+/** Case and spacing do not make a <title> different from an H1 to a crawler. */
+function normalizeHeading(text: string) {
+    return text.replace(/\s+/g, " ").trim().toLowerCase();
+}
 
 describe("SEO_TOPICS catalogue", () => {
     const slugs = SEO_TOPICS.map((topic) => topic.slug);
@@ -261,6 +281,22 @@ describe("SEO_TOPICS catalogue", () => {
             expect(topic.intro.join(" ")).not.toMatch(/\b(?:rating|rated|reviews?|stars?)\b/i);
         }
     );
+
+    // The root layout sets a plain title (no template), so metaTitle is the rendered <title>
+    // as it is. Semrush flags a page whose <title> and H1 are the same text.
+    it.each(SEO_TOPICS.map((topic) => [topic.slug, topic] as const))(
+        "%s renders a <title> of at most 60 characters that is not its H1",
+        (_slug, topic) => {
+            expect(topic.metaTitle.length).toBeLessThanOrEqual(60);
+            expect(normalizeHeading(topic.metaTitle)).not.toBe(normalizeHeading(topic.h1));
+        }
+    );
+
+    it("keeps the grazing table title keyword-first without the site name", () => {
+        const topic = getSeoTopicBySlug("charcuterie-grazing-table")!;
+        expect(topic.metaTitle).toBe("Charcuterie Board & Grazing Table Workshops in Pune");
+        expect(topic.h1).toBe("Charcuterie & Grazing Table Workshops in Pune");
+    });
 
     it("links only to topics that exist, never to itself", () => {
         for (const topic of SEO_TOPICS) {
@@ -857,6 +893,104 @@ describe("workshopEventJsonLd", () => {
         expect(linkedVenue.location.name).toBe("Pottery Making Experience venue");
         expect(JSON.stringify(linkedVenue)).not.toContain("maps.app.goo.gl");
     });
+
+    describe("offers", () => {
+        const open = { ...workshop, seatsRemaining: 4 };
+        // Early Bird 10% on ₹1,599: one guest pays ₹1,440 until 5:30 am IST on 18 Jun.
+        const offer = { listPrice: 1599, offerPrice: 1440, endsAt: "2026-06-18T00:00:00.000Z" };
+
+        it("is the list price, in stock, without pricing input (as before)", () => {
+            const plain = workshopEventJsonLd(open, urls);
+            expect(plain.offers.price).toBe(1599);
+            expect(plain.offers.availability).toBe("https://schema.org/InStock");
+            expect("priceValidUntil" in plain.offers).toBe(false);
+            expect("validThrough" in plain.offers).toBe(false);
+            expect(workshopEventJsonLd(open, urls, { offer: null }).offers).toEqual(plain.offers);
+        });
+
+        it("is what one guest pays now, valid until the advertised end", () => {
+            const discounted = workshopEventJsonLd(open, urls, { offer });
+            expect(discounted.offers.price).toBe(1440);
+            expect(discounted.offers.priceCurrency).toBe("INR");
+            expect(discounted.offers.availability).toBe("https://schema.org/InStock");
+            expect(discounted.offers.validThrough).toBe("2026-06-18T05:30:00+05:30");
+            expect(discounted.offers.priceValidUntil).toBe("2026-06-18");
+            // The listing date stays the offer's start.
+            expect(discounted.offers.validFrom).toBe("2026-06-15T14:51:25+05:30");
+        });
+
+        it("gives no end when the end may not be advertised", () => {
+            const quiet = workshopEventJsonLd(open, urls, { offer: { ...offer, endsAt: null } });
+            expect(quiet.offers.price).toBe(1440);
+            expect("priceValidUntil" in quiet.offers).toBe(false);
+            expect("validThrough" in quiet.offers).toBe(false);
+        });
+
+        it("never shows a price that is not a real discount on this list price", () => {
+            for (const bogus of [
+                { ...offer, offerPrice: 1599 },
+                { ...offer, offerPrice: 1700 },
+                { ...offer, listPrice: 1999 },
+                { ...offer, offerPrice: Number.NaN },
+            ]) {
+                const markup = workshopEventJsonLd(open, urls, { offer: bogus });
+                expect(markup.offers.price).toBe(1599);
+                expect("validThrough" in markup.offers).toBe(false);
+            }
+        });
+
+        it("keeps the list price for a per-booking discount (no honest per-person price)", () => {
+            const markup = workshopEventJsonLd(open, urls, {
+                offer: { ...offer, perBooking: true },
+            });
+            expect(markup.offers.price).toBe(1599);
+            expect("priceValidUntil" in markup.offers).toBe(false);
+            expect("validThrough" in markup.offers).toBe(false);
+            // A per-person discount that says so explicitly is still stated.
+            const perPerson = workshopEventJsonLd(open, urls, {
+                offer: { ...offer, perBooking: false },
+            });
+            expect(perPerson.offers.price).toBe(1440);
+        });
+
+        it("reports closed bookings as SoldOut at the list price, with no discount", () => {
+            const closed = workshopEventJsonLd(open, urls, { bookingsClosed: true, offer });
+            expect(closed.offers.availability).toBe("https://schema.org/SoldOut");
+            expect(closed.offers.price).toBe(1599);
+            expect("priceValidUntil" in closed.offers).toBe(false);
+            expect("validThrough" in closed.offers).toBe(false);
+            // The event itself still takes place.
+            expect(closed.eventStatus).toBe("https://schema.org/EventScheduled");
+        });
+    });
+});
+
+describe("formatIstDateTime", () => {
+    it("writes an instant as IST date and time", () => {
+        expect(formatIstDateTime("2026-10-31T00:00:00.000Z")).toBe("Sat, 31 Oct 2026, 5:30 am");
+        expect(formatIstDateTime("2026-10-31T13:00:00.000Z")).toBe("Sat, 31 Oct 2026, 6:30 pm");
+        // Late evening UTC is already the next day in India.
+        expect(formatIstDateTime(Date.parse("2026-10-31T20:00:00.000Z"))).toBe(
+            "Sun, 1 Nov 2026, 1:30 am"
+        );
+    });
+
+    it("has a short form for cards", () => {
+        expect(formatIstDateTime("2026-10-31T00:00:00.000Z", { short: true })).toBe(
+            "31 Oct, 5:30 am"
+        );
+        expect(formatIstDateTime("2026-01-04T18:29:00.000Z", { short: true })).toBe(
+            "4 Jan, 11:59 pm"
+        );
+    });
+
+    it("is empty for anything it cannot read", () => {
+        expect(formatIstDateTime(null)).toBe("");
+        expect(formatIstDateTime("")).toBe("");
+        expect(formatIstDateTime("soon")).toBe("");
+        expect(formatIstDateTime(Number.NaN)).toBe("");
+        expect(formatIstDateTime(9e15)).toBe("");
+    });
 });
 
 describe("siteJsonLd", () => {
@@ -882,6 +1016,37 @@ describe("siteJsonLd", () => {
             },
         });
         expect(JSON.stringify(organization)).not.toContain("streetAddress");
+    });
+
+    it("stays an Organization that serves Pune, never a LocalBusiness", () => {
+        expect(graph.map((node) => node["@type"])).toEqual(["Organization", "WebSite"]);
+        expect(JSON.stringify(graph)).not.toContain("LocalBusiness");
+        const organization = graph.find((node) => node["@type"] === "Organization");
+        expect(organization).toMatchObject({
+            areaServed: { "@type": "City", name: "Pune" },
+            email: "reachout@onlyworkshops.com",
+            telephone: "+917028478109",
+        });
+    });
+
+    it("lists each support line the contact page prints as a ContactPoint", () => {
+        const organization = graph.find((node) => node["@type"] === "Organization");
+        const contactPoints =
+            organization && "contactPoint" in organization ? organization.contactPoint : [];
+        expect(contactPoints).toEqual(
+            CONTACT_PHONE_NUMBERS.map((phone) => ({
+                "@type": "ContactPoint",
+                contactType: "customer support",
+                email: "reachout@onlyworkshops.com",
+                telephone: phone.value,
+                areaServed: "IN",
+                availableLanguage: ["English"],
+            }))
+        );
+        expect(contactPoints.map((point) => point.telephone)).toEqual([
+            "+917028478109",
+            "+919921604163",
+        ]);
     });
 });
 

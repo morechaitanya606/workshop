@@ -1,6 +1,6 @@
 "use client";
 
-import { publicEnv } from "@/lib/env";
+import { publicEnv } from "@/lib/public-env";
 
 type PostHogClient = (typeof import("posthog-js"))["default"];
 

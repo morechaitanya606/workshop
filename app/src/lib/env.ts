@@ -1,7 +1,32 @@
 import { z } from "zod";
 import type { ChatbotLlmProvider, ChatbotLlmProviderName } from "@/lib/chatbot-llm-shared";
+import { GA_MEASUREMENT_ID_PATTERN, PRODUCTION_SITE_URL } from "@/lib/public-env";
+
+/**
+ * Server-side configuration, validated with zod. Client components must import
+ * `@/lib/public-env` instead: importing this module from one ships zod and the server schema to
+ * every visitor's browser.
+ */
+
+export { PRODUCTION_SITE_URL };
 
 const nonEmpty = z.string().trim().min(1);
+
+function isEnvValidationSkipped() {
+    return process.env.SKIP_ENV_VALIDATION === "true" || process.env.SKIP_ENV_VALIDATION === "1";
+}
+
+/**
+ * NEXT_PUBLIC_GA_MEASUREMENT_ID as the schema should see it. Blank means unset. A malformed id
+ * fails the server's env parse (so the build stops with a clear message), but where validation
+ * is skipped, and in the browser (which cannot see SKIP_ENV_VALIDATION), it just turns analytics
+ * off: throwing there would break every page over an optional tag.
+ */
+function gaMeasurementIdInput() {
+    const value = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim() || undefined;
+    if (!value || GA_MEASUREMENT_ID_PATTERN.test(value)) return value;
+    return typeof window !== "undefined" || isEnvValidationSkipped() ? undefined : value;
+}
 
 const publicEnvSchema = z.object({
     NEXT_PUBLIC_APP_URL: z.string().url().optional(),
@@ -14,6 +39,10 @@ const publicEnvSchema = z.object({
     NEXT_PUBLIC_POSTHOG_HOST: z.string().url().optional(),
     NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
     NEXT_PUBLIC_MEDIA_BASE_URL: z.string().url().optional(),
+    NEXT_PUBLIC_GA_MEASUREMENT_ID: z
+        .string()
+        .regex(GA_MEASUREMENT_ID_PATTERN, "must be a GA4 measurement id such as G-ABC123XYZ9")
+        .optional(),
 });
 
 const serverEnvSchema = z.object({
@@ -73,6 +102,7 @@ export const publicEnv = parseOrThrow(
         NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
         NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
         NEXT_PUBLIC_MEDIA_BASE_URL: process.env.NEXT_PUBLIC_MEDIA_BASE_URL,
+        NEXT_PUBLIC_GA_MEASUREMENT_ID: gaMeasurementIdInput(),
     },
     "public env"
 );
@@ -178,16 +208,6 @@ export function getPublicSupabaseConfig() {
     return { url, key };
 }
 
-/**
- * The live site, www included (the bare domain answers 308 to it).
- *
- * The production deployment always uses this, whatever NEXT_PUBLIC_APP_URL says: a
- * `http://localhost:3000` copied from .env.local into Vercel once made every canonical URL,
- * sitemap entry, social preview image and customer email link on the live site point at
- * localhost, which Google and WhatsApp cannot reach.
- */
-export const PRODUCTION_SITE_URL = "https://www.onlyworkshops.com";
-
 function isLocalUrl(value: string) {
     try {
         const { hostname } = new URL(value);
@@ -231,6 +251,11 @@ export function getAbsoluteUrl(path = "/") {
 
 export function getPublicMapplsKey() {
     return publicEnv.NEXT_PUBLIC_MAPPLS_API_KEY || null;
+}
+
+/** The Google Analytics 4 measurement id, or null when analytics is not set up. */
+export function getGaMeasurementId() {
+    return publicEnv.NEXT_PUBLIC_GA_MEASUREMENT_ID || null;
 }
 
 export function getMapplsClientConfig() {
@@ -444,7 +469,7 @@ export function assertProductionEnv() {
         return; // Don't validate server variables in the browser
     }
 
-    if (process.env.SKIP_ENV_VALIDATION === "true" || process.env.SKIP_ENV_VALIDATION === "1") {
+    if (isEnvValidationSkipped()) {
         return;
     }
 

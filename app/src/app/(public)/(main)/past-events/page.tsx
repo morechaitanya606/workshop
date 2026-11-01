@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import { getAbsoluteUrl } from "@/lib/env";
 import { serializeJsonLd } from "@/lib/json-ld";
 import { DEFAULT_OG_IMAGES, breadcrumbJsonLd } from "@/lib/seo";
-import { PAST_WORKSHOPS_PAGE_SIZE, loadPastWorkshops } from "@/lib/workshop-page-data";
+import { withOneRetry } from "@/lib/cache-success-only";
+import {
+    PAST_WORKSHOPS_PAGE_SIZE,
+    failRenderOnDataError,
+    loadPastWorkshops,
+} from "@/lib/workshop-page-data";
 import { topicLinksFor } from "@/lib/seo-topics";
 import PastEventsPageClient from "./PastEventsPageClient";
 
@@ -31,7 +36,13 @@ export const metadata: Metadata = {
 export const revalidate = 60;
 
 export default async function PastEventsPage() {
-    const { data, total, source } = await loadPastWorkshops(1, PAST_WORKSHOPS_PAGE_SIZE);
+    // The page is cached whole for a minute: retry once, then keep the last good page rather
+    // than cache "could not load" (the "Load more" action reads once, like any button press).
+    const { data, total, source } = await withOneRetry(
+        () => loadPastWorkshops(1, PAST_WORKSHOPS_PAGE_SIZE),
+        (attempt) => attempt.source === "error"
+    );
+    failRenderOnDataError(source, "/past-events");
 
     return (
         <>

@@ -16,6 +16,7 @@ export const MOBILE_SUMMARY_ID = "mobile-order-summary";
  */
 export default function BookingMobileBar({
     total,
+    savings,
     guests,
     holdRemainingMs,
     mode,
@@ -25,9 +26,13 @@ export default function BookingMobileBar({
     isRazorpayReady,
     submitting,
     awaitingConfirmation,
+    confirmBusy,
     onPay,
 }: {
-    total: number;
+    /** Null while the service fee is unknown: a placeholder, never a guessed total. */
+    total: number | null;
+    /** Early Bird + offer savings (never the fee); shown in green when above zero. */
+    savings: number;
     guests: number;
     holdRemainingMs: number | null;
     /** "details" submits the details form; "pay" starts checkout. */
@@ -39,6 +44,8 @@ export default function BookingMobileBar({
     isRazorpayReady: boolean;
     submitting: boolean;
     awaitingConfirmation: boolean;
+    /** A paid order is being confirmed right now (else it waits for a connection or a login). */
+    confirmBusy: boolean;
     onPay: () => void;
 }) {
     const showSummary = () => {
@@ -47,10 +54,21 @@ export default function BookingMobileBar({
             ?.scrollIntoView({ behavior: "smooth", block: "start" });
     };
 
+    // The button takes the width of its label (wrapping past 46%), so the total, the timer and
+    // "You save" always get the rest: at 320-390 px two equal halves overlapped them.
     const buttonClass =
-        "btn-primary min-w-0 flex-1 !px-4 !py-3 disabled:cursor-not-allowed disabled:opacity-50";
+        "btn-primary min-w-0 max-w-[46%] shrink-0 !px-4 !py-3 disabled:cursor-not-allowed disabled:opacity-50";
 
-    const buttonContent = submitting ? (
+    const buttonContent = awaitingConfirmation ? (
+        confirmBusy ? (
+            <>
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                Confirming...
+            </>
+        ) : (
+            <>Payment received</>
+        )
+    ) : submitting ? (
         <>
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
             Processing...
@@ -70,7 +88,7 @@ export default function BookingMobileBar({
     ) : (
         <>
             <Lock className="h-4 w-4" aria-hidden="true" />
-            {awaitingConfirmation ? "Retry confirmation" : "Pay now"}
+            Pay now
         </>
     );
 
@@ -82,25 +100,45 @@ export default function BookingMobileBar({
                         type="button"
                         onClick={showSummary}
                         aria-controls={MOBILE_SUMMARY_ID}
-                        className="flex min-w-0 flex-1 items-center gap-2 rounded-xl py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                        className="flex min-w-0 flex-1 items-center rounded-xl py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                     >
-                        <span className="min-w-0">
-                            <span className="block whitespace-nowrap text-[11px] font-inter font-semibold uppercase tracking-wide text-dark-muted">
-                                Total &middot; {guests} {guests === 1 ? "guest" : "guests"}
-                            </span>
-                            <span className="flex items-center gap-2">
-                                <span className="whitespace-nowrap font-playfair text-xl font-medium leading-tight text-dark">
-                                    {formatCurrency(total)}
+                        <span className="min-w-0 flex-1">
+                            <span className="flex items-center justify-between gap-2">
+                                <span className="whitespace-nowrap text-[11px] font-inter font-semibold uppercase tracking-wide text-dark-muted">
+                                    Total &middot; {guests} {guests === 1 ? "guest" : "guests"}
                                 </span>
-                                <span className="whitespace-nowrap text-[10px] font-inter text-dark-muted">
+                                <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-inter font-semibold text-terracotta">
+                                    <span className="sr-only min-[380px]:not-sr-only">Summary</span>
+                                    <ChevronDown
+                                        aria-hidden="true"
+                                        className="h-3.5 w-3.5 -rotate-180"
+                                    />
+                                </span>
+                            </span>
+                            {/* Wraps instead of overflowing: the timer drops to its own line when
+                                the width runs out. "incl. GST" is also in the summary card. */}
+                            <span className="flex flex-wrap items-center gap-x-2">
+                                <span className="whitespace-nowrap font-playfair text-xl font-medium leading-tight text-dark">
+                                    {total === null ? (
+                                        <span
+                                            role="img"
+                                            aria-label="Total loading"
+                                            className="inline-block h-5 w-16 animate-pulse rounded bg-cream-200 align-middle"
+                                        />
+                                    ) : (
+                                        formatCurrency(total)
+                                    )}
+                                </span>
+                                <span className="hidden whitespace-nowrap text-[10px] font-inter text-dark-muted min-[360px]:inline">
                                     incl. GST
                                 </span>
                                 <HoldTimerChip remainingMs={holdRemainingMs} />
                             </span>
-                        </span>
-                        <span className="ml-auto inline-flex shrink-0 items-center gap-0.5 text-[11px] font-inter font-semibold text-terracotta">
-                            Summary
-                            <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 -rotate-180" />
+                            {savings > 0 && (
+                                <span className="block whitespace-nowrap text-[11px] font-inter font-semibold text-emerald-700">
+                                    You save {formatCurrency(savings)}
+                                </span>
+                            )}
                         </span>
                     </button>
 
