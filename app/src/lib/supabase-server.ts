@@ -13,10 +13,27 @@ export const isSupabaseServiceConfigured = Boolean(
     supabasePublicConfig?.url && env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+/**
+ * `next dev` compiles every route on its first request and keeps the server too busy to read
+ * sockets for tens of seconds. The production timeouts (2.5-5 s) then fire on healthy database
+ * calls: the first page after a start showed "Unable to load live workshops" and a NotCached
+ * error overlay. Development waits at least this long; production timeouts are unchanged.
+ */
+export const DEV_MIN_REQUEST_TIMEOUT_MS = 30_000;
+
+export function effectiveRequestTimeoutMs(timeoutMs: number): number {
+    return process.env.NODE_ENV === "development"
+        ? Math.max(timeoutMs, DEV_MIN_REQUEST_TIMEOUT_MS)
+        : timeoutMs;
+}
+
 function createFetchWithTimeout(timeoutMs: number): typeof fetch {
     return async (input, init) => {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        const timeoutId = setTimeout(
+            () => controller.abort(),
+            effectiveRequestTimeoutMs(timeoutMs)
+        );
 
         try {
             return await fetch(input, { ...init, signal: controller.signal });

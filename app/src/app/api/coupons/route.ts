@@ -2,9 +2,34 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireAdminUser, jsonError } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { handleApiError, parseBody, parseQuery } from "@/lib/api-route";
+import {
+    COUPON_OFFERS_MAX_ENTRIES,
+    offerSettingsFor,
+    type CouponOffersSetting,
+} from "@/lib/offers";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { couponCreateSchema, cursorPageQuerySchema, toPageCursor } from "@/lib/validators";
+import {
+    applyDisplayInput,
+    checkCouponOffers,
+    displayInputNeedsEntry,
+    displayToAdmin,
+    failureResponse,
+    OFFER_SETTINGS_READ_FAILED,
+    offerSettingsFullFailure,
+    pickDisplayInput,
+    readCouponOffersFresh,
+    revalidateCouponOffers,
+    withAdminDisplay,
+    writeCouponOffers,
+    type CouponOffersRead,
+} from "./coupon-offers-store";
 
+/**
+ * Admin coupon list. Each coupon carries its display settings (visibility, label, min_guests,
+ * show_end_date) from the "coupon_offers" setting; offerSettingsOk is false when that read
+ * failed, so the editor knows not to trust (or save) the "hidden" defaults it then shows.
+ */
 export async function GET(request: NextRequest) {
     const limited = await enforceRateLimit(request, "publicRead", "api-coupons-list");
     if (!limited.ok) return limited.response;
@@ -31,7 +56,10 @@ export async function GET(request: NextRequest) {
             query = query.lt("created_at", cursor);
         }
 
-        const { data, error } = await query;
+        const [{ data, error }, offers] = await Promise.all([
+            query,
+            readCouponOffersFresh(service.client),
+        ]);
 
         if (error) {
             throw error;
@@ -41,8 +69,16 @@ export async function GET(request: NextRequest) {
         const page = rows.slice(0, limit);
         const nextCursor =
             rows.length > limit ? toPageCursor(page[page.length - 1]?.created_at) : null;
+        const setting: CouponOffersSetting = offers.ok ? offers.setting : {};
 
-        return NextResponse.json({ coupons: page, nextCursor }, { status: 200 });
+        return NextResponse.json(
+            {
+                coupons: page.map((row) => withAdminDisplay(row, setting)),
+                nextCursor,
+                offerSettingsOk: offers.ok,
+            },
+            { status: 200 }
+        );
     } catch (error) {
         return handleApiError("Failed to load coupons.", error);
     }
@@ -68,6 +104,20 @@ export async function POST(request: NextRequest) {
 
     try {
         const input = parsed.data;
+        const display = pickDisplayInput(input);
+
+        // Read the display settings BEFORE inserting: when they cannot be read (or are full),
+        // nothing is saved at all, rather than a coupon that silently ends up a hidden code.
+        let offersRead: Extract<CouponOffersRead, { ok: true }> | null = null;
+        const wantsDisplay = displayInputNeedsEntry(display);
+        if (wantsDisplay) {
+            const read = await readCouponOffersFresh(service.client);
+            if (!read.ok) return failureResponse(OFFER_SETTINGS_READ_FAILED);
+            if (Object.keys(read.setting).length >= COUPON_OFFERS_MAX_ENTRIES) {
+                return failureResponse(offerSettingsFullFailure());
+            }
+            offersRead = read;
+        }
 
         const { data, error } = await service.client
             .from("coupons")
@@ -103,7 +153,35 @@ export async function POST(request: NextRequest) {
             throw error;
         }
 
-        return NextResponse.json({ coupon: data }, { status: 201 });
+        let savedDisplay = displayToAdmin(undefined);
+        let warning: string | undefined;
+        if (wantsDisplay && offersRead && data?.id) {
+            const couponId = data.id;
+            const next = applyDisplayInput(offersRead.setting, couponId, display);
+            const checked = await checkCouponOffers(service.client, next, couponId);
+            const written = checked.ok
+                ? await writeCouponOffers(service.client, {
+                      setting: next,
+                      stored: checked.stored,
+                      version: offersRead.version,
+                      rebuild: (current) => applyDisplayInput(current, couponId, display),
+                      couponId,
+                  })
+                : checked;
+            if (written.ok) {
+                savedDisplay = displayToAdmin(offerSettingsFor(written.setting, couponId));
+            } else {
+                // The coupon exists as a hidden typed code (today's behaviour); say so plainly.
+                warning = `The coupon was saved as a hidden code, but its offer settings were not: ${written.error} Edit it to try again.`;
+            }
+        }
+
+        revalidateCouponOffers();
+
+        return NextResponse.json(
+            { coupon: { ...data, ...savedDisplay }, ...(warning ? { warning } : {}) },
+            { status: 201 }
+        );
     } catch (error) {
         return handleApiError("Failed to create coupon.", error);
     }

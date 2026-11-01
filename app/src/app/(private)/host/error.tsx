@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import * as Sentry from "@sentry/nextjs";
+import { retryAfterError } from "@/lib/chunk-load-recovery";
+import { reportError } from "@/lib/sentry-client";
 
 export default function HostError({
     error,
@@ -12,12 +13,7 @@ export default function HostError({
     reset: () => void;
 }) {
     useEffect(() => {
-        Sentry.captureException(error, {
-            tags: {
-                route: "host",
-                layer: "web",
-            },
-        });
+        reportError(error, { route: "host", layer: "web" });
     }, [error]);
 
     return (
@@ -29,7 +25,7 @@ export default function HostError({
                     and bookings are unaffected.
                 </p>
                 <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                    <button onClick={reset} className="btn-primary">
+                    <button onClick={() => retryAfterError(error, reset)} className="btn-primary">
                         Try again
                     </button>
                     <Link href="/host/dashboard" className="btn-secondary">

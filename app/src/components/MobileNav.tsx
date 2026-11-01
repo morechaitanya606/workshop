@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useSitePathname } from "@/lib/use-site-pathname";
 import { Home, Search, CalendarDays, LayoutDashboard, User } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 export default function MobileNav() {
-    const pathname = usePathname();
+    const pathname = useSitePathname();
     const { user, role, roleLoading } = useAuth();
     const navItems = [
         { href: "/", label: "Home", icon: Home },

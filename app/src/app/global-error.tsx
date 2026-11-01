@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import * as Sentry from "@sentry/nextjs";
+import { retryAfterError } from "@/lib/chunk-load-recovery";
+import { reportError } from "@/lib/sentry-client";
 
 export default function GlobalError({
     error,
@@ -12,12 +13,7 @@ export default function GlobalError({
 }) {
     useEffect(() => {
         // The root layout itself failed, so no other boundary has seen this error.
-        Sentry.captureException(error, {
-            tags: {
-                route: "global",
-                layer: "web",
-            },
-        });
+        reportError(error, { route: "global", layer: "web" });
     }, [error]);
 
     return (
@@ -76,7 +72,7 @@ export default function GlobalError({
                     </p>
                     <button
                         type="button"
-                        onClick={() => reset()}
+                        onClick={() => retryAfterError(error, reset)}
                         className="btn-primary"
                         style={{
                             display: "inline-flex",

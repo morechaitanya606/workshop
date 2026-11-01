@@ -14,6 +14,10 @@ import {
 import { syncWorkshopLibrary } from "@/lib/workshop-library";
 import { isMissingColumnError, withoutNewColumns } from "@/lib/workshop-approval-compat";
 import { mirrorImageFields } from "@/lib/image-mirror";
+import { readClosedWorkshopIds } from "@/lib/workshop-availability-server";
+
+// Pasted image links are copied into storage on save (see lib/image-mirror).
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
     const auth = await requireAdminUser(request);
@@ -26,11 +30,17 @@ export async function GET(request: NextRequest) {
     const serviceClient = service.client;
 
     try {
-        const { data, error } = await serviceClient
-            .from("workshops")
-            .select("*")
-            .order("created_at", { ascending: false })
-            .limit(100);
+        // The "Bookings closed" ids ride along, read fresh (never the cached settings), so the
+        // admin list shows each workshop's switch as it really is. A failed read is reported
+        // (closedWorkshopIdsOk: false) instead of looking like "nothing closed".
+        const [{ data, error }, closed] = await Promise.all([
+            serviceClient
+                .from("workshops")
+                .select("*")
+                .order("created_at", { ascending: false })
+                .limit(100),
+            readClosedWorkshopIds(serviceClient),
+        ]);
 
         if (error) {
             throw error;
@@ -38,6 +48,8 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({
             data: (data || []).map((row) => mapWorkshopRowToWorkshop(row)),
+            closedWorkshopIds: [...closed.ids],
+            closedWorkshopIdsOk: closed.ok,
         });
     } catch (error) {
         return handleApiError("Failed to load admin workshops.", error);

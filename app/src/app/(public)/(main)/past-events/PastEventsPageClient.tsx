@@ -234,6 +234,11 @@ export default function PastEventsPageClient({
             {/* Events grid */}
             <section className="section-padding pb-8 md:pb-16">
                 <div className="max-w-7xl mx-auto">
+                    {/* Section title, so the card titles (h3) do not follow the h1 directly. The
+                        list is ordered by date, latest first (see loadPastWorkshops). */}
+                    {workshops.length > 0 && (
+                        <h2 className="heading-md mb-6">Past workshops, newest first</h2>
+                    )}
                     {workshops.length === 0 ? (
                         <div className="text-center py-20">
                             <div className="w-16 h-16 rounded-full bg-terracotta/10 flex items-center justify-center mx-auto mb-4">

@@ -19,6 +19,9 @@ import {
 } from "@/lib/workshop-approval-compat";
 import { mirrorImageFields } from "@/lib/image-mirror";
 
+// Pasted image links are copied into storage on save (see lib/image-mirror).
+export const maxDuration = 60;
+
 export async function GET(request: NextRequest) {
     const auth = await requireHostOrAdmin(request);
     if (!auth.ok) {

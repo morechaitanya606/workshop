@@ -1,7 +1,8 @@
 # Homepage Hero Video Assets
 
-**The four renditions the homepage uses are committed** and served from Vercel's CDN. Every
-other .mp4 in this folder is source material and is gitignored.
+**The five renditions the homepage uses are committed** (`hero-1-mobile.mp4` to
+`hero-5-mobile.mp4`) and served from Vercel's CDN. Every other .mp4 in this folder is source
+material and is gitignored.
 
 Why here rather than object storage, on the current plan:
 
@@ -37,31 +38,46 @@ downloading. `-an` drops audio, which the hero never plays. The sources were alr
 encoded at 24 fps, so CRF 30 came out _larger_ than the input -- do not assume a low CRF means
 a smaller file, measure it.
 
-The component picks a rendition at `(max-width: 640px)`:
+All five are 720x1280 portrait clips. The component picks the layout at `(max-width: 640px)`:
 
-- **Desktop** — `hero-triptych.mp4`, a single looping 1920x1080 file showing all three clips
-  side by side as 640x1080 panels. The source footage is vertical, so a triptych keeps the
-  full frame where a plain 16:9 crop would throw away most of it.
-- **Mobile** — `hero-1-mobile.mp4`, `hero-2-mobile.mp4`, `hero-3-mobile.mp4`, played one at a
-  time in order and looping back to the first. A phone is too narrow for three panels.
+- **Desktop** is three portrait panels side by side (three equal columns, each filled with
+  `object-cover`), so the vertical footage keeps its full frame where a plain 16:9 crop would
+  throw away most of it. Each panel is its own `<video>`:
+    - **left**: `hero-4-mobile.mp4`, looping on its own (22.6 s);
+    - **middle**: `hero-1-mobile.mp4`, `hero-2-mobile.mp4`, `hero-3-mobile.mp4`, played one
+      after another and looping back to the first;
+    - **right**: `hero-5-mobile.mp4`, looping on its own (41.2 s).
 
-To change either, edit `HERO_VIDEO_DESKTOP` / `HERO_MOBILE_CLIPS` in
-`src/components/home/HeroSection.tsx`.
+    The panels loop independently, so their different lengths never matter. If one panel's clip
+    cannot play, the hero image shows through that third and the other two carry on.
 
-Rebuild the triptych from three portrait masters with `hstack`. Each panel is scaled to 640
-wide and centre-cropped to 1080 tall:
+- **Mobile** plays `hero-1-mobile.mp4` to `hero-5-mobile.mp4` one at a time in order and loops
+  back to the first. A phone is too narrow for three panels. Each clip is fetched only when its
+  turn comes.
+
+To change either, edit `HERO_LEFT_CLIPS` / `HERO_MIDDLE_CLIPS` / `HERO_RIGHT_CLIPS` /
+`HERO_MOBILE_CLIPS` in `src/components/home/HeroSection.tsx`. The slow-connection protections
+(start deadline, rebuffering detection) live in `src/components/home/HeroVideoPanel.tsx` and
+apply to every panel.
+
+`hero-4-mobile.mp4` and `hero-5-mobile.mp4` were made on 2026-11-01 from two 4K, 60 fps, HDR
+(HLG) HEVC phone clips of 148 MB and 277 MB with sound; they came out at 1.45 MB and 2.91 MB,
+about 0.5 to 0.6 Mbps. The exact command (downscale first, then tone map to SDR, see the HDR note
+below):
 
 ```
-ffmpeg -t 38 -i a.mp4 -ss 0 -t 38 -i b.mp4 -ss 38 -t 38 -i b.mp4 -filter_complex \
-  "[0:v]scale=640:-2,crop=640:1080,setsar=1[l];[1:v]scale=640:-2,crop=640:1080,setsar=1[c];\
-   [2:v]scale=640:-2,crop=640:1080,setsar=1[r];[l][c][r]hstack=inputs=3,fps=24[v]" \
-  -map "[v]" -an -c:v libx264 -crf 30 -maxrate 1800k -movflags +faststart hero-triptych.mp4
+ffmpeg -i in.mp4 -vf "scale=720:1280,fps=24,zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p" \
+  -an -c:v libx264 -crf 35 -preset slow -profile:v high -level 4.0 -maxrate 900k -bufsize 1800k \
+  -pix_fmt yuv420p -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
+  -movflags +faststart hero-N-mobile.mp4
 ```
 
-All three panels must be at least as long as `-t`, or the short one freezes on its last frame.
+It needs an ffmpeg build with `zscale` (the Gyan.FFmpeg full build has it: `winget install
+Gyan.FFmpeg`). Converting the 41 s clip takes about 4 minutes on a 6 GB laptop.
 
-`hero-1.mp4`, `hero-2.mp4` and `hero-3.mp4` are the earlier single-clip desktop crops and are
-no longer referenced.
+`hero-triptych.mp4` (the earlier single 1920x1080 file with three clips baked in) and
+`hero-1.mp4`, `hero-2.mp4`, `hero-3.mp4` (older single-clip desktop crops) are no longer
+referenced.
 
 ## Encoding rules
 

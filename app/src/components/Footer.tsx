@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { useSitePathname } from "@/lib/use-site-pathname";
 import { MessageCircle, Phone } from "lucide-react";
 import { RevealGroup, RevealItem } from "@/components/ui";
 import { CONTACT_PAGE_HREF, CONTACT_PHONE_NUMBERS } from "@/lib/contact";
 
 export default function Footer() {
-    const pathname = usePathname();
+    const pathname = useSitePathname();
     // The server and the visitor's browser can disagree about the year around New Year (different
     // time zones), which is the one expected hydration difference here; React keeps the server text.
     const currentYear = new Date().getFullYear();
@@ -95,11 +95,12 @@ export default function Footer() {
                     </RevealItem>
 
                     <RevealItem>
-                        {/* Company */}
+                        {/* Company. The column titles are h2s styled small: as h4s they skipped
+                            a heading level after the page's own h2 sections. */}
                         <div>
-                            <h4 className="font-inter text-xs font-bold tracking-widest uppercase text-dark mb-5">
+                            <h2 className="font-inter text-xs font-bold tracking-widest uppercase text-dark mb-5">
                                 Company
-                            </h4>
+                            </h2>
                             <ul className="space-y-3">
                                 {[
                                     { label: "About Us", href: "/about" },
@@ -134,9 +135,9 @@ export default function Footer() {
                     <RevealItem>
                         {/* Support */}
                         <div>
-                            <h4 className="font-inter text-xs font-bold tracking-widest uppercase text-dark mb-5">
+                            <h2 className="font-inter text-xs font-bold tracking-widest uppercase text-dark mb-5">
                                 Support
-                            </h4>
+                            </h2>
                             <ul className="space-y-3">
                                 {[
                                     { label: "Help Center", href: "/help" },

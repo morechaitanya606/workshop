@@ -3,13 +3,55 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
 import { sanitizeInternalRedirect } from "@/lib/auth-origin";
 import { getClientAppUrl } from "@/lib/client-url";
-import { User, Session } from "@supabase/supabase-js";
-import { isSupabaseConfigured, supabase } from "./supabase";
+import type { User, Session } from "@supabase/supabase-js";
+import { getPublicSupabaseConfig } from "@/lib/public-env";
 import { getAuthMe } from "@/lib/api-client";
 
 import { clearFavoritesCache } from "@/lib/favorites-cache";
 
 type UserRole = "admin" | "host" | "user";
+
+type BrowserSupabaseClient = (typeof import("./supabase"))["supabase"];
+
+/** Same rule as `isSupabaseConfigured` in ./supabase, without loading supabase-js to learn it. */
+const isSupabaseConfigured = getPublicSupabaseConfig() !== null;
+
+let supabaseClientPromise: Promise<BrowserSupabaseClient> | null = null;
+
+/**
+ * supabase-js (auth, realtime, storage and the Buffer polyfill storage needs: about 57 KB
+ * gzipped) is imported after hydration, not with every page's first-load JavaScript. Nothing on
+ * a public page needs it sooner, and the server HTML is unchanged: it always rendered the auth
+ * `loading` state, which lasts until the session is read below. Repeated calls share one import;
+ * a failed one (a dropped connection) is forgotten so the next call tries again.
+ */
+function loadSupabaseClient() {
+    if (!supabaseClientPromise) {
+        supabaseClientPromise = import("./supabase")
+            .then(({ supabase }) => supabase)
+            .catch((error: unknown) => {
+                supabaseClientPromise = null;
+                throw error;
+            });
+    }
+    return supabaseClientPromise;
+}
+
+function loadSupabaseClientOrNull() {
+    return loadSupabaseClient().catch(() => null);
+}
+
+const AUTH_SERVICE_UNREACHABLE_MESSAGE =
+    "We could not reach the sign-in service. Check your connection and try again.";
+
+/**
+ * Pauses between attempts to read the session, or its role, after a network failure; the last
+ * one repeats. The browser's `online` event retries straight away.
+ */
+const SESSION_RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 20_000, 30_000];
+
+/** Failed downloads of supabase-js, while online, before the chunk-load recovery is told. */
+const CHUNK_FAILURES_BEFORE_RECOVERY = 3;
 
 interface AuthContextType {
     user: User | null;
@@ -64,6 +106,41 @@ function isInvalidRefreshTokenError(error: unknown) {
     return message.includes("invalid refresh token") || message.includes("refresh token not found");
 }
 
+const NETWORK_ERROR_MESSAGE_PATTERN =
+    /failed to fetch|fetch failed|networkerror|network error|network request failed|load failed|loading chunk|failed to load chunk|dynamically imported module|timed out|timeout/i;
+
+/**
+ * An error that says the session could not be read right now (no connection, a gateway error,
+ * the supabase-js chunk failing to download), not that the visitor is signed out. auth-js names
+ * its own retryable failures AuthRetryableFetchError: status 0 when no answer came back, 502-504
+ * from a gateway.
+ */
+export function isNetworkSessionError(error: unknown, depth = 0): boolean {
+    if (isInvalidRefreshTokenError(error)) return false;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
+
+    if (error && typeof error === "object") {
+        const { name, status, cause } = error as {
+            name?: unknown;
+            status?: unknown;
+            cause?: unknown;
+        };
+        if (name === "AuthRetryableFetchError" || name === "ChunkLoadError") return true;
+        if (typeof status === "number" && (status === 0 || status >= 500)) return true;
+        // A wrapper error (`new Error(message, { cause })`) is judged by what it wraps.
+        if (cause && depth < 3 && isNetworkSessionError(cause, depth + 1)) return true;
+    }
+
+    return NETWORK_ERROR_MESSAGE_PATTERN.test(getErrorMessage(error));
+}
+
+/** An answer of "no" (the token is not accepted), as opposed to no answer at all. */
+function isDefiniteDenial(error: unknown) {
+    const status =
+        error && typeof error === "object" ? (error as { status?: unknown }).status : undefined;
+    return status === 401 || status === 403;
+}
+
 function clearSupabaseAuthStorage() {
     if (typeof window === "undefined") {
         return;
@@ -107,11 +184,11 @@ function clearSupabaseAuthStorage() {
     }
 }
 
-async function clearStaleSupabaseSession() {
+async function clearStaleSupabaseSession(client: BrowserSupabaseClient) {
     clearFavoritesCache();
 
     try {
-        await supabase.auth.signOut({ scope: "local" });
+        await client.auth.signOut({ scope: "local" });
     } catch {
         // If the refresh token is already invalid, manual storage cleanup below is enough.
     }
@@ -137,19 +214,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         let cancelled = false;
         let roleRequestId = 0;
+        let subscription: { unsubscribe: () => void } | null = null;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
+        let retryCount = 0;
+        let isWaitingToRetry = false;
+        let importFailuresWhileOnline = 0;
+        // The visitor whose role the server has answered for, so a failed re-check keeps it.
+        let confirmedRoleUserId: string | null = null;
 
-        const loadRole = async (accessToken: string) => {
+        /**
+         * The role, or null when the server could not be asked (no connection, a timeout, a 5xx).
+         * Only an answer may change what a visitor is allowed to see: an admin on a weak
+         * connection used to be told "not allowed" because a failed check counted as "visitor".
+         */
+        const loadRole = async (accessToken: string): Promise<UserRole | null> => {
             try {
                 const result = await getAuthMe(accessToken);
                 return result.role === "admin" || result.role === "host" ? result.role : "user";
-            } catch {
-                return "user" as UserRole;
+            } catch (error) {
+                return isDefiniteDenial(error) ? "user" : null;
+            }
+        };
+
+        const stopRetrying = () => {
+            isWaitingToRetry = false;
+            if (retryTimer !== null) {
+                clearTimeout(retryTimer);
+                retryTimer = null;
             }
         };
 
         const resetSession = () => {
+            stopRetrying();
             roleRequestId += 1;
             userIdRef.current = null;
+            confirmedRoleUserId = null;
             setSession(null);
             setUser(null);
             setRole("user");
@@ -158,8 +257,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
 
         const applySession = (nextSession: Session | null) => {
-            const isSameUser = nextSession?.user?.id === userIdRef.current;
-            userIdRef.current = nextSession?.user?.id ?? null;
+            stopRetrying();
+            const userId = nextSession?.user?.id ?? null;
+            const isSameUser = userId === userIdRef.current;
+            userIdRef.current = userId;
 
             setSession(nextSession);
             setUser(nextSession?.user ?? null);
@@ -167,6 +268,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             if (!nextSession?.access_token) {
                 roleRequestId += 1;
+                confirmedRoleUserId = null;
+                retryCount = 0;
                 setRole("user");
                 setRoleLoading(false);
                 return;
@@ -174,6 +277,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             const currentRequestId = ++roleRequestId;
             if (!isSameUser) {
+                confirmedRoleUserId = null;
                 setRoleLoading(true);
             }
 
@@ -181,60 +285,124 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (cancelled || currentRequestId !== roleRequestId) {
                     return;
                 }
+
+                if (nextRole === null) {
+                    // Not answered. A role confirmed earlier for this visitor stands; otherwise
+                    // the pages that need the role keep waiting while it is asked for again (a
+                    // fresh session read each time, so a token that expired meanwhile is renewed).
+                    if (confirmedRoleUserId !== userId) retryLater();
+                    return;
+                }
+
+                confirmedRoleUserId = userId;
+                retryCount = 0;
                 setRole(nextRole);
                 setRoleLoading(false);
             });
         };
 
-        // Get initial session
-        supabase.auth
-            .getSession()
-            .then(async ({ data: { session: initialSession }, error }) => {
+        const retryNow = () => {
+            stopRetrying();
+            void loadInitialSession();
+        };
+
+        // A session refresh that failed for lack of network says nothing about whether the
+        // visitor is signed in, and signing them out here bounced a customer mid-booking to
+        // /auth/login. Stay in `loading` and read the session again: as soon as the browser
+        // says it is back online, otherwise after a growing pause.
+        const retryLater = () => {
+            stopRetrying();
+            isWaitingToRetry = true;
+            const delay =
+                SESSION_RETRY_DELAYS_MS[Math.min(retryCount, SESSION_RETRY_DELAYS_MS.length - 1)];
+            retryCount += 1;
+            retryTimer = setTimeout(retryNow, delay);
+        };
+
+        const onOnline = () => {
+            if (isWaitingToRetry) retryNow();
+        };
+
+        const handleSessionError = async (error: unknown, client: BrowserSupabaseClient | null) => {
+            if (client && isInvalidRefreshTokenError(error)) {
+                await clearStaleSupabaseSession(client);
+            } else if (isNetworkSessionError(error)) {
+                retryLater();
+                return;
+            }
+            if (!cancelled) resetSession();
+        };
+
+        const loadInitialSession = async () => {
+            let client: BrowserSupabaseClient | null = null;
+            try {
+                try {
+                    client = await loadSupabaseClient();
+                    importFailuresWhileOnline = 0;
+                } catch (error) {
+                    // Online and still failing: most likely a tab open across a deploy, whose
+                    // old chunk is gone. Hand it to the root layout's chunk-load recovery
+                    // (which reloads, at most twice in five minutes) and keep retrying meanwhile.
+                    if (navigator.onLine !== false) importFailuresWhileOnline += 1;
+                    if (importFailuresWhileOnline === CHUNK_FAILURES_BEFORE_RECOVERY) {
+                        setTimeout(() => {
+                            throw error;
+                        }, 0);
+                    }
+                    throw error;
+                }
+                if (cancelled) return;
+
+                if (!subscription) {
+                    subscription = client.auth.onAuthStateChange((event, nextSession) => {
+                        // The first session comes from getSession() below. auth-js reports
+                        // INITIAL_SESSION as null when its token refresh fails for lack of
+                        // network, which would sign the visitor out, and applying it as well
+                        // only repeated the role request.
+                        if (cancelled || event === "INITIAL_SESSION") return;
+                        applySession(nextSession);
+                    }).data.subscription;
+                }
+
+                const {
+                    data: { session: initialSession },
+                    error,
+                } = await client.auth.getSession();
                 if (cancelled) return;
 
                 if (error) {
-                    if (isInvalidRefreshTokenError(error)) {
-                        await clearStaleSupabaseSession();
-                    }
-                    resetSession();
+                    await handleSessionError(error, client);
                     return;
                 }
 
                 applySession(initialSession);
-            })
-            .catch(async (error) => {
+            } catch (error) {
                 if (cancelled) return;
+                await handleSessionError(error, client);
+            }
+        };
 
-                if (isInvalidRefreshTokenError(error)) {
-                    await clearStaleSupabaseSession();
-                }
-                resetSession();
-            });
-
-        // Listen for auth state changes
-        const {
-            data: { subscription },
-        } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-            if (cancelled) return;
-            applySession(nextSession);
-        });
+        window.addEventListener("online", onOnline);
+        void loadInitialSession();
 
         return () => {
             cancelled = true;
             roleRequestId += 1;
-            subscription.unsubscribe();
+            stopRetrying();
+            window.removeEventListener("online", onOnline);
+            subscription?.unsubscribe();
         };
     }, []);
 
-    const clearInvalidSessionBeforeAuth = async () => {
+    const clearInvalidSessionBeforeAuth = async (client: BrowserSupabaseClient) => {
         try {
-            const { error } = await supabase.auth.getSession();
+            const { error } = await client.auth.getSession();
             if (isInvalidRefreshTokenError(error)) {
-                await clearStaleSupabaseSession();
+                await clearStaleSupabaseSession(client);
             }
         } catch (error) {
             if (isInvalidRefreshTokenError(error)) {
-                await clearStaleSupabaseSession();
+                await clearStaleSupabaseSession(client);
             }
         }
     };
@@ -245,8 +413,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 error: "Authentication is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).",
             };
         }
-        await clearInvalidSessionBeforeAuth();
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const client = await loadSupabaseClientOrNull();
+        if (!client) return { error: AUTH_SERVICE_UNREACHABLE_MESSAGE };
+        await clearInvalidSessionBeforeAuth(client);
+        const { error } = await client.auth.signInWithPassword({ email, password });
         return { error: error?.message ?? null };
     };
 
@@ -256,8 +426,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 error: "Authentication is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).",
             };
         }
-        await clearInvalidSessionBeforeAuth();
-        const { error } = await supabase.auth.signUp({
+        const client = await loadSupabaseClientOrNull();
+        if (!client) return { error: AUTH_SERVICE_UNREACHABLE_MESSAGE };
+        await clearInvalidSessionBeforeAuth(client);
+        const { error } = await client.auth.signUp({
             email,
             password,
             options: {
@@ -272,7 +444,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!isSupabaseConfigured) {
             return { error: "Authentication is not configured." };
         }
-        const { error } = await supabase.auth.resend({
+        const client = await loadSupabaseClientOrNull();
+        if (!client) return { error: AUTH_SERVICE_UNREACHABLE_MESSAGE };
+        const { error } = await client.auth.resend({
             type: "signup",
             email,
             options: { emailRedirectTo: getSignupConfirmRedirect() },
@@ -287,7 +461,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             };
         }
 
-        await clearInvalidSessionBeforeAuth();
+        // Best effort: the Google flow runs on the server, so it goes ahead even if the
+        // client could not be loaded to clear a stale local session first.
+        const client = await loadSupabaseClientOrNull();
+        if (client) await clearInvalidSessionBeforeAuth(client);
         // Same parse-and-compare rule as the server routes; see sanitizeInternalRedirect.
         // A startsWith("/") test alone accepts "//evil.example".
         const safeRedirectPath = sanitizeInternalRedirect(redirectPath);
@@ -300,7 +477,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const signOut = async () => {
         if (!isSupabaseConfigured) return;
         clearFavoritesCache();
-        await supabase.auth.signOut();
+        const client = await loadSupabaseClientOrNull();
+        if (client) {
+            await client.auth.signOut();
+            return;
+        }
+
+        // Only reachable if supabase-js never loaded: drop the local session by hand.
+        clearSupabaseAuthStorage();
+        userIdRef.current = null;
+        setSession(null);
+        setUser(null);
+        setRole("user");
+        setLoading(false);
+        setRoleLoading(false);
     };
 
     return (

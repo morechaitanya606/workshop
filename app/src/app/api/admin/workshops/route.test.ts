@@ -1,13 +1,16 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 import { requireAdminUser } from "@/lib/api-auth";
 import { requireSupabaseService } from "@/lib/api-helpers";
 import { assertRateLimit } from "@/lib/rate-limit";
+import { readClosedWorkshopIds } from "@/lib/workshop-availability-server";
+import { createChainableSupabase } from "@/test/chainable-supabase";
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/workshop-library", () => ({ syncWorkshopLibrary: vi.fn() }));
+vi.mock("@/lib/workshop-availability-server", () => ({ readClosedWorkshopIds: vi.fn() }));
 vi.mock("@/lib/api-auth", async () => {
     const { NextResponse } = await import("next/server");
     return {
@@ -68,6 +71,69 @@ function mockInsert() {
     });
     return insert;
 }
+
+describe("GET /api/admin/workshops", () => {
+    const ROW = {
+        id: "pottery-wheel-1760000000000",
+        title: "Pottery",
+        created_at: "2099-01-01T00:00:00Z",
+        max_seats: 12,
+        seats_remaining: 4,
+    };
+
+    beforeEach(() => {
+        vi.mocked(requireAdminUser).mockResolvedValue({
+            ok: true,
+            user: { id: "admin-1" } as any,
+            accessToken: "token",
+            role: "admin",
+        } as any);
+    });
+
+    it("returns the workshops with the fresh closed ids", async () => {
+        const db = createChainableSupabase({ workshops: [{ data: [ROW], error: null }] });
+        vi.mocked(requireSupabaseService).mockReturnValue({ ok: true, client: db.client as any });
+        vi.mocked(readClosedWorkshopIds).mockResolvedValue({
+            ok: true,
+            ids: new Set([ROW.id]),
+        });
+
+        const response = await GET(new NextRequest("http://localhost/api/admin/workshops"));
+        const body = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(body.data).toHaveLength(1);
+        expect(body.data[0]).toMatchObject({ id: ROW.id, maxSeats: 12, seatsRemaining: 4 });
+        expect(body.closedWorkshopIds).toEqual([ROW.id]);
+        expect(body.closedWorkshopIdsOk).toBe(true);
+        expect(readClosedWorkshopIds).toHaveBeenCalledWith(db.client);
+    });
+
+    it("says so when the closed ids could not be read (never 'nothing closed')", async () => {
+        const db = createChainableSupabase({ workshops: [{ data: [ROW], error: null }] });
+        vi.mocked(requireSupabaseService).mockReturnValue({ ok: true, client: db.client as any });
+        vi.mocked(readClosedWorkshopIds).mockResolvedValue({ ok: false, ids: new Set() });
+
+        const body = await (
+            await GET(new NextRequest("http://localhost/api/admin/workshops"))
+        ).json();
+
+        expect(body.closedWorkshopIds).toEqual([]);
+        expect(body.closedWorkshopIdsOk).toBe(false);
+    });
+
+    it("is admin-only", async () => {
+        vi.mocked(requireAdminUser).mockResolvedValue({
+            ok: false,
+            response: new Response(null, { status: 403 }),
+        } as any);
+
+        const response = await GET(new NextRequest("http://localhost/api/admin/workshops"));
+
+        expect(response.status).toBe(403);
+        expect(readClosedWorkshopIds).not.toHaveBeenCalled();
+    });
+});
 
 describe("POST /api/admin/workshops", () => {
     beforeEach(() => {

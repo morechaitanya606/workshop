@@ -54,7 +54,9 @@ function Tile({
         >
             <Image
                 src={photo.src}
-                alt={decorative ? "" : photo.alt}
+                // The repeats keep the alt too: screen readers skip them anyway (their wrapper is
+                // aria-hidden), and SEO audits counted dozens of alt-less images here.
+                alt={photo.alt}
                 fill
                 sizes={shape.sizes}
                 quality={70}

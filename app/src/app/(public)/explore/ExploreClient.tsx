@@ -18,8 +18,10 @@ import {
 import Footer from "@/components/Footer";
 import ExploreCommunitiesSection from "@/components/communities/ExploreCommunitiesSection";
 import ExploreResultsSection from "@/components/explore/ExploreResultsSection";
+import { exploreResultsHeading } from "@/components/explore/explore-results-heading";
 import ExploreToolbarSection from "@/components/explore/ExploreToolbarSection";
 import type { Community } from "@/lib/communities";
+import type { CardOffer } from "@/lib/offers";
 
 type SortOption = "date_asc" | "date_desc" | "price_asc" | "price_desc" | "rating_desc";
 
@@ -71,12 +73,18 @@ export default function ExploreClient({
     total,
     source,
     todayIso,
+    cardOffers,
+    closedWorkshopIds,
 }: {
     workshops: Workshop[];
     featuredCommunities: Community[];
     total: number;
     source: "supabase" | "error";
     todayIso: string;
+    /** Card offers by workshop id, computed on the server for this render. */
+    cardOffers?: Record<string, CardOffer>;
+    /** Listed workshops whose bookings the admin closed. */
+    closedWorkshopIds?: string[];
 }) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -539,12 +547,15 @@ export default function ExploreClient({
                 />
 
                 <ExploreResultsSection
+                    heading={exploreResultsHeading(parsedQuery)}
                     isPending={isPending}
                     total={total}
                     source={source}
                     todayIso={todayIso}
                     errorBannerMotionProps={errorBannerMotionProps}
                     workshops={workshops}
+                    cardOffers={cardOffers}
+                    closedWorkshopIds={closedWorkshopIds}
                     clearFilters={clearFilters}
                     onRetry={() => router.refresh()}
                     gridKey={gridKey}

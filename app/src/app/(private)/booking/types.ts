@@ -1,3 +1,5 @@
+import type { CheckoutPayload } from "@/lib/api-client";
+
 export type ConfirmedBooking = {
     id: string;
     total: number;
@@ -9,10 +11,30 @@ export type ConfirmedBooking = {
     };
 };
 
+/**
+ * A code the customer typed or tapped, as /api/coupons/validate accepted it. The price is never
+ * taken from here directly: booking-pricing.ts turns it into a PricingCoupon (with the public
+ * offer's rules when it is one) and quotes it with src/lib/pricing.ts, like checkout does.
+ */
 export type AppliedCoupon = {
     code: string;
+    /** The coupon id from the validate response; matches a public offer's id when it is one. */
+    id: string | null;
+    /** discount_value: a percentage, or rupees once per booking. */
     discount: number;
     type: "percentage" | "fixed";
+    /** Only when the validate response names them. */
+    minGuests?: number | null;
+    minOrderAmount?: number | null;
+    /** The offer's public name when the code belongs to one ("Community price drop"). */
+    label?: string | null;
+};
+
+/** What the confirm request sends: the order's checkout payload plus Razorpay's proof. */
+export type PendingConfirmationPayload = CheckoutPayload & {
+    razorpayOrderId: string;
+    razorpayPaymentId: string;
+    razorpaySignature: string;
 };
 
 export type BookingFormData = {

@@ -12,7 +12,9 @@ import { addFavorite, getFavorites, removeFavorite } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import type { Workshop } from "@/lib/data";
 import { fadeInUp, revealViewport, standardTransition } from "@/lib/motion-presets";
-import { areaWithCity, displayVenue, workshopArea } from "@/lib/seo";
+import type { CardOffer } from "@/lib/offers";
+import { areaWithCity, displayVenue, formatIstDateTime, workshopArea } from "@/lib/seo";
+import { BOOKINGS_CLOSED_LABEL } from "@/lib/workshop-availability";
 
 interface WorkshopCardProps {
     workshop: Workshop;
@@ -24,9 +26,154 @@ interface WorkshopCardProps {
     showBadgeLabels?: boolean;
     /** `sizes` for the cover image; set it where the card's width is not a plain column share. */
     imageSizes?: string;
+    /**
+     * cardOfferFor(...) computed on the server for this render (null for closed workshops).
+     * Shown only while it is a real discount on this card's price; dropped after mount once it
+     * has ended. Omitted: the card shows the list price exactly as before.
+     */
+    offer?: CardOffer | null;
+    /**
+     * The admin switched bookings off: a "Bookings closed" status (never "Sold out": seats may
+     * remain) instead of seats and the starting-soon countdown, and no offer.
+     */
+    bookingsClosed?: boolean;
 }
 
 const DEFAULT_IMAGE_SIZES = "(max-width: 640px) 40vw, (max-width: 1024px) 33vw, 25vw";
+
+/** setTimeout fires at once for longer delays (32-bit); such an offer just ends on a reload. */
+const MAX_TIMER_MS = 2_147_483_647;
+
+/**
+ * "Now", read after mount only: null on the server and in the first client render, so both
+ * agree (no hydration mismatch). Read again when `untilIso` passes, so an offer that ends while
+ * the tab stays open is dropped at that moment rather than on the next visit.
+ */
+function useNowAfterMount(untilIso?: string | null) {
+    const [nowMs, setNowMs] = useState<number | null>(null);
+    useEffect(() => {
+        setNowMs(Date.now());
+    }, []);
+
+    const untilMs = untilIso ? Date.parse(untilIso) : Number.NaN;
+    useEffect(() => {
+        if (nowMs === null || !Number.isFinite(untilMs) || nowMs >= untilMs) return;
+        const delay = untilMs - nowMs;
+        if (delay > MAX_TIMER_MS) return;
+        // A timer that fires a moment early just schedules itself again for the rest.
+        const timer = setTimeout(() => setNowMs(Date.now()), delay);
+        return () => clearTimeout(timer);
+    }, [nowMs, untilMs]);
+
+    return nowMs;
+}
+
+/**
+ * The offer that may be shown now: a real discount on this exact list price (no reference
+ * price is ever invented), not yet ended (checked after mount only), and none at all when the
+ * workshop cannot be booked.
+ */
+function visibleOffer(
+    offer: CardOffer | null | undefined,
+    { price, nowMs, unavailable }: { price: number; nowMs: number | null; unavailable: boolean }
+): CardOffer | null {
+    if (!offer || unavailable) return null;
+    if (offer.listPrice !== price || !(offer.offerPrice < offer.listPrice)) return null;
+    if (!(offer.savings > 0) || offer.offerPrice < 0) return null;
+    const endsMs = offer.availableUntil ? Date.parse(offer.availableUntil) : Number.NaN;
+    if (nowMs !== null && Number.isFinite(endsMs) && nowMs >= endsMs) return null;
+    return offer;
+}
+
+/**
+ * The line under the offer price: the discount with its unit when the label does not already
+ * say it (always for a per-booking discount, which has no per-person struck price), and the
+ * advertised end, after mount only.
+ */
+function offerDetails(offer: CardOffer, nowMs: number | null) {
+    const parts: string[] = [];
+    if (offer.perBooking || !offer.label.toLowerCase().includes(offer.discountText.toLowerCase())) {
+        parts.push(offer.discountText);
+    }
+    const ends =
+        nowMs !== null && offer.endsAt ? formatIstDateTime(offer.endsAt, { short: true }) : "";
+    if (ends) parts.push(`Ends ${ends}`);
+    return parts.join(" · ");
+}
+
+// The label wraps instead of truncating: on a 240px phone rail card the price leaves a truncating
+// badge about 15px, which showed an empty pill. rounded-xl is a capsule on one line and a soft
+// rectangle on two or three.
+const OFFER_BADGE_CLASS =
+    "min-w-0 break-words rounded-xl bg-terracotta/10 px-2 py-0.5 text-[10px] font-inter font-bold uppercase leading-tight tracking-wide text-terracotta";
+// "BOOKINGS CLOSED" needs about 125px at the usual padding and tracking; a 240px phone rail card
+// leaves 120px, which wrapped it into a two-line capsule. Tighter on phones, nowrap everywhere.
+const CLOSED_PILL_CLASS =
+    "inline-flex whitespace-nowrap rounded-full px-2 sm:px-2.5 py-1 text-[10px] font-inter font-semibold uppercase tracking-wide sm:tracking-wider border bg-gray-100 text-gray-700 border-gray-200";
+
+/**
+ * A price for list rows outside the card (the city page's "this weekend" list), with the same
+ * rules as the card: without `offer` and `bookingsClosed` it is just the price in `className`.
+ */
+export function WorkshopPriceTag({
+    price,
+    offer,
+    bookingsClosed = false,
+    soldOut = false,
+    className,
+}: {
+    price: number;
+    offer?: CardOffer | null;
+    bookingsClosed?: boolean;
+    /** No seat left: like the card, no offer is shown (the plain price stays). */
+    soldOut?: boolean;
+    className?: string;
+}) {
+    const nowMs = useNowAfterMount(offer?.availableUntil);
+    const shown = visibleOffer(offer, {
+        price,
+        nowMs,
+        unavailable: bookingsClosed || soldOut,
+    });
+
+    if (bookingsClosed) {
+        return (
+            <span className={className}>
+                <span className={`mr-2 ${CLOSED_PILL_CLASS}`}>{BOOKINGS_CLOSED_LABEL}</span>
+                {formatCurrency(price)}
+            </span>
+        );
+    }
+    if (!shown) {
+        return <span className={className}>{formatCurrency(price)}</span>;
+    }
+
+    const details = offerDetails(shown, nowMs);
+    return (
+        <span className={className}>
+            <span className={`mr-2 inline-block max-w-[12rem] align-middle ${OFFER_BADGE_CLASS}`}>
+                {shown.label}
+            </span>
+            {shown.perBooking ? (
+                formatCurrency(price)
+            ) : (
+                <>
+                    <s className="mr-1.5 font-normal text-dark-muted">
+                        <span className="sr-only">Regular price </span>
+                        {formatCurrency(shown.listPrice)}
+                    </s>
+                    <span className="sr-only">Offer price </span>
+                    {formatCurrency(shown.offerPrice)}
+                </>
+            )}
+            {details && (
+                <span className="block text-xs font-normal text-dark-muted sm:text-right">
+                    {details}
+                </span>
+            )}
+        </span>
+    );
+}
 
 const favoritesCache = new Map<string, string[]>();
 const favoritesRequests = new Map<string, Promise<string[]>>();
@@ -65,6 +212,8 @@ export default function WorkshopCard({
     animateOnScroll = true,
     showBadgeLabels = true,
     imageSizes = DEFAULT_IMAGE_SIZES,
+    offer,
+    bookingsClosed = false,
 }: WorkshopCardProps) {
     const { user, session } = useAuth();
     const prefersReducedMotion = usePrefersReducedMotion();
@@ -83,11 +232,8 @@ export default function WorkshopCard({
     // "Now" is read after mount. Calling Date.now() during render made the server HTML and
     // the first client render disagree (the "Starts in Nh" badge and the past/upcoming style),
     // which React reports as a hydration mismatch. Before mount we only use the date-level
-    // comparison against the server-provided todayIso.
-    const [nowMs, setNowMs] = useState<number | null>(null);
-    useEffect(() => {
-        setNowMs(Date.now());
-    }, []);
+    // comparison against the server-provided todayIso. It is read again when the offer ends.
+    const nowMs = useNowAfterMount(offer?.availableUntil);
 
     const workshopDateTime = getWorkshopDateTime(workshop.date, workshop.time);
     const isPastWorkshop =
@@ -109,9 +255,10 @@ export default function WorkshopCard({
         return unique.length ? unique : [workshop.coverImage];
     }, [workshop.coverImage, workshop.galleryImages]);
 
+    // No "Starts in Nh" countdown for closed bookings: there is nothing left to hurry for.
     const highlightedBadge = isPastWorkshop
         ? null
-        : isStartingSoon
+        : isStartingSoon && !bookingsClosed
           ? {
                 label: `Starts in ${Math.ceil(hoursUntil!)}h`,
                 className: "bg-terracotta text-white animate-pulse shadow-md shadow-terracotta/20",
@@ -129,9 +276,16 @@ export default function WorkshopCard({
                 }
               : null;
     const isSoldOut = !isPastWorkshop && workshop.seatsRemaining <= 0;
-    const seatsLabel = isSoldOut
-        ? "Sold out"
-        : `${workshop.seatsRemaining} seat${workshop.seatsRemaining === 1 ? "" : "s"} available`;
+    // No exact count: the owner does not want it shown ("Only N seats left" still appears below).
+    const seatsLabel = isSoldOut ? "Sold out" : "Seats available";
+    const isClosed = bookingsClosed && !isPastWorkshop;
+    const shownOffer = visibleOffer(offer, {
+        price: workshop.price,
+        nowMs,
+        unavailable: bookingsClosed || isPastWorkshop || isSoldOut,
+    });
+    const shownOfferDetails = shownOffer ? offerDetails(shownOffer, nowMs) : "";
+    const strikePrice = shownOffer !== null && !shownOffer.perBooking;
 
     // Never print a pasted Maps link as the venue; fall back to the area the address names.
     const venue = displayVenue(workshop);
@@ -406,18 +560,52 @@ export default function WorkshopCard({
                         )}
 
                         {/* Bottom Row */}
-                        <div className="flex items-center justify-between pt-2 border-t border-gray-100 mt-auto sm:mt-0">
-                            <span className="text-sm sm:text-lg font-inter font-bold text-terracotta ml-auto">
-                                {formatCurrency(workshop.price)}
+                        {/* With an offer the row wraps: badge first, and the price drops below it
+                            (still on the right) when they do not fit side by side. */}
+                        <div
+                            className={`flex items-center justify-between pt-2 border-t border-gray-100 mt-auto sm:mt-0${
+                                shownOffer ? " flex-wrap gap-x-2 gap-y-1" : ""
+                            }`}
+                        >
+                            {shownOffer && (
+                                <span className={`max-w-full ${OFFER_BADGE_CLASS}`}>
+                                    {shownOffer.label}
+                                </span>
+                            )}
+                            <span
+                                className={`text-sm sm:text-lg font-inter font-bold text-terracotta ml-auto${
+                                    shownOffer ? " shrink-0 whitespace-nowrap" : ""
+                                }`}
+                            >
+                                {strikePrice && (
+                                    <>
+                                        <s className="mr-1.5 text-xs sm:text-sm font-semibold text-dark-muted">
+                                            <span className="sr-only">Regular price </span>
+                                            {formatCurrency(shownOffer.listPrice)}
+                                        </s>
+                                        <span className="sr-only">Offer price </span>
+                                    </>
+                                )}
+                                {formatCurrency(
+                                    strikePrice ? shownOffer.offerPrice : workshop.price
+                                )}
                             </span>
                         </div>
+                        {shownOfferDetails && (
+                            <p className="mt-1 text-right text-[10px] sm:text-xs font-inter text-dark-muted">
+                                {shownOfferDetails}
+                            </p>
+                        )}
 
-                        {/* Seats / Status indicator */}
-                        <div className="hidden sm:block mt-2">
+                        {/* Seats / Status indicator. Closed bookings show on phones too: the
+                            card is the only place a visitor learns it before opening the page. */}
+                        <div className={isClosed ? "mt-2" : "hidden sm:block mt-2"}>
                             {isPastWorkshop ? (
                                 <span className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-inter font-semibold uppercase tracking-wider border bg-gray-100 text-gray-500 border-gray-200">
                                     Event ended
                                 </span>
+                            ) : isClosed ? (
+                                <span className={CLOSED_PILL_CLASS}>{BOOKINGS_CLOSED_LABEL}</span>
                             ) : (
                                 <>
                                     {workshop.seatsRemaining > 0 &&
