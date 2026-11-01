@@ -17,6 +17,9 @@ import { createSupabaseServiceClient, isSupabaseServiceConfigured } from "@/lib/
 import { communityCreateSchema } from "@/lib/validators";
 import { mirrorImageFields } from "@/lib/image-mirror";
 
+// Pasted image links are copied into storage on save (see lib/image-mirror).
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
     // The submission form lives under the (private) route group, so the UI already
     // assumes a session. The route did not enforce it, which left anonymous callers able

@@ -23,14 +23,160 @@ export class ApiClientError extends Error {
     }
 }
 
-type ApiRequestOptions = {
+export type ApiRequestOptions = {
     method?: "GET" | "POST" | "PATCH" | "DELETE";
     accessToken?: string;
     body?: unknown;
     cache?: RequestCache;
+    /** Cancels the request (and any retry); the call then rejects with a status-0 error. */
+    signal?: AbortSignal;
+    /**
+     * Per-attempt timeout; defaults to API_GET_TIMEOUT_MS for a GET, API_MEDIA_WRITE_TIMEOUT_MS
+     * for the image-copying writes and API_WRITE_TIMEOUT_MS for any other write.
+     */
+    timeoutMs?: number;
 };
 
-async function apiRequest<T>(path: string, options: ApiRequestOptions = {}) {
+/** Message of a status-0 ApiClientError for a read (dropped connection, timeout or abort). */
+export const API_OFFLINE_MESSAGE =
+    "You seem to be offline or on a slow connection. Please try again.";
+/**
+ * Message of a status-0 ApiClientError for a write: the request may have reached the server
+ * before the connection dropped, so a bare "try again" would invite a duplicate.
+ */
+export const API_WRITE_UNCONFIRMED_MESSAGE =
+    "The connection is slow or dropped, so we can't tell whether this was saved. Please check before trying again.";
+/*
+ * Per-attempt timeouts. The booking page puts its own backstops over them (booking-network.ts:
+ * workshop load 35 s, hold and order 30 s, confirm 28 s): a GET (two attempts and a pause of at
+ * most 1 s) must stay under 35 s and an ordinary write under 28 s.
+ */
+export const API_GET_TIMEOUT_MS = 15_000;
+export const API_WRITE_TIMEOUT_MS = 25_000;
+/** GET /api/auth/me decides whether an admin or host is let in: a slow link gets longer. */
+export const API_AUTH_TIMEOUT_MS = 30_000;
+/**
+ * Writes whose server copies pasted image links into storage (src/lib/image-mirror.ts: four at a
+ * time, each up to ~20 s; the routes run up to maxDuration = 60). The client must outlast the
+ * server: a save that worked but is reported as failed gets saved a second time.
+ */
+export const API_MEDIA_WRITE_TIMEOUT_MS = 65_000;
+const MEDIA_WRITE_PATHS: readonly RegExp[] = [
+    /^\/api\/(?:admin|host)\/workshops(?:\/[^/]+)?$/,
+    /^\/api\/admin\/community-photos(?:\/[^/]+)?$/,
+    /^\/api\/workshops\/[^/]+\/feedback$/,
+    /^\/api\/(?:communities|profile|settings)$/,
+];
+const API_GET_RETRY_DELAY_MS = 600;
+/** Added at random to the retry pause so clients that failed together do not retry together. */
+const API_GET_RETRY_JITTER_MS = 400;
+/** Gateway answers worth one more try for a read (the origin was briefly unreachable). */
+const RETRYABLE_GET_STATUSES = new Set([502, 503, 504]);
+
+function defaultTimeoutMs(method: string, path: string) {
+    if (method === "GET") return API_GET_TIMEOUT_MS;
+    const pathname = path.split(/[?#]/, 1)[0];
+    return MEDIA_WRITE_PATHS.some((pattern) => pattern.test(pathname))
+        ? API_MEDIA_WRITE_TIMEOUT_MS
+        : API_WRITE_TIMEOUT_MS;
+}
+
+function retryPauseMs() {
+    return API_GET_RETRY_DELAY_MS + Math.floor(Math.random() * API_GET_RETRY_JITTER_MS);
+}
+
+type NetworkFailureReason = "offline" | "timeout" | "aborted";
+
+/**
+ * Network failure: status 0, details { code: "NETWORK_ERROR", reason }. A write that did not
+ * come back (not one the caller cancelled) may still have been saved, and says so.
+ */
+function networkError(reason: NetworkFailureReason, method = "GET") {
+    const unconfirmedWrite = method !== "GET" && reason !== "aborted";
+    return new ApiClientError(
+        unconfirmedWrite ? API_WRITE_UNCONFIRMED_MESSAGE : API_OFFLINE_MESSAGE,
+        0,
+        { code: "NETWORK_ERROR", reason }
+    );
+}
+
+/** Waits `ms`, or rejects with an "aborted" network error as soon as `signal` aborts. */
+function waitBeforeRetry(ms: number, signal?: AbortSignal) {
+    return new Promise<void>((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(networkError("aborted"));
+            return;
+        }
+        const onAbort = () => {
+            clearTimeout(timer);
+            reject(networkError("aborted"));
+        };
+        const timer = setTimeout(() => {
+            signal?.removeEventListener("abort", onAbort);
+            resolve();
+        }, ms);
+        signal?.addEventListener("abort", onAbort, { once: true });
+    });
+}
+
+type AttemptResult = { response: Response; payload: unknown };
+
+/**
+ * One fetch plus reading its body, under one timeout (a body can stall on a slow connection
+ * too). Rejects only with a status-0 ApiClientError; HTTP errors resolve with their response.
+ */
+async function attemptRequest(
+    path: string,
+    init: RequestInit,
+    timeoutMs: number,
+    callerSignal?: AbortSignal
+): Promise<AttemptResult> {
+    if (callerSignal?.aborted) throw networkError("aborted");
+
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, timeoutMs);
+    const onCallerAbort = () => controller.abort();
+    callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
+
+    try {
+        const response = await fetch(path, { ...init, signal: controller.signal });
+        const text = await response.text();
+        let payload: unknown = {};
+        if (text) {
+            try {
+                payload = JSON.parse(text);
+            } catch {
+                // Not JSON (e.g. a gateway's HTML error page): same as an empty body.
+                payload = {};
+            }
+        }
+        return { response, payload };
+    } catch {
+        // fetch() and body reads reject only when no complete answer arrived.
+        throw networkError(
+            timedOut ? "timeout" : callerSignal?.aborted ? "aborted" : "offline",
+            init.method
+        );
+    } finally {
+        clearTimeout(timer);
+        callerSignal?.removeEventListener("abort", onCallerAbort);
+    }
+}
+
+/**
+ * JSON request with a timeout. GET is retried once after a short pause when the connection
+ * fails, times out or a gateway answers 502/503/504; POST/PATCH/DELETE are never retried (they
+ * may have reached the server, and no endpoint takes an idempotency key). Network failures
+ * reject with ApiClientError status 0 (API_OFFLINE_MESSAGE for a read,
+ * API_WRITE_UNCONFIRMED_MESSAGE for a write); HTTP errors keep their status, the body's `error`
+ * as message and `details ?? body` as details.
+ */
+export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}) {
+    const method = options.method ?? "GET";
     const headers: Record<string, string> = {};
     if (options.body !== undefined) {
         headers["Content-Type"] = "application/json";
@@ -39,19 +185,41 @@ async function apiRequest<T>(path: string, options: ApiRequestOptions = {}) {
         headers.Authorization = `Bearer ${options.accessToken}`;
     }
 
-    const response = await fetch(path, {
-        method: options.method ?? "GET",
+    const init: RequestInit = {
+        method,
         headers,
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         cache: options.cache,
-    });
+    };
+    const timeoutMs = options.timeoutMs ?? defaultTimeoutMs(method, path);
+    const maxAttempts = method === "GET" ? 2 : 1;
 
-    const payload = await response.json().catch(() => ({}));
+    let result: AttemptResult | null = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const isLastAttempt = attempt === maxAttempts;
+        try {
+            result = await attemptRequest(path, init, timeoutMs, options.signal);
+        } catch (error) {
+            const aborted = options.signal?.aborted ?? false;
+            if (isLastAttempt || aborted) throw error;
+            await waitBeforeRetry(retryPauseMs(), options.signal);
+            continue;
+        }
+        if (!isLastAttempt && RETRYABLE_GET_STATUSES.has(result.response.status)) {
+            await waitBeforeRetry(retryPauseMs(), options.signal);
+            continue;
+        }
+        break;
+    }
+
+    // The loop either throws or ends with a result.
+    const { response, payload } = result as AttemptResult;
+    const body = payload as { error?: unknown; details?: unknown } | null;
     if (!response.ok) {
         throw new ApiClientError(
-            String(payload?.error || "Request failed."),
+            String(body?.error || "Request failed."),
             response.status,
-            payload?.details ?? payload
+            body?.details ?? body
         );
     }
 
@@ -245,6 +413,7 @@ export function createSupportTicketReply(ticketId: string, accessToken: string, 
     });
 }
 
+/** A refused hold answers 409 with a BookingConflictCode ("BOOKINGS_CLOSED") among others. */
 export type BookingHoldResponse = {
     hold: {
         id: string;
@@ -397,8 +566,41 @@ export function submitWorkshopFeedback(
     });
 }
 
+/**
+ * The server's price for the order it just created (POST /api/bookings/checkout, mode
+ * "order_created"), in whole rupees, computed with src/lib/pricing.ts. It is what Razorpay
+ * charges: the booking page shows it as the truth.
+ */
+export type CheckoutQuote = {
+    listSubtotal: number;
+    earlyBirdDiscount: number;
+    couponDiscount: number;
+    couponId: string | null;
+    couponLabel: string | null;
+    subtotal: number;
+    serviceFee: number;
+    total: number;
+    savings: number;
+};
+
+/**
+ * `code` of the 409 answers to a NEW booking (hold creation, re-hold and checkout order
+ * creation), body { code, message }; read it from ApiClientError.details.code.
+ * - BOOKINGS_CLOSED: the admin closed this workshop's bookings (src/lib/workshop-availability.ts).
+ * - COUPON_NO_LONGER_VALID: the typed coupon code does not apply any more (order creation only).
+ */
+export type BookingConflictCode = "BOOKINGS_CLOSED" | "COUPON_NO_LONGER_VALID";
+
 export type CheckoutOrderResponse = {
     mode: "order_created" | "already_confirmed" | "confirmed";
+    /** Only with "order_created". */
+    quote?: CheckoutQuote;
+    /** Only with "order_created": the hold the order was priced for. */
+    hold?: {
+        id: string;
+        guests: number;
+        expiresAt: string;
+    };
     order?: {
         id: string;
         amount: number;
@@ -489,6 +691,11 @@ export type PlatformSettings = {
     whatsapp_community_url?: string;
     /** Optional short sentence shown in the sold-out community popup. */
     whatsapp_community_message?: string;
+    /**
+     * Workshops whose bookings the admin switched off (src/lib/workshop-availability.ts). Read
+     * only: written by POST /api/admin/workshops/[id]/booking-status, never by PATCH /api/settings.
+     */
+    closed_workshop_ids?: string[];
 };
 
 export type PlatformSettingsResponse = {
@@ -526,14 +733,63 @@ export type AdminCoupon = {
     created_at: string | null;
     /** null or empty = every workshop; otherwise only these workshop ids. */
     applicable_workshop_ids?: string[] | null;
+    min_order_amount?: number | null;
+    max_uses?: number | null;
+    valid_from?: string | null;
+    applicable_categories?: string[] | null;
+    /**
+     * How the coupon is shown, merged in from the "coupon_offers" setting (src/lib/offers.ts).
+     * "hidden" (a code typed at checkout) when it has no entry.
+     */
+    visibility?: AdminOfferVisibility;
+    /** Customer-facing name; never a code. */
+    label?: string | null;
+    /** Minimum seats per booking; null = none. */
+    min_guests?: number | null;
+    show_end_date?: boolean;
+};
+
+export type AdminOfferVisibility = "hidden" | "listed" | "auto" | "community";
+
+/** The display fields of a coupon (stored in "coupon_offers", not in the coupons table). */
+export type AdminCouponDisplayInput = {
+    visibility?: AdminOfferVisibility;
+    label?: string | null;
+    min_guests?: number | null;
+    show_end_date?: boolean;
+};
+
+export type AdminCouponRulesInput = {
+    discount_type?: AdminCoupon["discount_type"];
+    discount_value?: number;
+    min_order_amount?: number | null;
+    max_uses?: number | null;
+    /** ISO with an offset; null = no start / no end. */
+    valid_from?: string | null;
+    valid_until?: string | null;
+    applicable_workshop_ids?: string[] | null;
+    is_active?: boolean;
 };
 
 export type AdminCouponsResponse = {
     coupons: AdminCoupon[];
+    nextCursor?: string | null;
+    /** False when the display settings could not be read: visibility etc. are then unknown. */
+    offerSettingsOk?: boolean;
 };
 
-export function getAdminCoupons(accessToken: string) {
-    return apiRequest<AdminCouponsResponse>("/api/coupons", {
+/** A coupon write that saved the coupon but not all of it (e.g. its display settings). */
+export type AdminCouponWriteResponse = { coupon: AdminCoupon; warning?: string };
+
+export function getAdminCoupons(
+    accessToken: string,
+    options: { limit?: number; cursor?: string | null } = {}
+) {
+    const query = new URLSearchParams();
+    if (options.limit) query.set("limit", String(options.limit));
+    if (options.cursor) query.set("cursor", options.cursor);
+    const search = query.toString();
+    return apiRequest<AdminCouponsResponse>(`/api/coupons${search ? `?${search}` : ""}`, {
         accessToken,
         cache: "no-store",
     });
@@ -546,9 +802,10 @@ export function createAdminCoupon(
         discount_type: AdminCoupon["discount_type"];
         discount_value: number;
         applicable_workshop_ids?: string[] | null;
-    }
+    } & AdminCouponRulesInput &
+        AdminCouponDisplayInput
 ) {
-    return apiRequest<{ coupon: AdminCoupon }>("/api/coupons", {
+    return apiRequest<AdminCouponWriteResponse>("/api/coupons", {
         method: "POST",
         accessToken,
         body: payload,
@@ -558,12 +815,9 @@ export function createAdminCoupon(
 export function updateAdminCoupon(
     accessToken: string,
     couponId: string,
-    payload: {
-        is_active?: boolean;
-        applicable_workshop_ids?: string[] | null;
-    }
+    payload: AdminCouponRulesInput & AdminCouponDisplayInput
 ) {
-    return apiRequest<{ coupon: AdminCoupon }>(`/api/coupons/${couponId}`, {
+    return apiRequest<AdminCouponWriteResponse>(`/api/coupons/${couponId}`, {
         method: "PATCH",
         accessToken,
         body: payload,
@@ -571,7 +825,7 @@ export function updateAdminCoupon(
 }
 
 export function deleteAdminCoupon(accessToken: string, couponId: string) {
-    return apiRequest<{ ok: true; id: string }>(`/api/coupons/${couponId}`, {
+    return apiRequest<{ ok: true; id: string; warning?: string }>(`/api/coupons/${couponId}`, {
         method: "DELETE",
         accessToken,
     });
@@ -592,6 +846,7 @@ export function getAuthMe(accessToken: string) {
     return apiRequest<AuthMeResponse>("/api/auth/me", {
         accessToken,
         cache: "no-store",
+        timeoutMs: API_AUTH_TIMEOUT_MS,
     });
 }
 
@@ -907,6 +1162,9 @@ export function deleteAdminCommunityPhoto(accessToken: string, photoId: string) 
 
 export type AdminWorkshopsResponse = {
     data: Workshop[];
+    /** Fresh "Bookings closed" ids; closedWorkshopIdsOk is false when they could not be read. */
+    closedWorkshopIds?: string[];
+    closedWorkshopIdsOk?: boolean;
 };
 
 export function getAdminWorkshops(accessToken: string) {
@@ -914,6 +1172,36 @@ export function getAdminWorkshops(accessToken: string) {
         accessToken,
         cache: "no-store",
     });
+}
+
+/** The admin "Bookings" switch of one workshop (src/lib/workshop-availability.ts). */
+export type AdminWorkshopBookingStatusResponse = {
+    workshopId: string;
+    closed: boolean;
+    /** The whole stored list after the change (or as read). */
+    closedWorkshopIds: string[];
+};
+
+export function getAdminWorkshopBookingStatus(accessToken: string, workshopId: string) {
+    return apiRequest<AdminWorkshopBookingStatusResponse>(
+        `/api/admin/workshops/${encodeURIComponent(workshopId)}/booking-status`,
+        { accessToken, cache: "no-store" }
+    );
+}
+
+/**
+ * Switches new bookings off (closed: true) or back on. 503 { code: "READ_FAILED" } means the
+ * current list could not be read and nothing was changed.
+ */
+export function setAdminWorkshopBookingsClosed(
+    accessToken: string,
+    workshopId: string,
+    closed: boolean
+) {
+    return apiRequest<AdminWorkshopBookingStatusResponse>(
+        `/api/admin/workshops/${encodeURIComponent(workshopId)}/booking-status`,
+        { method: "POST", accessToken, body: { closed } }
+    );
 }
 
 export type WorkshopLibraryResponse = {

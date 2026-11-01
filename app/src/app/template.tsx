@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { useSitePathname } from "@/lib/use-site-pathname";
 
 import { usePlatformSettings } from "@/lib/platform-settings-context";
 import { isSpecialPagePath } from "@/lib/special-page";
@@ -14,7 +14,7 @@ import { isSpecialPagePath } from "@/lib/special-page";
  * client-only preference read to cause a hydration mismatch either.
  */
 export default function Template({ children }: { children: React.ReactNode }) {
-    const pathname = usePathname();
+    const pathname = useSitePathname();
     const { settings } = usePlatformSettings();
 
     if (isSpecialPagePath(pathname, settings.special_page)) {

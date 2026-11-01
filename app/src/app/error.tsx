@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import * as Sentry from "@sentry/nextjs";
+import { retryAfterError } from "@/lib/chunk-load-recovery";
+import { reportError } from "@/lib/sentry-client";
 
 /**
  * Root boundary.
@@ -20,12 +21,7 @@ export default function RootError({
     reset: () => void;
 }) {
     useEffect(() => {
-        Sentry.captureException(error, {
-            tags: {
-                route: "root",
-                layer: "web",
-            },
-        });
+        reportError(error, { route: "root", layer: "web" });
     }, [error]);
 
     return (
@@ -36,7 +32,7 @@ export default function RootError({
                     This page could not be loaded. Please try again in a moment.
                 </p>
                 <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                    <button onClick={reset} className="btn-primary">
+                    <button onClick={() => retryAfterError(error, reset)} className="btn-primary">
                         Try again
                     </button>
                     <Link href="/" className="btn-secondary">

@@ -2,15 +2,22 @@ import type { Metadata } from "next";
 import { getAbsoluteUrl, getAppUrl } from "@/lib/env";
 import { getIstTodayIso } from "@/lib/ist-date";
 import { serializeJsonLd } from "@/lib/json-ld";
-import { siteJsonLd } from "@/lib/seo";
+import { SITE_NAME, siteJsonLd } from "@/lib/seo";
 import { loadHomepageCommunityPhotos } from "@/lib/community-photos";
-import { loadHomeWorkshops } from "@/lib/workshop-page-data";
+import {
+    failRenderOnDataError,
+    loadCardPricing,
+    loadHomeWorkshops,
+    workshopCardExtras,
+} from "@/lib/workshop-page-data";
 import HomePageClient from "./HomePageClient";
 
 const canonicalUrl = getAbsoluteUrl("/");
-const HOME_TITLE = "Only Workshops | Creative Workshops & Events in Pune";
+// Keyword first; /workshops/pune takes the plain "workshops in Pune" query. Only the <title> and
+// the search snippet change for SEO: the visible homepage stays as the owner set it up.
+const HOME_TITLE = "Creative Workshops & Classes in Pune | Only Workshops";
 const HOME_DESCRIPTION =
-    "Book hands-on creative workshops in Pune: pottery, baking, sourdough pizza, kimchi and more, with local makers in small groups. Reserve your seat online.";
+    "Hands-on workshops in Pune led by local hosts: pottery, baking, sourdough, chocolate making, macarons, terrariums and ice baths, in small groups. Book online.";
 const defaultOgImageUrl = getAbsoluteUrl("/images/og-default.jpg");
 
 export const metadata: Metadata = {
@@ -24,12 +31,15 @@ export const metadata: Metadata = {
         description: HOME_DESCRIPTION,
         url: canonicalUrl,
         type: "website",
+        // A page-level openGraph replaces the root one, so these are repeated here.
+        siteName: SITE_NAME,
+        locale: "en_IN",
         images: [
             {
                 url: defaultOgImageUrl,
                 width: 1200,
                 height: 630,
-                alt: "Only Workshops homepage social preview",
+                alt: "Collage of children and adults painting, playing chess and making crafts at workshops",
             },
         ],
     },
@@ -44,11 +54,17 @@ export const metadata: Metadata = {
 export const revalidate = 60;
 
 export default async function HomePage() {
-    const [{ data, source }, communityPhotos] = await Promise.all([
+    const [{ data, source }, communityPhotos, cardPricing] = await Promise.all([
         loadHomeWorkshops(),
         loadHomepageCommunityPhotos(12),
+        loadCardPricing(),
     ]);
+    // Keeps the last good homepage instead of caching "Unable to load live workshops".
+    failRenderOnDataError(source, "/");
     const todayIso = getIstTodayIso();
+    // Only the workshop cards use these (offer badge and price, "Bookings closed"): the rest of
+    // the homepage stays exactly as the owner set it up.
+    const { cardOffers, closedWorkshopIds } = workshopCardExtras(data, cardPricing, todayIso);
 
     return (
         <>
@@ -63,6 +79,8 @@ export default async function HomePage() {
                 communityPhotos={communityPhotos}
                 source={source}
                 todayIso={todayIso}
+                cardOffers={cardOffers}
+                closedWorkshopIds={closedWorkshopIds}
             />
         </>
     );

@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { startAnalytics, stopAnalytics } from "@/lib/analytics";
 import { COOKIE_CONSENT_EVENT, readCookieConsent, type CookieConsent } from "@/lib/cookie-consent";
-import { publicEnv } from "@/lib/env";
+import { publicEnv } from "@/lib/public-env";
 
 /**
  * Starts PostHog once (and only once) the visitor has accepted cookies.

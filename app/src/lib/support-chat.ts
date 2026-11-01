@@ -8,13 +8,19 @@ import {
     SUPPORT_CHAT_POLICY,
 } from "@/lib/support-chat-config";
 import { warnDevFallback } from "@/lib/dev-warnings";
+import { isChatWorkshopClosed, workshopPriceText, type ChatPricing } from "@/lib/chatbot-prompt";
+import { cardOfferFor } from "@/lib/offers";
+import { loadPublicOffersResult } from "@/lib/offers-server";
 import {
     createSupabaseServiceClient,
     isSupabaseServiceConfigured,
     type SupabaseServerClient,
 } from "@/lib/supabase-server";
+import { loadClosedWorkshopIds } from "@/lib/workshop-availability-server";
 import { mapWorkshopRowToWorkshop } from "@/lib/workshop-utils";
 import { isMissingApprovalStatusColumnError } from "@/lib/workshop-approval-compat";
+
+export type { ChatPricing };
 
 export type SupportChatReply = {
     reply: string;
@@ -45,6 +51,11 @@ export type BuildSupportChatReplyOptions = {
     userDisplayName?: string | null;
     contextWorkshopId?: string | null;
     today?: Date;
+    /**
+     * Offers and closed bookings for the prices quoted. Defaults to the snapshot that
+     * loadSupportChatWorkshops loaded with the workshops (getSupportChatPricing).
+     */
+    pricing?: ChatPricing | null;
 };
 
 type WorkshopMatch = {
@@ -142,6 +153,13 @@ const STOPWORDS = new Set([
 
 let workshopCache: WorkshopCacheEntry | null = null;
 
+type PricingCacheEntry = {
+    pricing: ChatPricing;
+    fetchedAt: number;
+};
+
+let pricingCache: PricingCacheEntry | null = null;
+
 async function loadLiveSupportChatWorkshopRows(
     serviceClient: SupabaseServerClient,
     includeApprovalFilter = true
@@ -209,6 +227,30 @@ function formatTime(timeValue: string) {
 
 function formatPrice(amount: number) {
     return `Rs. ${new Intl.NumberFormat("en-IN").format(amount)}`;
+}
+
+/** The price per person as charged today (see workshopPriceText), in this chat's "Rs." style. */
+function formatWorkshopPrice(workshop: Workshop, pricing: ChatPricing | null, today: Date) {
+    return workshopPriceText(workshop, { pricing, now: today, formatAmount: formatPrice });
+}
+
+/**
+ * What one guest pays today, for budget filters: the offer price unless the discount is per
+ * booking (then the per-person price is the list price). Closed and past workshops: the list
+ * price.
+ */
+function onePersonPrice(workshop: Workshop, pricing: ChatPricing | null, today: Date) {
+    if (isChatWorkshopClosed(workshop, pricing) || workshop.date < toIsoDate(today)) {
+        return workshop.price;
+    }
+    try {
+        const offer = cardOfferFor(workshop, pricing?.offers ?? [], today);
+        return offer && !offer.perBooking && offer.listPrice === workshop.price
+            ? offer.offerPrice
+            : workshop.price;
+    } catch {
+        return workshop.price;
+    }
 }
 
 function toIsoDate(date: Date) {
@@ -325,7 +367,12 @@ function findWorkshopMatches(workshops: Workshop[], query: string) {
         .sort((left, right) => right.score - left.score);
 }
 
-function getWorkshopAvailabilityText(workshop: Workshop) {
+function getWorkshopAvailabilityText(workshop: Workshop, pricing: ChatPricing | null) {
+    // Closed by the admin is not "sold out": seats may remain, but nobody can book them.
+    if (isChatWorkshopClosed(workshop, pricing)) {
+        return "closed for bookings";
+    }
+
     if (workshop.seatsRemaining <= 0) {
         return "currently sold out";
     }
@@ -414,7 +461,12 @@ function getRequestedWorkshopCities(
     );
 }
 
-function filterWorkshopList(workshops: Workshop[], query: string, today: Date) {
+function filterWorkshopList(
+    workshops: Workshop[],
+    query: string,
+    today: Date,
+    pricing: ChatPricing | null
+) {
     const normalizedQuery = normalizeText(query);
     const queryTokens = tokenize(query);
     const todayIso = toIsoDate(today);
@@ -433,9 +485,9 @@ function filterWorkshopList(workshops: Workshop[], query: string, today: Date) {
                   workshopTime.setHours(Number(hours), Number(minutes), 0, 0);
                   if (workshopTime < today) return false;
               }
-              // If query implies availability, filter out sold out items
+              // If query implies availability, filter out sold out and closed items
               if (normalizedQuery.includes("available")) {
-                  return workshop.seatsRemaining > 0;
+                  return workshop.seatsRemaining > 0 && !isChatWorkshopClosed(workshop, pricing);
               }
               return workshop.seatsRemaining >= 0;
           });
@@ -444,7 +496,7 @@ function filterWorkshopList(workshops: Workshop[], query: string, today: Date) {
 
     const budgetLimit = getBudgetLimit(normalizedQuery);
     if (budgetLimit !== null) {
-        items = items.filter((workshop) => workshop.price <= budgetLimit);
+        items = items.filter((workshop) => onePersonPrice(workshop, pricing, today) <= budgetLimit);
     }
 
     const requestedCategories = getRequestedWorkshopCategories(items, normalizedQuery, queryTokens);
@@ -473,7 +525,12 @@ function buildWorkshopLink(workshop: Workshop, label = "View workshop") {
     return `[${label}](/workshop/${encodeURIComponent(workshop.id)})`;
 }
 
-function buildWorkshopDetailReply(query: string, workshop: Workshop) {
+function buildWorkshopDetailReply(
+    query: string,
+    workshop: Workshop,
+    pricing: ChatPricing | null,
+    today: Date
+) {
     const normalizedQuery = normalizeText(query);
     const wantsPrice = includesAny(normalizedQuery, PRICE_KEYWORDS);
     const wantsSchedule = includesAny(normalizedQuery, SCHEDULE_KEYWORDS);
@@ -502,7 +559,7 @@ function buildWorkshopDetailReply(query: string, workshop: Workshop) {
     ) {
         parts.push(buildWorkshopSummary(workshop));
         parts.push(
-            `It costs ${formatPrice(workshop.price)}, is ${getWorkshopAvailabilityText(workshop)}, and is hosted by ${workshop.hostName}.`
+            `It costs ${formatWorkshopPrice(workshop, pricing, today)}, is ${getWorkshopAvailabilityText(workshop, pricing)}, and is hosted by ${workshop.hostName}.`
         );
         parts.push(`You will learn ${humanJoin(workshop.whatYouLearn)}.`);
         parts.push(`Materials included: ${humanJoin(workshop.materialsProvided)}.`);
@@ -511,7 +568,11 @@ function buildWorkshopDetailReply(query: string, workshop: Workshop) {
     }
 
     if (wantsPrice) {
-        parts.push(`${workshop.title} costs ${formatPrice(workshop.price)} per booking.`);
+        // The listed price is per person (seat), not per booking.
+        parts.push(`${workshop.title} costs ${formatWorkshopPrice(workshop, pricing, today)}.`);
+        if (isChatWorkshopClosed(workshop, pricing)) {
+            parts.push("Bookings for this workshop are closed.");
+        }
     }
 
     if (wantsSchedule || wantsDuration) {
@@ -539,7 +600,7 @@ function buildWorkshopDetailReply(query: string, workshop: Workshop) {
     }
 
     if (wantsAvailability) {
-        parts.push(`${workshop.title} is ${getWorkshopAvailabilityText(workshop)}.`);
+        parts.push(`${workshop.title} is ${getWorkshopAvailabilityText(workshop, pricing)}.`);
     }
 
     if (wantsHost) {
@@ -572,6 +633,8 @@ function getDominantWorkshopCategory(workshops: Workshop[]) {
 
 function buildWorkshopListReply(
     workshops: Workshop[],
+    pricing: ChatPricing | null,
+    today: Date,
     userDisplayName?: string | null,
     originalQuery?: string
 ) {
@@ -587,7 +650,7 @@ function buildWorkshopListReply(
         : `Here are ${isPastQuery ? "some past workshops" : "the best workshop matches I found right now"}:`;
 
     const lines = workshops.slice(0, SUPPORT_CHAT_LIST_LIMIT).map((workshop, index) => {
-        return `${index + 1}. ${workshop.title} - ${formatDate(workshop.date)} at ${formatTime(workshop.time)} - ${formatPrice(workshop.price)} - ${workshop.location} - ${getWorkshopAvailabilityText(workshop)}. ${buildWorkshopLink(workshop)}.`;
+        return `${index + 1}. ${workshop.title} - ${formatDate(workshop.date)} at ${formatTime(workshop.time)} - ${formatWorkshopPrice(workshop, pricing, today)} - ${workshop.location} - ${getWorkshopAvailabilityText(workshop, pricing)}. ${buildWorkshopLink(workshop)}.`;
     });
 
     const dominantCategory = getDominantWorkshopCategory(workshops);
@@ -613,10 +676,14 @@ function buildGreetingReply(userDisplayName?: string | null) {
     return `Hi ${name}! ${SUPPORT_CHAT_MESSAGES.greeting.replace(/^Hi!\s*/, "")}`;
 }
 
-function buildBookingReply(workshop?: Workshop) {
+function buildBookingReply(workshop: Workshop | undefined, pricing: ChatPricing | null) {
     const action = SUPPORT_CHAT_POLICY.booking.callToAction;
     const holdMinutes = SUPPORT_CHAT_POLICY.booking.holdWindowMinutes;
     const confirmation = SUPPORT_CHAT_POLICY.booking.confirmationText;
+
+    if (workshop && isChatWorkshopClosed(workshop, pricing)) {
+        return `Bookings for ${workshop.title} are closed, so it cannot be booked right now. You can find other upcoming workshops on [Explore](/explore).`;
+    }
 
     if (workshop) {
         return `You can book ${workshop.title} from its workshop page. Choose your guest count, click ${action}, and complete payment within ${holdMinutes} minutes. ${confirmation}`;
@@ -783,7 +850,9 @@ function classifyIntent(input: {
 function resolveWorkshopDetail(
     message: string,
     contextWorkshop: Workshop | null,
-    topMatch: WorkshopMatch | null
+    topMatch: WorkshopMatch | null,
+    pricing: ChatPricing | null,
+    today: Date
 ): SupportChatResolution | null {
     if (
         contextWorkshop &&
@@ -795,7 +864,7 @@ function resolveWorkshopDetail(
         )
     ) {
         return {
-            reply: buildWorkshopDetailReply(message, contextWorkshop),
+            reply: buildWorkshopDetailReply(message, contextWorkshop, pricing, today),
             contextWorkshopId: contextWorkshop.id,
             showIssueForm: false,
             intent: "workshop_detail",
@@ -811,7 +880,7 @@ function resolveWorkshopDetail(
             topMatch.score >= SUPPORT_CHAT_MATCH_THRESHOLDS.detailHighConfidence)
     ) {
         return {
-            reply: buildWorkshopDetailReply(message, topMatch.workshop),
+            reply: buildWorkshopDetailReply(message, topMatch.workshop, pricing, today),
             contextWorkshopId: topMatch.workshop.id,
             showIssueForm: false,
             intent: "workshop_detail",
@@ -831,6 +900,7 @@ export function resolveSupportChatReply(
     const normalizedQuery = normalizeText(message);
     const queryTokens = tokenize(message);
     const today = options.today ?? new Date();
+    const pricing = options.pricing !== undefined ? options.pricing : getSupportChatPricing();
     const contextWorkshop = findContextWorkshop(workshops, options.contextWorkshopId);
     const matches = findWorkshopMatches(workshops, message);
     const topMatch = matches[0] || null;
@@ -885,7 +955,7 @@ export function resolveSupportChatReply(
 
     if (intent === "booking") {
         return {
-            reply: buildBookingReply(strongMatch || contextWorkshop || undefined),
+            reply: buildBookingReply(strongMatch || contextWorkshop || undefined, pricing),
             contextWorkshopId: strongMatch?.id || contextWorkshop?.id || null,
             showIssueForm: false,
             intent,
@@ -917,7 +987,13 @@ export function resolveSupportChatReply(
     }
 
     if (intent === "workshop_detail") {
-        const detailReply = resolveWorkshopDetail(message, contextWorkshop, topMatch);
+        const detailReply = resolveWorkshopDetail(
+            message,
+            contextWorkshop,
+            topMatch,
+            pricing,
+            today
+        );
         if (detailReply) {
             return detailReply;
         }
@@ -933,11 +1009,13 @@ export function resolveSupportChatReply(
     }
 
     if (intent === "workshop_list") {
-        const workshopList = filterWorkshopList(workshops, message, today);
+        const workshopList = filterWorkshopList(workshops, message, today, pricing);
         if (workshopList.length >= SUPPORT_CHAT_MATCH_THRESHOLDS.listResultMinimum) {
             return {
                 reply: buildWorkshopListReply(
                     workshopList,
+                    pricing,
+                    today,
                     options.userDisplayName,
                     normalizedQuery
                 ),
@@ -985,7 +1063,49 @@ export function buildSupportChatReply(
     };
 }
 
+/**
+ * The offers and closed bookings loaded with the workshops (loadSupportChatWorkshops), for the
+ * prices and availability chat replies quote. null before the first load: prices then include
+ * Early Bird only and nothing is closed, as before.
+ */
+export function getSupportChatPricing(): ChatPricing | null {
+    return pricingCache?.pricing ?? null;
+}
+
+/** Never throws: a failed offers read keeps the offers already known (none at first). */
+async function refreshSupportChatPricing(now: number) {
+    if (pricingCache && now - pricingCache.fetchedAt < SUPPORT_CHAT_CACHE_TTL_MS) return;
+    try {
+        const [offersResult, closedWorkshopIds] = await Promise.all([
+            loadPublicOffersResult(),
+            loadClosedWorkshopIds(),
+        ]);
+        pricingCache = {
+            pricing: {
+                offers: offersResult.ok
+                    ? offersResult.offers
+                    : (pricingCache?.pricing.offers ?? []),
+                closedWorkshopIds,
+            },
+            fetchedAt: now,
+        };
+    } catch (error) {
+        Sentry.captureException(error, {
+            tags: { layer: "support_chat", route: "load_support_chat_pricing" },
+        });
+    }
+}
+
+/** Workshops for chat answers; also refreshes the offers and closed bookings alongside them. */
 export async function loadSupportChatWorkshops(now = Date.now()) {
+    const [workshops] = await Promise.all([
+        loadSupportChatWorkshopRows(now),
+        refreshSupportChatPricing(now),
+    ]);
+    return workshops;
+}
+
+async function loadSupportChatWorkshopRows(now: number) {
     if (workshopCache && now - workshopCache.fetchedAt < SUPPORT_CHAT_CACHE_TTL_MS) {
         return workshopCache.data;
     }

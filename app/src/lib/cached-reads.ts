@@ -16,6 +16,12 @@ import { PUBLIC_SETTING_KEYS, pickPublicSettings } from "@/lib/platform-settings
  */
 export const PLATFORM_SETTINGS_TAG = "platform-settings";
 export const WORKSHOPS_LIST_TAG = "workshops-list";
+/**
+ * Public coupon offers (src/lib/offers-server.ts). Revalidate after any coupon write. Saving a
+ * platform setting revalidates them too (they are also tagged PLATFORM_SETTINGS_TAG), and the
+ * "Bookings closed" list (closed_workshop_ids) rides on the cached platform settings.
+ */
+export const OFFERS_TAG = "public-offers";
 
 export function workshopTag(workshopId: string) {
     return `workshop:${workshopId}`;
@@ -26,7 +32,8 @@ async function readPlatformSettings(): Promise<PlatformSettings> {
         return {};
     }
 
-    const supabase = createSupabaseServiceClient();
+    // Every page awaits this read: a hung database must not hang the whole site.
+    const supabase = createSupabaseServiceClient({ requestTimeoutMs: 5000 });
     const { data, error } = await supabase
         .from("platform_settings")
         .select("setting_key, setting_value")

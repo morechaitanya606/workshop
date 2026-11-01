@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Bot, MessageCircle, PhoneCall, Send, X } from "lucide-react";
-import { useParams, usePathname } from "next/navigation";
+import { useParams } from "next/navigation";
+import { useSitePathname } from "@/lib/use-site-pathname";
 import { getChatbotConfig } from "@/lib/api-client";
 import {
     ChatbotRequestError,
@@ -131,7 +132,7 @@ export default function SupportChatbot({
     clientApiKey = null,
 }: SupportChatbotProps) {
     const prefersReducedMotion = Boolean(useReducedMotion());
-    const pathname = usePathname();
+    const pathname = useSitePathname();
     const params = useParams<{ id?: string }>();
     const shouldHideFloatingWidget = mode === "floating" && pathname.startsWith("/chatbot/embed");
 

@@ -12,8 +12,52 @@ import {
     getWorkshopApprovalStatus,
     isMissingApprovalStatusColumnError,
 } from "@/lib/workshop-approval-compat";
+import {
+    BOOKINGS_CLOSED_CODE,
+    BOOKINGS_CLOSED_MESSAGE,
+    isBookingClosed,
+} from "@/lib/workshop-availability";
+import { readClosedWorkshopIds } from "@/lib/workshop-availability-server";
 
 const HOLD_DURATION_MINUTES = BOOKING_HOLD_MINUTES;
+
+/** The "Bookings closed" read must never hold a booking up: past this it counts as open. */
+const CLOSED_READ_DEADLINE_MS = 3000;
+
+/**
+ * The admin "Bookings closed" list, read fresh (an admin switch takes effect at once, not when
+ * a cache expires). A failed read, or one slower than CLOSED_READ_DEADLINE_MS, counts as
+ * nothing closed: today's behaviour.
+ */
+async function readClosedWorkshopIdsWithinDeadline(
+    serviceClient: SupabaseServerClient
+): Promise<ReadonlySet<string>> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        const read = await Promise.race([
+            readClosedWorkshopIds(serviceClient),
+            new Promise<{ ids: ReadonlySet<string> }>((resolve) => {
+                timer = setTimeout(() => resolve({ ids: new Set() }), CLOSED_READ_DEADLINE_MS);
+            }),
+        ]);
+        return read.ids;
+    } finally {
+        if (timer !== undefined) clearTimeout(timer);
+    }
+}
+
+/** 409 { code, message } (plus `error` and `details.code`, which ApiClientError callers read). */
+function bookingsClosedResponse() {
+    return NextResponse.json(
+        {
+            error: BOOKINGS_CLOSED_MESSAGE,
+            message: BOOKINGS_CLOSED_MESSAGE,
+            code: BOOKINGS_CLOSED_CODE,
+            details: { code: BOOKINGS_CLOSED_CODE },
+        },
+        { status: 409 }
+    );
+}
 
 /**
  * True only when the RPC itself is not installed -- never when it ran and raised.
@@ -203,8 +247,13 @@ export async function POST(request: NextRequest) {
     const { workshopId, guests } = parsed.data;
 
     try {
-        const { data: workshopTiming, error: timingError } =
-            await loadWorkshopTimingWithApprovalCompat(serviceClient, workshopId);
+        // Side by side: the closed-list read adds no wait to a normal hold.
+        const [{ data: workshopTiming, error: timingError }, closedWorkshopIds] = await Promise.all(
+            [
+                loadWorkshopTimingWithApprovalCompat(serviceClient, workshopId),
+                readClosedWorkshopIdsWithinDeadline(serviceClient),
+            ]
+        );
 
         if (timingError || !workshopTiming) {
             return jsonError("Workshop not found.", 404);
@@ -213,6 +262,13 @@ export async function POST(request: NextRequest) {
             return jsonError("This workshop is not open for bookings yet.", 409, {
                 code: "WORKSHOP_PENDING_APPROVAL",
             });
+        }
+
+        // The admin switched this workshop's bookings off. This route is also the re-hold, so
+        // a customer already on the booking page cannot start a new payment window either;
+        // an order created before the switch is still confirmed by checkout.
+        if (isBookingClosed(workshopId, closedWorkshopIds)) {
+            return bookingsClosedResponse();
         }
 
         if (isBookingClosedNow(workshopTiming.date, workshopTiming.time)) {

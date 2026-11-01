@@ -2,13 +2,26 @@
 
 import { useId, useMemo, useState } from "react";
 import { Search } from "lucide-react";
+import { getWorkshopDateTime } from "@/lib/booking-time";
 import { formatDate } from "@/lib/utils";
 
 export type CouponWorkshopOption = {
     id: string;
     title: string;
     date: string;
+    /** Start time (IST). With it a workshop counts as past once it has started, like the cards. */
+    time?: string | null;
 };
+
+/**
+ * Whether the workshop has already started, by the rule the cards use for "Event ended": its
+ * start time has passed, or (without a time) its date is before today. No date: not past.
+ */
+function hasStarted(workshop: CouponWorkshopOption, nowMs: number, todayIso: string): boolean {
+    if (!workshop.date) return false;
+    const start = workshop.time ? getWorkshopDateTime(workshop.date, workshop.time) : null;
+    return start ? start.getTime() < nowMs : workshop.date < todayIso;
+}
 
 /**
  * "Applies to" control for a coupon: every workshop (`value` null) or only the ticked ones.
@@ -34,16 +47,25 @@ export default function CouponWorkshopPicker({
     const isLimited = value !== null;
     const selected = useMemo(() => new Set(value ?? []), [value]);
 
-    // Upcoming first (soonest at the top), then past ones (most recent first).
+    // Read once per time the list is shown (the picker only renders in the browser, after the
+    // workshops have loaded), so it cannot disagree with server-rendered markup.
+    const [nowMs] = useState(() => Date.now());
+
+    // Only upcoming workshops can be chosen (soonest at the top): an offer for a past workshop
+    // can never be used. A past workshop an existing offer already names stays listed, marked
+    // "past", so the owner can untick it; it would otherwise stay in the saved list unseen.
     const ordered = useMemo(() => {
         const upcoming = workshops
-            .filter((workshop) => workshop.date >= todayIso)
-            .sort((a, b) => a.date.localeCompare(b.date));
-        const past = workshops
-            .filter((workshop) => workshop.date < todayIso)
+            .filter((workshop) => !hasStarted(workshop, nowMs, todayIso))
+            .sort(
+                (a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? "")
+            );
+        const pastSelected = workshops
+            .filter((workshop) => hasStarted(workshop, nowMs, todayIso))
+            .filter((workshop) => selected.has(workshop.id))
             .sort((a, b) => b.date.localeCompare(a.date));
-        return [...upcoming, ...past];
-    }, [workshops, todayIso]);
+        return [...upcoming, ...pastSelected];
+    }, [workshops, todayIso, selected, nowMs]);
 
     const needle = query.trim().toLowerCase();
     const visible = needle
@@ -116,20 +138,22 @@ export default function CouponWorkshopPicker({
                                     </span>
                                     <span
                                         className={`shrink-0 text-xs ${
-                                            workshop.date < todayIso
+                                            hasStarted(workshop, nowMs, todayIso)
                                                 ? "text-dark-muted/70"
                                                 : "text-dark-muted"
                                         }`}
                                     >
                                         {workshop.date ? formatDate(workshop.date) : ""}
-                                        {workshop.date && workshop.date < todayIso ? " · past" : ""}
+                                        {hasStarted(workshop, nowMs, todayIso) ? " · past" : ""}
                                     </span>
                                 </label>
                             </li>
                         ))}
                         {visible.length === 0 && (
                             <li className="px-3 py-4 text-center text-xs font-inter text-dark-muted">
-                                No workshops match.
+                                {needle
+                                    ? "No workshops match."
+                                    : "No upcoming workshops to choose from."}
                             </li>
                         )}
                     </ul>

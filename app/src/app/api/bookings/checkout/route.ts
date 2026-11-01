@@ -15,19 +15,55 @@ import {
 } from "@/lib/razorpay-server";
 import type { SupabaseServerClient } from "@/lib/supabase-server";
 import { sendPaymentNotification } from "@/lib/payment-notifications";
-import {
-    BOOKING_CUTOFF_HOURS,
-    computeEarlyBirdDiscount,
-    isBookingClosedNow,
-} from "@/lib/booking-time";
+import { BOOKING_CUTOFF_HOURS, isBookingClosedNow } from "@/lib/booking-time";
 import {
     getWorkshopApprovalStatus,
     isMissingApprovalStatusColumnError,
 } from "@/lib/workshop-approval-compat";
+import {
+    computeQuote,
+    couponFromRow,
+    couponRejection,
+    parseServiceFee,
+    pickBestCoupon,
+    type CouponRejection,
+    type PricingCoupon,
+    type PricingWorkshop,
+    type Quote,
+} from "@/lib/pricing";
+import {
+    offerSettingsFor,
+    pricingCouponFromRow,
+    publicOfferFromCoupon,
+    type CouponOffersSetting,
+} from "@/lib/offers";
+import { autoOfferCoupons, loadOfferCoupons, type OfferCouponsResult } from "@/lib/offers-server";
+import {
+    BOOKINGS_CLOSED_CODE,
+    BOOKINGS_CLOSED_MESSAGE,
+    isBookingClosed,
+} from "@/lib/workshop-availability";
+import { readClosedWorkshopIds } from "@/lib/workshop-availability-server";
+import { formatCurrency } from "@/lib/utils";
 
 // Removed hardcoded SERVICE_FEE
 const PAYMENT_CURRENCY = "INR";
 const PAYMENT_PROVIDER = "razorpay";
+
+/** 409 code for a typed coupon code that no longer applies when the order is created. */
+const COUPON_NO_LONGER_VALID_CODE = "COUPON_NO_LONGER_VALID";
+
+/**
+ * The settings reads on the order path must never hold a booking up. Past this deadline the
+ * "Bookings closed" list counts as nothing closed (today's behaviour), while the offers read
+ * counts as FAILED: the customer is asked to retry, never charged a price that skipped an offer.
+ */
+const SETTINGS_READ_DEADLINE_MS = 3000;
+
+/** 503 code for an order whose price inputs (offers, service fee) could not be read. */
+const PRICE_CHECK_FAILED_CODE = "PRICE_CHECK_FAILED";
+
+const COUPON_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type HoldWithWorkshop = {
     id: string;
@@ -71,6 +107,206 @@ function parseQuotedServiceFee(notes: unknown): number | null {
     if (!Number.isInteger(parsed) || parsed < 0 || parsed > 100_000) return null;
 
     return parsed;
+}
+
+/**
+ * The coupon an order was priced with, from the snapshot written at order creation
+ * (buildOrderNotes): `couponId` is null when the order was priced without one. Null for an
+ * order created before the snapshot existed (no `listSubtotal` note): those keep the old rule,
+ * the code the customer typed.
+ */
+function parseQuotedCoupon(notes: unknown): { couponId: string | null } | null {
+    if (!notes || typeof notes !== "object" || Array.isArray(notes)) return null;
+
+    const record = notes as Record<string, unknown>;
+    const listSubtotal = record.listSubtotal;
+    if (listSubtotal === undefined || listSubtotal === null || String(listSubtotal).trim() === "") {
+        return null;
+    }
+    if (!Number.isInteger(Number(listSubtotal)) || Number(listSubtotal) < 0) return null;
+
+    const couponId = typeof record.couponId === "string" ? record.couponId.trim() : "";
+    return { couponId: COUPON_ID_PATTERN.test(couponId) ? couponId : null };
+}
+
+/**
+ * Razorpay order notes. They are written here, server-side, and nowhere else, so confirmation
+ * and the webhook can trust them. Razorpay allows 15 keys of 256 characters: this uses 10, or
+ * 11 with a coupon.
+ */
+function buildOrderNotes(params: {
+    holdId: string;
+    workshopId: string;
+    userId: string;
+    quote: Quote;
+}): Record<string, string> {
+    const { quote } = params;
+    const notes: Record<string, string> = {
+        holdId: params.holdId,
+        workshopId: params.workshopId,
+        userId: params.userId,
+        // Snapshot of the fee this amount was built from. An admin editing the service fee
+        // between order and payment no longer turns every in-flight, correctly-priced payment
+        // into a mismatch.
+        serviceFee: String(quote.serviceFee),
+        // The quote this amount was built from. Confirmation applies exactly `couponId` (by
+        // id), so an offer that ends, or a better one that appears, while the customer pays
+        // does not change the price. `listSubtotal` is what the host is paid on: the platform
+        // funds discounts (see the Razorpay webhook).
+        listSubtotal: String(quote.listSubtotal),
+        earlyBirdDiscount: String(quote.earlyBirdDiscount),
+        couponDiscount: String(quote.couponDiscount),
+        subtotal: String(quote.subtotal),
+        total: String(quote.total),
+    };
+    if (quote.couponId) {
+        notes.couponId = quote.couponId;
+    }
+    return notes;
+}
+
+/** The hold's workshop row (snake_case) as src/lib/pricing.ts reads it. */
+function toPricingWorkshop(
+    workshop: NonNullable<HoldWithWorkshop["workshop"]>,
+    fallbackId: string
+): PricingWorkshop {
+    return {
+        id: String(workshop.id || fallbackId),
+        price: Math.max(0, Number(workshop.price || 0)),
+        category: workshop.category ?? null,
+        createdAt: workshop.created_at ?? null,
+        earlyBirdEnabled: workshop.early_bird_enabled ?? null,
+        earlyBirdDiscountType: workshop.early_bird_discount_type ?? null,
+        earlyBirdDiscountValue: workshop.early_bird_discount_value ?? null,
+        earlyBirdDaysAfterListing: workshop.early_bird_days_after_listing ?? null,
+    };
+}
+
+/** A read that never throws, bounded by SETTINGS_READ_DEADLINE_MS; `fallback` once it passes. */
+async function withinDeadline<T>(read: Promise<T>, fallback: () => T): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            read,
+            new Promise<T>((resolve) => {
+                timer = setTimeout(() => resolve(fallback()), SETTINGS_READ_DEADLINE_MS);
+            }),
+        ]);
+    } finally {
+        if (timer !== undefined) clearTimeout(timer);
+    }
+}
+
+type CouponRowRead = { ok: true; row: unknown } | { ok: false; error: unknown };
+
+/** A typed code: active rows only, as before. `row` is null when there is no such code. */
+async function loadCouponRowByCode(
+    serviceClient: SupabaseServerClient,
+    code: string
+): Promise<CouponRowRead> {
+    const { data, error } = await serviceClient
+        .from("coupons")
+        .select("*")
+        .eq("code", code)
+        .eq("is_active", true)
+        .maybeSingle();
+    return error ? { ok: false, error } : { ok: true, row: data ?? null };
+}
+
+/** The coupon an order was priced with. Inactive rows too: the pricing rules decide. */
+async function loadCouponRowById(
+    serviceClient: SupabaseServerClient,
+    couponId: string
+): Promise<CouponRowRead> {
+    const { data, error } = await serviceClient
+        .from("coupons")
+        .select("*")
+        .eq("id", couponId)
+        .maybeSingle();
+    return error ? { ok: false, error } : { ok: true, row: data ?? null };
+}
+
+/**
+ * Same text for every failure that could tell a guesser whether a code exists, exactly as
+ * /api/coupons/validate answers them, so checkout is no better an oracle than that endpoint.
+ */
+const TYPED_COUPON_NOT_VALID =
+    "This coupon code is not valid for this booking. Remove it to book at the current price.";
+
+/** Why a typed code no longer applies, in plain words, without revealing hidden codes. */
+function typedCouponRejectionMessage(
+    coupon: PricingCoupon | null,
+    rejection: CouponRejection
+): string {
+    if (!coupon) return TYPED_COUPON_NOT_VALID;
+
+    // Conditions the customer can act on, which /api/coupons/validate names too.
+    if (rejection === "COUPON_MIN_GUESTS_NOT_MET" && coupon.minGuests) {
+        return `This code is valid for ${coupon.minGuests} or more seats. Add seats or remove the code.`;
+    }
+    if (rejection === "COUPON_MIN_ORDER_NOT_MET" && coupon.minOrderAmount) {
+        return `This code needs a booking of ${formatCurrency(Number(coupon.minOrderAmount))} or more (before service fee). Remove it to book at the current price.`;
+    }
+
+    // An advertised offer (auto, listed or community) is public, end date and workshops
+    // included, so saying it ended reveals nothing. A hidden code keeps the vague message.
+    if (coupon.advertised) {
+        if (rejection === "COUPON_EXPIRED") {
+            return "This offer has ended. Remove the code to book at the current price.";
+        }
+        if (rejection === "COUPON_MAX_USES_REACHED") {
+            return "This offer has been fully claimed. Remove the code to book at the current price.";
+        }
+        if (rejection === "COUPON_WORKSHOP_MISMATCH" || rejection === "COUPON_CATEGORY_MISMATCH") {
+            return "This offer does not apply to this workshop. Remove the code to book at the current price.";
+        }
+    }
+
+    return TYPED_COUPON_NOT_VALID;
+}
+
+/**
+ * What the booking page shows for the applied coupon: the offer's public label, or the code
+ * itself for a hidden code (only ever applied because the customer typed it). Never the code of
+ * an automatic or community offer the customer did not type.
+ */
+function appliedCouponLabel(
+    coupon: PricingCoupon | null,
+    setting: CouponOffersSetting,
+    typedCode: string | null
+): string | null {
+    if (!coupon) return null;
+
+    const display = offerSettingsFor(setting, coupon.id);
+    const offer = display ? publicOfferFromCoupon(coupon, display) : null;
+    if (offer) return offer.label;
+
+    if (typedCode && coupon.code.toUpperCase() === typedCode) return typedCode;
+    return "Offer";
+}
+
+/** The quote as the booking page may see it: amounts and the applied coupon's label only. */
+function quoteForClient(quote: Quote, couponLabel: string | null) {
+    return {
+        listSubtotal: quote.listSubtotal,
+        earlyBirdDiscount: quote.earlyBirdDiscount,
+        couponDiscount: quote.couponDiscount,
+        couponId: quote.couponId,
+        couponLabel: quote.couponId ? couponLabel : null,
+        subtotal: quote.subtotal,
+        serviceFee: quote.serviceFee,
+        total: quote.total,
+        savings: quote.savings,
+    };
+}
+
+/**
+ * An expected refusal before any money moved ("Bookings closed", a typed code that no longer
+ * applies): `{ error, message, code }`, plus `details.code` for ApiClientError callers. Not an
+ * error report: nothing is wrong.
+ */
+function checkoutRefusal(message: string, code: string, status = 409) {
+    return NextResponse.json({ error: message, message, code, details: { code } }, { status });
 }
 
 function isExpired(isoDate: string) {
@@ -864,113 +1100,158 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        const pricePerGuest = Math.max(0, Number(workshop.price || 0));
-        const subtotalOriginal = pricePerGuest * Number(hold.guests || 0);
+        // Every amount comes from src/lib/pricing.ts, the module the cards, the workshop page
+        // and the booking page price with, and which mirrors confirm_booking_from_hold (Early
+        // Bird, then at most one coupon, then the service fee). The RPC recomputes everything
+        // after capture and raises on any difference, which ends in a refund.
+        const pricingWorkshop = toPricingWorkshop(workshop, hold.workshop_id);
+        // From the hold row, never the request: the seats cannot change after the hold.
+        const guests = Number(hold.guests || 0);
 
-        // The early-bird term was missing entirely: the buyer was quoted a discounted total
-        // client-side, charged the full price, and then confirm_booking_from_hold raised
-        // EARLY_BIRD_DISCOUNT_MISMATCH *after capture*. This helper is shared with the booking
-        // hook and mirrors the SQL exactly.
-        const earlyBirdDiscount = computeEarlyBirdDiscount({
-            price: pricePerGuest,
-            guests: Number(hold.guests || 0),
-            enabled: workshop.early_bird_enabled,
-            discountType: workshop.early_bird_discount_type,
-            discountValue: workshop.early_bird_discount_value,
-            daysAfterListing: workshop.early_bird_days_after_listing,
-            createdAt: workshop.created_at,
-        });
-        const subtotalAfterEarlyBird = Math.max(0, subtotalOriginal - earlyBirdDiscount);
-
-        let discountAmount = 0;
-        let appliedCouponId: string | null = null;
-
-        if (payload.couponCode) {
-            const code = payload.couponCode.toUpperCase();
-            const { data: coupon } = await serviceClient
-                .from("coupons")
-                .select("*")
-                .eq("code", code)
-                .eq("is_active", true)
-                .single();
-
-            if (coupon) {
-                const now = new Date();
-                const validTime =
-                    (!coupon.valid_from || new Date(coupon.valid_from) <= now) &&
-                    (!coupon.valid_until || new Date(coupon.valid_until) >= now);
-                const validUses =
-                    coupon.max_uses === null || (coupon.used_count || 0) < coupon.max_uses;
-                const validMinimum =
-                    !coupon.min_order_amount || subtotalAfterEarlyBird >= coupon.min_order_amount;
-                const validWorkshop =
-                    !Array.isArray(coupon.applicable_workshop_ids) ||
-                    coupon.applicable_workshop_ids.length === 0 ||
-                    coupon.applicable_workshop_ids.includes(payload.workshopId);
-                const validCategory =
-                    !Array.isArray(coupon.applicable_categories) ||
-                    coupon.applicable_categories.length === 0 ||
-                    Boolean(
-                        workshop.category &&
-                        coupon.applicable_categories.includes(workshop.category)
-                    );
-
-                if (validTime && validUses && validMinimum && validWorkshop && validCategory) {
-                    appliedCouponId = coupon.id;
-                    // Multiply BEFORE dividing, exactly as confirm_booking_from_hold does in
-                    // numeric arithmetic. Dividing first goes through a binary float: at
-                    // subtotal 1450 with a 29% coupon, `1450 * (29/100)` is 420.49999999999994
-                    // and rounds to 420 while the RPC computes 421, so the RPC raises
-                    // COUPON_DISCOUNT_MISMATCH *after the card has been captured*.
-                    const rawDiscount =
-                        coupon.discount_type === "percentage"
-                            ? (subtotalAfterEarlyBird * Number(coupon.discount_value)) / 100
-                            : Number(coupon.discount_value);
-                    discountAmount = Math.min(
-                        subtotalAfterEarlyBird,
-                        Math.max(0, Math.round(rawDiscount))
-                    );
-                }
-            }
-        }
-
-        // Fetch dynamic service fee
-        let serviceFee = 99; // Fallback
-        const { data: settings } = await serviceClient
+        // Fetch dynamic service fee. No row means the default fee, as before; a read that FAILED
+        // is not that, and the order branch below refuses it instead of charging the default.
+        // (A confirmation prices with the fee snapshotted in the order notes; the live fee only
+        // covers orders that predate the snapshot, and a wrong one there ends in a refund.)
+        const { data: settings, error: serviceFeeError } = await serviceClient
             .from("platform_settings")
             .select("setting_value")
             .eq("setting_key", "service_fee")
-            .single();
-
-        if (settings?.setting_value !== undefined) {
-            const parsed = parseFloat(String(settings.setting_value));
-            if (!isNaN(parsed)) serviceFee = Math.max(0, Math.round(parsed));
-        }
-
-        const subtotal = Math.max(0, subtotalAfterEarlyBird - discountAmount);
-        // `let`: on confirmation the fee quoted when the ORDER was created replaces the live
-        // setting (see below), and everything derived from it moves with it.
-        let total = subtotal + serviceFee;
-        let totalPaise = toPaise(total);
+            .maybeSingle();
+        const liveServiceFee = parseServiceFee(settings?.setting_value);
 
         const razorpay = getRazorpayServerClient();
 
         if (!isPaymentConfirmation) {
+            const typedCode = payload.couponCode ? payload.couponCode.trim().toUpperCase() : null;
+
+            // Independent reads, side by side. A failed or slow read of the "Bookings closed"
+            // list means nothing closed (today's behaviour). The offers read is different: see
+            // the price check below.
+            const [closed, offerCoupons, typedRead] = await Promise.all([
+                withinDeadline(readClosedWorkshopIds(serviceClient), () => ({
+                    ok: false,
+                    ids: new Set<string>(),
+                })),
+                withinDeadline(loadOfferCoupons(serviceClient), (): OfferCouponsResult => {
+                    // Only a read that outlived the deadline lands here; one that failed
+                    // outright was already reported by loadOfferCoupons.
+                    Sentry.captureMessage("Checkout stopped waiting for the offers read.", {
+                        level: "warning",
+                        tags: {
+                            layer: "payments",
+                            provider: "razorpay",
+                            route: "bookings_checkout",
+                            action: "offers_read_deadline",
+                        },
+                    });
+                    return { ok: false, coupons: [], setting: {} };
+                }),
+                typedCode ? loadCouponRowByCode(serviceClient, typedCode) : null,
+            ]);
+
+            // The admin "Bookings closed" switch stops NEW bookings only. It is checked here
+            // and at hold creation, never at confirmation: an order created before the switch
+            // still becomes a booking and is never refunded for it.
+            if (isBookingClosed(hold.workshop_id, closed.ids)) {
+                return checkoutRefusal(BOOKINGS_CLOSED_MESSAGE, BOOKINGS_CLOSED_CODE);
+            }
+
+            // "Nothing is configured" (no offers setting, no fee row) is a real answer and
+            // means the plain price. A read that FAILED or ran out of time is not: the booking
+            // page may be showing an automatic offer or the live fee, and pricing the order
+            // without them would charge more than the customer agreed to. Nothing has been
+            // created yet (the hold is untouched), so ask for a retry. The one failed offers
+            // read that is safe to price through: the setting was read and lists no automatic
+            // offer (`noAutoOffers`), so only Early Bird (from the workshop row) or a typed
+            // code (read on its own) can discount this order.
+            if (serviceFeeError || !(offerCoupons.ok || offerCoupons.noAutoOffers === true)) {
+                if (serviceFeeError) {
+                    Sentry.captureException(serviceFeeError, {
+                        level: "warning",
+                        tags: {
+                            layer: "payments",
+                            provider: "razorpay",
+                            route: "bookings_checkout",
+                            action: "service_fee_read",
+                        },
+                    });
+                }
+                return checkoutRefusal(
+                    "We could not check the current price right now. Please try again.",
+                    PRICE_CHECK_FAILED_CODE,
+                    503
+                );
+            }
+
+            if (typedRead && !typedRead.ok) {
+                Sentry.captureException(typedRead.error, {
+                    level: "warning",
+                    tags: {
+                        layer: "payments",
+                        provider: "razorpay",
+                        route: "bookings_checkout",
+                        action: "typed_coupon_read",
+                    },
+                });
+                // No money has moved. Charging the full price instead of the discount the
+                // booking page showed would be a surprise at payment, so ask for a retry.
+                return checkoutRefusal(
+                    "We could not check your coupon code right now. Please try again.",
+                    "COUPON_CHECK_FAILED",
+                    503
+                );
+            }
+
+            const now = new Date();
+            const context = { workshop: pricingWorkshop, guests, now, purpose: "order" as const };
+            const typedCoupon =
+                typedRead && typedRead.ok && typedRead.row
+                    ? pricingCouponFromRow(typedRead.row, offerCoupons.setting)
+                    : null;
+
+            if (typedCode) {
+                // A typed code that no longer applies (ended, used up, too few seats) is
+                // refused with the reason, never silently dropped for the full price.
+                const rejection: CouponRejection | null = typedCoupon
+                    ? couponRejection(typedCoupon, context)
+                    : "COUPON_INVALID";
+                if (rejection) {
+                    return checkoutRefusal(
+                        typedCouponRejectionMessage(typedCoupon, rejection),
+                        COUPON_NO_LONGER_VALID_CODE
+                    );
+                }
+            }
+
+            // One coupon per booking: the typed code or an automatic offer, whichever saves
+            // more (a tie goes to the typed code). The automatic offers are the ones the cards
+            // price with, so the price shown is the price charged. Seat minimums are checked
+            // against the hold's seats.
+            const best = pickBestCoupon([typedCoupon, ...autoOfferCoupons(offerCoupons)], {
+                ...context,
+                typedCode,
+            });
+            const quote = computeQuote({
+                workshop: pricingWorkshop,
+                guests,
+                coupon: best?.coupon ?? null,
+                serviceFee: liveServiceFee,
+                now,
+                purpose: "order",
+            });
+            const totalPaise = toPaise(quote.total);
+
             const order = await withRazorpayTimeout(() =>
                 razorpay.orders.create({
                     amount: totalPaise,
                     currency: PAYMENT_CURRENCY,
                     receipt: payload.holdId,
-                    notes: {
+                    notes: buildOrderNotes({
                         holdId: payload.holdId,
                         workshopId: payload.workshopId,
                         userId: auth.user.id,
-                        // Snapshot of the fee this amount was built from. Notes are written
-                        // server-side only, so confirmation can trust them: an admin editing
-                        // the service fee between order and payment no longer turns every
-                        // in-flight, correctly-priced payment into a mismatch.
-                        serviceFee: String(serviceFee),
-                    },
+                        quote,
+                    }),
                 })
             );
 
@@ -994,6 +1275,10 @@ export async function POST(request: NextRequest) {
                     guests: hold.guests,
                     expiresAt: hold.expires_at,
                 },
+                quote: quoteForClient(
+                    quote,
+                    appliedCouponLabel(best?.coupon ?? null, offerCoupons.setting, typedCode)
+                ),
             });
         }
 
@@ -1024,14 +1309,48 @@ export async function POST(request: NextRequest) {
             });
         }
 
+        const orderNotes = (order as { notes?: unknown }).notes;
+
         // Honour the fee quoted at order time. Orders created before this snapshot existed
         // carry no note and keep the live-fee behaviour.
-        const quotedServiceFee = parseQuotedServiceFee((order as { notes?: unknown }).notes);
-        if (quotedServiceFee !== null && quotedServiceFee !== serviceFee) {
-            serviceFee = quotedServiceFee;
-            total = subtotal + serviceFee;
-            totalPaise = toPaise(total);
+        const serviceFee = parseQuotedServiceFee(orderNotes) ?? liveServiceFee;
+
+        // Apply exactly the coupon the order was priced with, loaded by id: an automatic offer
+        // that ended, or a better one that appeared, while the customer paid must not change
+        // the price. Orders from before the snapshot fall back to the typed code, as before.
+        const quotedCoupon = parseQuotedCoupon(orderNotes);
+        let couponRead: CouponRowRead | null = null;
+        if (quotedCoupon) {
+            if (quotedCoupon.couponId) {
+                couponRead = await loadCouponRowById(serviceClient, quotedCoupon.couponId);
+            }
+        } else if (payload.couponCode) {
+            couponRead = await loadCouponRowByCode(
+                serviceClient,
+                payload.couponCode.trim().toUpperCase()
+            );
         }
+        if (couponRead && !couponRead.ok) {
+            // A failed read is not "no coupon": thrown, so the catch below reconciles the
+            // payment with Razorpay instead of answering with a guessed price.
+            throw couponRead.error;
+        }
+
+        // Confirmation follows the RPC's own rules (purpose "confirm": valid until valid_until,
+        // no seat minimum, which the order already checked against these same seats), so a
+        // payment that was quoted correctly is confirmed rather than refunded.
+        const quote = computeQuote({
+            workshop: pricingWorkshop,
+            guests,
+            coupon: couponRead?.ok ? couponFromRow(couponRead.row) : null,
+            serviceFee,
+            now: new Date(),
+            purpose: "confirm",
+        });
+        const { subtotal, total, earlyBirdDiscount } = quote;
+        const appliedCouponId = quote.couponId;
+        const discountAmount = quote.couponDiscount;
+        const totalPaise = toPaise(total);
 
         if (
             Number(order.amount || 0) !== totalPaise ||

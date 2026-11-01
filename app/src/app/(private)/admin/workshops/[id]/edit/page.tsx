@@ -9,8 +9,11 @@ import { useImageCropper } from "@/components/ImageCropper";
 import { categories, PAST_EVENTS_CATEGORY_ID, type Workshop } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import AdminShell from "@/components/admin/AdminShell";
+import BookingsSwitch, { BookingsClosedBadge } from "@/components/admin/BookingsSwitch";
+import OffersManager from "@/components/admin/OffersManager";
 import {
     getAdminWorkshop,
+    getAdminWorkshopBookingStatus,
     toApiErrorMessage,
     updateAdminWorkshop,
     uploadMedia,
@@ -125,6 +128,9 @@ export default function AdminEditWorkshopPage() {
     );
 
     const [loadingWorkshop, setLoadingWorkshop] = useState(true);
+    const [loadedWorkshop, setLoadedWorkshop] = useState<Workshop | null>(null);
+    // The "Bookings" switch: null until read (fresh, never the cached settings); "unknown" on error.
+    const [bookingsClosed, setBookingsClosed] = useState<boolean | "unknown" | null>(null);
     const [saving, setSaving] = useState(false);
     const [uploadingCover, setUploadingCover] = useState(false);
     const [uploadingGallery, setUploadingGallery] = useState(false);
@@ -379,6 +385,7 @@ export default function AdminEditWorkshopPage() {
                 const workshop = result.workshop;
                 if (!cancelled && workshop) {
                     syncWorkshopForm(workshop);
+                    setLoadedWorkshop(workshop);
                 }
             } catch (fetchError) {
                 if (!cancelled) {
@@ -396,6 +403,23 @@ export default function AdminEditWorkshopPage() {
             cancelled = true;
         };
     }, [session, workshopId, syncWorkshopForm]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const accessToken = session?.access_token;
+        if (!accessToken || !workshopId) return;
+
+        getAdminWorkshopBookingStatus(accessToken, workshopId)
+            .then((result) => {
+                if (!cancelled) setBookingsClosed(result.closed);
+            })
+            .catch(() => {
+                if (!cancelled) setBookingsClosed("unknown");
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [session, workshopId]);
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -506,6 +530,15 @@ export default function AdminEditWorkshopPage() {
         }
     };
 
+    // A link to #offers (the Offers button on the workshops list) lands on the section once the
+    // page has loaded: the browser's own jump runs before the section exists.
+    useEffect(() => {
+        if (loadingWorkshop || !loadedWorkshop) return;
+        if (window.location.hash === "#offers") {
+            document.getElementById("offers")?.scrollIntoView({ block: "start" });
+        }
+    }, [loadingWorkshop, loadedWorkshop]);
+
     return (
         <AdminShell>
             {cropperElement}
@@ -520,6 +553,74 @@ export default function AdminEditWorkshopPage() {
                     <h1 className="heading-md">Edit Workshop</h1>
                 </div>
             </div>
+
+            {!loadingWorkshop && loadedWorkshop && workshopId && (
+                <div className="mb-5 rounded-2xl bg-white p-4 shadow-soft sm:p-5">
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                        <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                            Bookings
+                        </h2>
+                        {bookingsClosed === true && <BookingsClosedBadge />}
+                    </div>
+                    {bookingsClosed === null ? (
+                        <div className="flex items-center gap-2 text-sm font-inter text-dark-muted">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Checking bookings status...
+                        </div>
+                    ) : (
+                        <BookingsSwitch
+                            workshopId={workshopId}
+                            title={loadedWorkshop.title}
+                            closed={bookingsClosed === true}
+                            known={bookingsClosed !== "unknown"}
+                            bookedSeats={Math.max(
+                                0,
+                                (Number(loadedWorkshop.maxSeats) || 0) -
+                                    (Number(loadedWorkshop.seatsRemaining) || 0)
+                            )}
+                            maxSeats={loadedWorkshop.maxSeats}
+                            accessToken={session?.access_token}
+                            onChange={(closed) => setBookingsClosed(closed)}
+                        />
+                    )}
+                    <p className="mt-2 text-xs font-inter text-dark-muted">
+                        Closed: the workshop stays visible with &quot;Bookings closed&quot; and no
+                        Book button, and no new booking can start. Existing bookings stay.
+                    </p>
+                </div>
+            )}
+
+            {!loadingWorkshop && loadedWorkshop && workshopId && (
+                <section
+                    id="offers"
+                    className="mb-5 scroll-mt-24 rounded-2xl bg-white p-4 shadow-soft sm:p-5"
+                >
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <h2 className="text-sm font-inter font-bold uppercase tracking-wider text-terracotta">
+                            Offers
+                        </h2>
+                        {(loadedWorkshop.approvalStatus === undefined ||
+                            loadedWorkshop.approvalStatus === "approved") && (
+                            <Link
+                                href={`/workshop/${workshopId}`}
+                                className="text-xs font-inter font-semibold text-terracotta hover:underline"
+                            >
+                                View workshop page
+                            </Link>
+                        )}
+                    </div>
+                    <p className="mb-4 text-xs font-inter text-dark-muted">
+                        The offers that apply to this workshop: those for all workshops and those
+                        for this one only. Customers see them on the workshop page and the cards
+                        once saved (none while bookings are closed). Early Bird is set in the form
+                        below.
+                    </p>
+                    <OffersManager
+                        accessToken={session?.access_token}
+                        workshop={{ id: workshopId, title: loadedWorkshop.title }}
+                    />
+                </section>
+            )}
 
             {loadingWorkshop ? (
                 <div className="flex items-center gap-2 text-sm font-inter text-dark-muted">
@@ -1096,6 +1197,7 @@ export default function AdminEditWorkshopPage() {
                                                     : "e.g. 200"
                                             }
                                         />
+                                        {renderFieldError("earlyBirdDiscountValue")}
                                     </div>
                                     <div>
                                         <label className="block text-xs font-inter font-bold uppercase tracking-wider text-dark-muted mb-2">
@@ -1110,6 +1212,7 @@ export default function AdminEditWorkshopPage() {
                                             className="w-full bg-cream-100 border border-gray-200 rounded-xl px-4 py-3 text-sm font-inter"
                                             placeholder="e.g. 1"
                                         />
+                                        {renderFieldError("earlyBirdDaysAfterListing")}
                                     </div>
                                 </>
                             )}

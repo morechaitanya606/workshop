@@ -17,9 +17,96 @@ import type { Workshop } from "@/lib/data";
 import type { SpecialPageSettings } from "@/lib/special-page";
 import { WORKSHOPS_LIST_TAG } from "@/lib/cached-reads";
 import { getIstTodayIso } from "@/lib/ist-date";
+import { cardOfferFor, type CardOffer, type PublicOffer } from "@/lib/offers";
+import { loadPublicOffers } from "@/lib/offers-server";
 import { buildIlikeOrFilter } from "@/lib/search-sanitize";
+import { isBookingClosed } from "@/lib/workshop-availability";
+import { loadClosedWorkshopIds } from "@/lib/workshop-availability-server";
 
 export type WorkshopPageSource = "supabase" | "error";
+
+/** process.env.NEXT_PHASE while `next build` prerenders pages (PHASE_PRODUCTION_BUILD). */
+const PRODUCTION_BUILD_PHASE = "phase-production-build";
+
+/** Thrown by failRenderOnDataError: the page render is abandoned on purpose. */
+export class WorkshopDataUnavailableError extends Error {
+    constructor(page: string) {
+        super(`Workshop data could not be read for ${page}; keeping the last good page.`);
+        this.name = "WorkshopDataUnavailableError";
+    }
+}
+
+/**
+ * Whole pages are cached as well as their data (ISR: the homepage and /past-events for 60 s,
+ * city and topic pages for 300 s), so a page rendered after a failed read ("Unable to load live
+ * workshops", empty lists) was served to everyone for that window, and its Refresh button read
+ * the cached failure back. When a read has still failed after its retry, the page throws
+ * instead: Next keeps serving the last good page and renders again on the next request
+ * (error.tsx is shown only when nothing is cached yet).
+ * Not while `next build` prerenders (a database moment must not fail a deploy: that render
+ * shows the error state as before), and not without a database configured (local
+ * development), where the failure is permanent and the error state is the useful answer.
+ * Nor under `next dev`: there is no last good page to keep, so abandoning the render only
+ * turned a slow first compile into a 500 instead of the page's own error state with Refresh.
+ */
+export function failRenderOnDataError(source: WorkshopPageSource, page: string) {
+    if (source !== "error" || !isSupabaseServiceConfigured) return;
+    if (process.env.NEXT_PHASE === PRODUCTION_BUILD_PHASE) return;
+    if (process.env.NODE_ENV === "development") return;
+    throw new WorkshopDataUnavailableError(page);
+}
+
+/** What cards need besides the workshop: the live coupon offers and the closed bookings. */
+export type CardPricing = {
+    /** loadPublicOffers(): coupon offers only; Early Bird comes from each workshop's own row. */
+    offers: PublicOffer[];
+    closedWorkshopIds: ReadonlySet<string>;
+};
+
+/**
+ * Offers and closed bookings for a page of cards. Both reads are cached and never throw; a
+ * failure means no offers and nothing closed, which is today's look, and is never cached.
+ * Start it alongside the workshop read: neither depends on the other.
+ */
+export async function loadCardPricing(): Promise<CardPricing> {
+    const [offers, closedWorkshopIds] = await Promise.all([
+        loadPublicOffers().catch((): PublicOffer[] => []),
+        loadClosedWorkshopIds().catch(() => new Set<string>()),
+    ]);
+    return { offers, closedWorkshopIds };
+}
+
+/** Serializable props for WorkshopCard lists (server component -> client component). */
+export type WorkshopCardExtras = {
+    /** CardOffer by workshop id, only for upcoming, bookable workshops with a real discount. */
+    cardOffers: Record<string, CardOffer>;
+    /** The ids among these workshops whose bookings the admin closed. */
+    closedWorkshopIds: string[];
+};
+
+/**
+ * Card offers and closed flags for these workshops, priced at `now` with the same quote as
+ * checkout (cardOfferFor). A closed or past workshop gets no offer. Pure.
+ */
+export function workshopCardExtras(
+    workshops: readonly Workshop[],
+    pricing: CardPricing,
+    todayIso: string,
+    now: number = Date.now()
+): WorkshopCardExtras {
+    const cardOffers: Record<string, CardOffer> = {};
+    const closedWorkshopIds: string[] = [];
+    for (const workshop of workshops) {
+        if (isBookingClosed(workshop.id, pricing.closedWorkshopIds)) {
+            if (!closedWorkshopIds.includes(workshop.id)) closedWorkshopIds.push(workshop.id);
+            continue;
+        }
+        if (workshop.date < todayIso || Object.hasOwn(cardOffers, workshop.id)) continue;
+        const offer = cardOfferFor(workshop, pricing.offers, now);
+        if (offer) cardOffers[workshop.id] = offer;
+    }
+    return { cardOffers, closedWorkshopIds };
+}
 
 export type HomeWorkshopsResult = {
     data: Workshop[];
@@ -115,7 +202,16 @@ function buildExploreWorkshopQuery(
     return dbQuery.order(sortConfig.column, { ascending: sortConfig.ascending }).range(from, to);
 }
 
+/**
+ * The homepage rails. Retried once (most failures are one-off timeouts); the page itself is
+ * cached whole, so a result that still failed makes it keep its last good copy
+ * (failRenderOnDataError).
+ */
 export async function loadHomeWorkshops(): Promise<HomeWorkshopsResult> {
+    return withOneRetry(fetchHomeWorkshops, (attempt) => attempt.source === "error");
+}
+
+async function fetchHomeWorkshops(): Promise<HomeWorkshopsResult> {
     if (isSupabaseServiceConfigured) {
         try {
             const serviceClient = createSupabaseServiceClient({ requestTimeoutMs: 5000 });
@@ -457,7 +553,8 @@ export type PlatformSettingsType = {
 export async function getPlatformSettings(): Promise<PlatformSettingsType> {
     if (isSupabaseServiceConfigured) {
         try {
-            const serviceClient = createSupabaseServiceClient();
+            // Same limit as the other page reads: a stalled query must not hold the render.
+            const serviceClient = createSupabaseServiceClient({ requestTimeoutMs: 5000 });
             const { data, error } = await serviceClient.from("platform_settings").select("*");
 
             if (!error && data) {

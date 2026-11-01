@@ -1,6 +1,6 @@
 "use client";
 
-import { PRODUCTION_SITE_URL } from "@/lib/env";
+import { PRODUCTION_SITE_URL } from "@/lib/public-env";
 
 /**
  * The host the site is served from: the bare domain answers 308 to www. Auth email links are

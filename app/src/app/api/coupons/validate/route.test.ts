@@ -225,4 +225,101 @@ describe("POST /api/coupons/validate", () => {
             expect(res.status).toBe(200);
         });
     });
+
+    describe("offers (seats, advertised end, what is returned)", () => {
+        const OFFER_ID = "88888888-8888-4888-8888-888888888888";
+
+        function offerSetting(entry: Record<string, unknown>) {
+            return { data: { setting_value: { [OFFER_ID]: entry } }, error: null };
+        }
+
+        it("names a group offer's seat minimum when too few seats are booked", async () => {
+            mockDb({
+                coupons: [{ data: coupon({ id: OFFER_ID }), error: null }],
+                platform_settings: [offerSetting({ visibility: "community", min_guests: 2 })],
+                workshops: [{ data: { id: "w1", price: 1000 }, error: null }],
+            });
+
+            const res = await POST(
+                validateRequest({ code: "SAVE10", workshopId: "w1", guests: 1 })
+            );
+
+            expect(res.status).toBe(400);
+            expect((await res.json()).message).toBe("Valid for 2 or more seats.");
+        });
+
+        it("quotes the discount exactly as checkout will for the seats given", async () => {
+            mockDb({
+                coupons: [
+                    { data: coupon({ id: OFFER_ID, max_uses: 50, used_count: 7 }), error: null },
+                ],
+                platform_settings: [offerSetting({ visibility: "community", min_guests: 2 })],
+                workshops: [{ data: { id: "w1", price: 1000 }, error: null }],
+            });
+
+            const res = await POST(
+                validateRequest({ code: "SAVE10", workshopId: "w1", guests: 3 })
+            );
+            const body = await res.json();
+
+            expect(res.status).toBe(200);
+            expect(body).toMatchObject({ valid: true, minGuests: 2, couponDiscount: 300 });
+            // Never use counts or limits.
+            expect(body).not.toHaveProperty("max_uses");
+            expect(body).not.toHaveProperty("used_count");
+            expect(JSON.stringify(body)).not.toMatch(/"(maxUses|usedCount)"/);
+        });
+
+        it("does not refuse for a seat minimum when no seats are sent", async () => {
+            mockDb({
+                coupons: [{ data: coupon({ id: OFFER_ID }), error: null }],
+                platform_settings: [offerSetting({ visibility: "community", min_guests: 2 })],
+            });
+
+            const res = await POST(
+                validateRequest({ code: "SAVE10", workshopId: "w1", subtotal: 1000 })
+            );
+
+            expect(res.status).toBe(200);
+            expect((await res.json()).couponDiscount).toBe(100);
+        });
+
+        it("stops an advertised offer at its advertised end, a hidden code at valid_until", async () => {
+            const validUntil = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+            mockDb({
+                coupons: [{ data: coupon({ id: OFFER_ID, valid_until: validUntil }), error: null }],
+                platform_settings: [offerSetting({ visibility: "listed" })],
+            });
+            const advertised = await POST(
+                validateRequest({ code: "SAVE10", workshopId: "w1", subtotal: 1000 })
+            );
+            expect(advertised.status).toBe(400);
+            expect((await advertised.json()).message).toBe(
+                "This coupon code is not valid for this order."
+            );
+
+            mockDb({
+                coupons: [{ data: coupon({ id: OFFER_ID, valid_until: validUntil }), error: null }],
+            });
+            const hidden = await POST(
+                validateRequest({ code: "SAVE10", workshopId: "w1", subtotal: 1000 })
+            );
+            expect(hidden.status).toBe(200);
+        });
+
+        it("treats an unreadable offer setting as a hidden code", async () => {
+            mockDb({
+                coupons: [{ data: coupon({ id: OFFER_ID }), error: null }],
+                platform_settings: [{ data: null, error: { message: "boom" } }],
+            });
+
+            const res = await POST(
+                validateRequest({ code: "SAVE10", workshopId: "w1", subtotal: 1000 })
+            );
+
+            expect(res.status).toBe(200);
+            expect((await res.json()).label).toBeNull();
+        });
+    });
 });

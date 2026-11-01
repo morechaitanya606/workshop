@@ -20,6 +20,7 @@ import SpecialEventBanner from "@/components/home/SpecialEventBanner";
 import { categories, PAST_EVENTS_CATEGORY_LABEL } from "@/lib/data";
 import type { Workshop } from "@/lib/data";
 import type { CommunityPhoto } from "@/lib/community-photos";
+import type { CardOffer } from "@/lib/offers";
 import { toApiErrorMessage, updateWorkshopNotifications } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { usePlatformSettings } from "@/lib/platform-settings-context";
@@ -39,11 +40,17 @@ export default function HomePageClient({
     communityPhotos,
     source,
     todayIso,
+    cardOffers,
+    closedWorkshopIds,
 }: {
     initialWorkshops: Workshop[];
     communityPhotos: CommunityPhoto[];
     source: "supabase" | "error";
     todayIso: string;
+    /** Card offers by workshop id (server-computed); only the workshop cards show them. */
+    cardOffers?: Record<string, CardOffer>;
+    /** Workshops whose bookings the admin closed; their cards say "Bookings closed". */
+    closedWorkshopIds?: string[];
 }) {
     const router = useRouter();
     const shouldReduceMotion = usePrefersReducedMotion();
@@ -59,6 +66,7 @@ export default function HomePageClient({
     const [recentlyViewedWorkshops, setRecentlyViewedWorkshops] = useState<Workshop[]>([]);
 
     const allWorkshops = useMemo(() => initialWorkshops, [initialWorkshops]);
+    const closedWorkshops = useMemo(() => new Set(closedWorkshopIds ?? []), [closedWorkshopIds]);
 
     const selectedCategoryLabel = useMemo(() => {
         const matched = categories.find((item) => item.id === selectedCategory);
@@ -232,6 +240,8 @@ export default function HomePageClient({
                         selectedCategoryLabel={selectedCategoryLabel}
                         onTryAnotherCategory={() => setSelectedCategory("trending")}
                         cardImageSizes={RAIL_CARD_IMAGE_SIZES}
+                        cardOffers={cardOffers}
+                        closedWorkshopIds={closedWorkshops}
                     />
                     <p className="mt-5 text-center">
                         <Link
@@ -262,6 +272,8 @@ export default function HomePageClient({
                     emptyDescription=""
                     showCardBadgeLabels={false}
                     cardImageSizes={RAIL_CARD_IMAGE_SIZES}
+                    cardOffers={cardOffers}
+                    closedWorkshopIds={closedWorkshops}
                 />
             )}
 

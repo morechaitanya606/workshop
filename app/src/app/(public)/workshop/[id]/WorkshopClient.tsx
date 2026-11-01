@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -22,7 +22,6 @@ import {
 import Footer from "@/components/Footer";
 import { useToast } from "@/components/ToastProvider";
 import WhatsAppCommunityModal from "@/components/WhatsAppCommunityModal";
-import type { AppliedCoupon } from "@/app/(private)/booking/types";
 import type { Workshop } from "@/lib/data";
 import {
     addFavorite,
@@ -40,8 +39,17 @@ import { formatCurrency, formatDate, formatTime } from "@/lib/utils";
 import { BOOKING_CUTOFF_HOURS, getWorkshopDateTime, isBookingClosedNow } from "@/lib/booking-time";
 import { useAuth } from "@/lib/auth-context";
 import { trackEvent } from "@/lib/analytics";
+import type { CardOffer, PublicOffer } from "@/lib/offers";
 import { usePlatformSettings } from "@/lib/platform-settings-context";
+import { sanitizeWhatsAppCommunityUrl } from "@/lib/platform-settings-schema";
+import { runWhenPageIdle } from "@/lib/run-when-page-idle";
 import { useModalA11y } from "@/lib/use-modal-a11y";
+import { computeQuote, parseServiceFee } from "@/lib/pricing";
+import {
+    BOOKINGS_CLOSED_CODE,
+    BOOKINGS_CLOSED_LABEL,
+    BOOKINGS_CLOSED_MESSAGE,
+} from "@/lib/workshop-availability";
 import { googleMapsLinkOf, isSupportedWorkshopImageUrl, isWebUrl } from "@/lib/workshop-media";
 import {
     fadeInUp,
@@ -50,7 +58,6 @@ import {
     staggerContainer,
     standardTransition,
 } from "@/lib/motion-presets";
-import type { PlatformSettingsType } from "@/lib/workshop-page-data";
 import {
     areaWithCity,
     cityPagePath,
@@ -61,9 +68,21 @@ import {
     workshopArea,
 } from "@/lib/seo";
 import WorkshopGallery from "./WorkshopGallery";
-import WorkshopBookingSidebar from "./WorkshopBookingSidebar";
+import WorkshopBookingSidebar, { WorkshopHeadlinePrice } from "./WorkshopBookingSidebar";
 import WorkshopPastEventSidebar from "./WorkshopPastEventSidebar";
 import WorkshopMobileBookingBar from "./WorkshopMobileBookingBar";
+import WorkshopGuestStepper, { MAX_GUESTS_PER_BOOKING } from "./WorkshopGuestStepper";
+import WorkshopOffers from "./WorkshopOffers";
+import WorkshopPriceBreakdown from "./WorkshopPriceBreakdown";
+import { takeCouponFromUrl, useWorkshopCode } from "./use-workshop-code";
+import {
+    BOOKINGS_CLOSED_NOTE,
+    codeCoupon,
+    codeRejectionMessage,
+    priceWorkshop,
+    toPricingWorkshop,
+} from "./workshop-pricing";
+import { suggestedAlternatives } from "./workshop-suggestions";
 
 const SocialShareButtons = dynamic(() => import("@/components/SocialShareButtons"), {
     loading: () => (
@@ -136,6 +155,17 @@ function extractAvailableSeatsFromBookingError(error: unknown) {
     return null;
 }
 
+/** The hold API's 409 for a workshop whose bookings the admin closed. */
+function isBookingsClosedError(error: unknown) {
+    if (!isApiClientError(error) || error.status !== 409) return false;
+    const details = error.details;
+    return (
+        typeof details === "object" &&
+        details !== null &&
+        (details as Record<string, unknown>).code === BOOKINGS_CLOSED_CODE
+    );
+}
+
 /** Joins place names with ", ", skipping one the earlier parts already name ("Pune" twice). */
 function joinPlace(parts: (string | null | undefined)[]) {
     const kept: string[] = [];
@@ -180,7 +210,18 @@ export type NextSession = Pick<Workshop, "id" | "title" | "date" | "time"> & {
 export interface WorkshopClientProps {
     workshop: Workshop;
     similarWorkshops?: Workshop[];
-    platformSettings?: PlatformSettingsType;
+    /** cardOfferFor per similar workshop id (null for a closed one), priced at renderedAtMs. */
+    similarWorkshopOffers?: Record<string, CardOffer | null>;
+    /** Similar workshops whose bookings the admin closed. */
+    closedSimilarIds?: string[];
+    /** offersForWorkshop for this workshop (Early Bird first); empty when bookings are closed. */
+    offers?: PublicOffer[];
+    /** The admin "Bookings closed" switch (closed_workshop_ids). */
+    bookingsClosed?: boolean;
+    /** parseServiceFee(platform settings): the fee checkout adds. */
+    serviceFee?: number;
+    /** The server's render instant: the price is computed with it until mount (hydration). */
+    renderedAtMs: number;
     todayIso: string;
     /** Null when no activity page fits: the breadcrumb then skips that level. */
     topicLink?: TopicLink | null;
@@ -192,7 +233,12 @@ export interface WorkshopClientProps {
 export default function WorkshopClient({
     workshop,
     similarWorkshops = [],
-    platformSettings,
+    similarWorkshopOffers = {},
+    closedSimilarIds = [],
+    offers = [],
+    bookingsClosed: bookingsClosedOnServer = false,
+    serviceFee = parseServiceFee(undefined),
+    renderedAtMs,
     todayIso,
     topicLink = null,
     nextSession = null,
@@ -201,10 +247,12 @@ export default function WorkshopClient({
     const router = useRouter();
     const prefersReducedMotion = usePrefersReducedMotion();
     const seoCity = getSeoCityByName(workshop.city);
-    const { user, session } = useAuth();
+    const { user, session, loading: authLoading } = useAuth();
     const toast = useToast();
 
-    const [guests, setGuests] = useState(2);
+    // Two is the usual booking, but never more than the seats left: otherwise the server-rendered
+    // page quotes a booking nobody can make until the clamp below runs after hydration.
+    const [guests, setGuests] = useState(() => (workshop.seatsRemaining >= 2 ? 2 : 1));
     const [activeImage, setActiveImage] = useState(0);
     const [isSaved, setIsSaved] = useState(false);
     const [isMounted, setIsMounted] = useState(false);
@@ -212,12 +260,8 @@ export default function WorkshopClient({
     const [showVideo, setShowVideo] = useState(false);
     const [bookingLoading, setBookingLoading] = useState(false);
     const [holdError, setHoldError] = useState<string | null>(null);
-    const [couponCode, setCouponCode] = useState("");
-    const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
-    const [couponError, setCouponError] = useState<string | null>(null);
-    const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
-    const [showCouponInput, setShowCouponInput] = useState(false);
-    const [couponSubtotalSnapshot, setCouponSubtotalSnapshot] = useState<number | null>(null);
+    // The hold API answered BOOKINGS_CLOSED: the admin closed bookings since this page was built.
+    const [closedSinceRender, setClosedSinceRender] = useState(false);
     const [liveAvailableSeatCount, setLiveAvailableSeatCount] = useState<number | null>(null);
     const [notifyState, setNotifyState] = useState({
         similar: false,
@@ -246,7 +290,6 @@ export default function WorkshopClient({
     // back to the date-only comparison against the server-provided todayIso.
     const [nowMs, setNowMs] = useState<number | null>(null);
 
-    const todayDate = new Date(`${todayIso}T00:00:00.000Z`);
     const workshopDateTime = getWorkshopDateTime(workshop.date, workshop.time);
 
     const isPastWorkshop = (() => {
@@ -258,44 +301,87 @@ export default function WorkshopClient({
     const isBookingClosed =
         isPastWorkshop ||
         (nowMs !== null && isBookingClosedNow(workshop.date, workshop.time, new Date(nowMs)));
+    // The admin "Bookings closed" switch: this render's server read, or a hold refused since. Not
+    // the settings context: it is only as fresh as the tab's first page load, so a workshop the
+    // admin reopened would keep saying "Bookings closed" in a tab that was open before.
+    const bookingsClosed = bookingsClosedOnServer || closedSinceRender;
     const availableSeatCount = liveAvailableSeatCount ?? workshop.seatsRemaining;
-    const isSoldOut = availableSeatCount <= 0;
+    // A closed workshop never says "Sold out" (seats may remain): it says "Bookings closed".
+    const isSoldOut = !bookingsClosed && availableSeatCount <= 0;
+    // Guests, price lines, offers and a discounted price only while a booking can actually start.
+    const canBookNow = !bookingsClosed && !isBookingClosed && !isSoldOut;
 
-    // Early Bird Offer Calculation
-    const ebOffer = platformSettings?.early_bird_offer;
-    const isEbActive = ebOffer?.enabled && ebOffer.discount_value > 0;
-    const workshopDate = new Date(workshop.date);
-    const daysUntilWorkshop = Math.ceil(
-        (workshopDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24)
+    // The price, exactly as checkout computes it (workshop-pricing.ts -> pricing.ts): the
+    // workshop's own Early Bird, at most one offer, the service fee. Priced at the server's
+    // render instant until mount, then with the live clock, so offers that end drop off.
+    const pricingNow = nowMs ?? renderedAtMs;
+    const pricingWorkshop = useMemo(() => toPricingWorkshop(workshop), [workshop]);
+    const subtotalAfterEarlyBird = computeQuote({
+        workshop: pricingWorkshop,
+        guests,
+        coupon: null,
+        serviceFee,
+        now: pricingNow,
+        purpose: "display",
+    }).subtotalAfterEarlyBird;
+    const accessToken = session?.access_token ?? null;
+    const workshopCode = useWorkshopCode({
+        workshopId: workshop.id,
+        accessToken,
+        isSignedIn: Boolean(user),
+        guests,
+        subtotal: subtotalAfterEarlyBird,
+        offers,
+    });
+    const pricing = useMemo(
+        () =>
+            priceWorkshop({
+                workshop: pricingWorkshop,
+                guests,
+                offers,
+                code: workshopCode.applied,
+                serviceFee,
+                now: pricingNow,
+                bookingsClosed,
+            }),
+        [
+            pricingWorkshop,
+            guests,
+            offers,
+            workshopCode.applied,
+            serviceFee,
+            pricingNow,
+            bookingsClosed,
+        ]
     );
-    const isEbEligible = Boolean(isEbActive && daysUntilWorkshop >= (ebOffer.days_before || 0));
-
-    let earlyBirdDiscountPerGuest = 0;
-    if (isEbEligible && ebOffer) {
-        if (ebOffer.discount_type === "percentage") {
-            earlyBirdDiscountPerGuest = Math.floor((workshop.price * ebOffer.discount_value) / 100);
-        } else {
-            earlyBirdDiscountPerGuest = ebOffer.discount_value;
-        }
-    }
-
-    const currentPricePerGuest = workshop.price - earlyBirdDiscountPerGuest;
-    const subtotal = currentPricePerGuest * guests;
-    const couponDiscountAmount = appliedCoupon
-        ? appliedCoupon.type === "percentage"
-            ? subtotal * (appliedCoupon.discount / 100)
-            : appliedCoupon.discount
-        : 0;
-    const serviceFee = platformSettings?.service_fee ?? 99;
-    const total = Math.max(0, subtotal - couponDiscountAmount) + serviceFee;
+    const { quote } = pricing;
+    // Like the cards: no discount is advertised on a workshop nobody can book now (sold out, past
+    // the cut-off, past, or closed by the admin); it shows the plain price.
+    const headline = canBookNow ? pricing.headline : null;
+    const earlyBirdOffer = pricing.offers.find((offer) => offer.kind === "early_bird") ?? null;
+    // Per-person offer price only for a per-seat discount (a fixed coupon is per booking).
+    const perPersonOffer = headline && !headline.perBooking ? headline : null;
+    const appliedCodeText = workshopCode.applied?.code ?? null;
+    const codeRules = workshopCode.applied ? codeCoupon(workshopCode.applied, offers).coupon : null;
+    const codeRejectionText =
+        pricing.code.status === "rejected"
+            ? codeRejectionMessage(pricing.code.rejection, codeRules)
+            : null;
+    // A code goes on to checkout unless it does not apply (checkout re-validates it anyway).
+    const codeForCheckout =
+        appliedCodeText && pricing.code.status !== "rejected" ? appliedCodeText : null;
 
     const seatAvailabilityLabel = isPastWorkshop
         ? "Event completed"
-        : isBookingClosed
-          ? "Booking closed"
-          : isSoldOut
-            ? "Sold out - all spots are taken"
-            : `${availableSeatCount} seat${availableSeatCount === 1 ? "" : "s"} available`;
+        : bookingsClosed
+          ? BOOKINGS_CLOSED_LABEL
+          : isBookingClosed
+            ? "Booking closed"
+            : isSoldOut
+              ? "Sold out - all spots are taken"
+              : // The owner does not want the exact number shown (the "Only N left" badge still
+                // appears when a few are left).
+                "Seats available";
     const fallbackBadgeLabels = [
         "Beginners welcome",
         ...(workshop.materialsProvided.length > 0 ? ["All materials included"] : []),
@@ -309,17 +395,13 @@ export default function WorkshopClient({
         .map((label) => String(label).trim())
         .filter(Boolean)
         .slice(0, 3);
-    const suggestedWorkshops = similarWorkshops
-        .filter(
-            (item) =>
-                item.id !== workshop.id &&
-                item.seatsRemaining > 0 &&
-                item.date >= todayIso &&
-                (item.category === workshop.category || item.city === workshop.city)
-        )
-        .slice(0, 3);
+    const suggestedWorkshops = suggestedAlternatives(
+        similarWorkshops,
+        workshop,
+        todayIso,
+        closedSimilarIds
+    );
 
-    const accessToken = session?.access_token ?? null;
     const formattedWorkshopTime = (() => {
         if (!workshop.time) {
             return "Time will be shared soon";
@@ -404,11 +486,13 @@ export default function WorkshopClient({
             ? [
                   {
                       label: "Price",
-                      value: `${formatCurrency(currentPricePerGuest)} per person, incl. GST${
-                          isEbEligible
-                              ? ` (early-bird price; regular ${formatCurrency(workshop.price)})`
-                              : ""
-                      }`,
+                      value: bookingsClosed
+                          ? `${formatCurrency(workshop.price)} per person, incl. GST. ${BOOKINGS_CLOSED_NOTE}`
+                          : perPersonOffer
+                            ? `${formatCurrency(perPersonOffer.offerPrice)} per person, incl. GST (${perPersonOffer.label}; regular ${formatCurrency(perPersonOffer.listPrice)})`
+                            : `${formatCurrency(workshop.price)} per person, incl. GST${
+                                  headline ? ` (${headline.label}: ${headline.discountText})` : ""
+                              }`,
                   },
               ]
             : []),
@@ -504,17 +588,42 @@ export default function WorkshopClient({
         setShowCommunityModal(false);
     }, [workshop.id]);
 
+    // A code carried in the URL (?coupon=, e.g. back from the login link that kept it). It leaves
+    // the address bar at once (history, shares, Referer and error reports must not carry it), then
+    // is applied once the session is known, or kept for the login link while signed out. It is
+    // remembered straight away: the session is read after supabase-js loads, which takes seconds
+    // on a slow phone, and a visitor who taps "Log in" meanwhile must not lose the code.
+    const urlCodeRef = useRef<string | null | undefined>(undefined);
+    const { apply: applyCode, remember: rememberCode } = workshopCode;
     useEffect(() => {
-        if (!appliedCoupon || couponSubtotalSnapshot === subtotal) {
-            return;
+        if (urlCodeRef.current !== undefined) return;
+        urlCodeRef.current = takeCouponFromUrl();
+        if (urlCodeRef.current) rememberCode(urlCodeRef.current);
+    }, [rememberCode]);
+    useEffect(() => {
+        const urlCode = urlCodeRef.current;
+        if (!urlCode || authLoading || bookingsClosed || isPastWorkshop) return;
+        urlCodeRef.current = null;
+        if (user && accessToken) {
+            void applyCode(urlCode);
+        } else {
+            rememberCode(urlCode);
         }
+    }, [accessToken, applyCode, authLoading, bookingsClosed, isPastWorkshop, rememberCode, user]);
 
-        setCouponCode(appliedCoupon.code);
-        setAppliedCoupon(null);
-        setCouponSubtotalSnapshot(null);
-        setShowCouponInput(true);
-        setCouponError("Guest count changed. Please reapply your coupon.");
-    }, [appliedCoupon, couponSubtotalSnapshot, subtotal]);
+    // Booking starts with a client navigation to /booking: fetch its code while the visitor
+    // reads, so a slow connection does not wait for it after the seat hold. Not for a workshop
+    // nobody can book now.
+    useEffect(() => {
+        if (!canBookNow) return;
+        return runWhenPageIdle(() => {
+            try {
+                router.prefetch("/booking");
+            } catch {
+                // Prefetching is only an optimisation.
+            }
+        });
+    }, [canBookNow, router]);
 
     useEffect(() => {
         if (isSoldOut) {
@@ -523,7 +632,10 @@ export default function WorkshopClient({
         }
 
         setGuests((currentGuests) =>
-            Math.min(Math.max(1, currentGuests), Math.max(1, availableSeatCount))
+            Math.min(
+                Math.max(1, currentGuests),
+                Math.max(1, Math.min(availableSeatCount, MAX_GUESTS_PER_BOOKING))
+            )
         );
     }, [availableSeatCount, isSoldOut]);
 
@@ -571,7 +683,12 @@ export default function WorkshopClient({
         isSupportedWorkshopImageUrl(image)
     );
     const workshopPath = `/workshop/${workshop.id}`;
-    const loginRedirectHref = `/auth/login?redirect=${encodeURIComponent(workshopPath)}`;
+    // The login link brings the visitor back with their code (?coupon=), applied on return.
+    const codeToKeep = workshopCode.pendingCode ?? codeForCheckout;
+    const returnPath = codeToKeep
+        ? `${workshopPath}?${new URLSearchParams({ coupon: codeToKeep }).toString()}`
+        : workshopPath;
+    const loginRedirectHref = `/auth/login?redirect=${encodeURIComponent(returnPath)}`;
     const openCommunityModal = useCallback(
         (source: string) => {
             setShowCommunityModal(true);
@@ -580,65 +697,23 @@ export default function WorkshopClient({
         [workshop.id]
     );
 
-    const handleApplyCoupon = async () => {
-        const nextCode = couponCode.trim();
-        if (!nextCode) {
-            return;
-        }
-
-        setIsApplyingCoupon(true);
-        setCouponError(null);
-
-        try {
-            const response = await fetch("/api/coupons/validate", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-                },
-                body: JSON.stringify({
-                    code: nextCode,
-                    workshopId: workshop.id,
-                    subtotal,
-                }),
-            });
-            const data = await response.json();
-
-            if (response.ok && data.valid) {
-                setAppliedCoupon({
-                    code: nextCode.toUpperCase(),
-                    discount: data.discount,
-                    type: data.type,
-                });
-                setCouponSubtotalSnapshot(subtotal);
-                setCouponCode("");
-                setCouponError(null);
-                setShowCouponInput(false);
-                return;
-            }
-
-            setAppliedCoupon(null);
-            setCouponSubtotalSnapshot(null);
-            setCouponError(data.message || "Invalid or expired coupon code.");
-        } catch {
-            setAppliedCoupon(null);
-            setCouponSubtotalSnapshot(null);
-            setCouponError("Failed to apply coupon. Please try again.");
-        } finally {
-            setIsApplyingCoupon(false);
-        }
-    };
-
-    const handleRemoveCoupon = () => {
-        setAppliedCoupon(null);
-        setCouponSubtotalSnapshot(null);
-        setCouponCode("");
-        setCouponError(null);
-        setShowCouponInput(false);
-    };
+    const handleApplyCode = useCallback(
+        (code: string) => {
+            trackEvent("workshop_offer_code_applied", { workshopId: workshop.id });
+            void applyCode(code);
+        },
+        [applyCode, workshop.id]
+    );
+    const handleCommunityOfferClick = useCallback(() => {
+        trackEvent("community_offer_link_clicked", { workshopId: workshop.id });
+    }, [workshop.id]);
 
     const handleBooking = async () => {
         setHoldError(null);
+        if (bookingsClosed) {
+            setHoldError(BOOKINGS_CLOSED_MESSAGE);
+            return;
+        }
         if (isBookingClosed) {
             const message = `Bookings close ${BOOKING_CUTOFF_HOURS} hours before the workshop starts.`;
             setHoldError(message);
@@ -692,14 +767,21 @@ export default function WorkshopClient({
                 guests: String(guests),
                 hold: holdId,
             });
-            if (appliedCoupon?.code) {
-                bookingParams.set("coupon", appliedCoupon.code);
+            if (codeForCheckout) {
+                bookingParams.set("coupon", codeForCheckout);
             }
             if (holdExpiresAt) {
                 bookingParams.set("holdExpiresAt", holdExpiresAt);
             }
             router.push(`/booking?${bookingParams.toString()}`);
         } catch (error) {
+            if (isBookingsClosedError(error)) {
+                // Closed by the admin since this page was built: show the closed state.
+                setClosedSinceRender(true);
+                setHoldError(BOOKINGS_CLOSED_MESSAGE);
+                toast.info(BOOKINGS_CLOSED_LABEL, BOOKINGS_CLOSED_MESSAGE);
+                return;
+            }
             const nextAvailableSeatCount = extractAvailableSeatsFromBookingError(error);
             if (nextAvailableSeatCount !== null) {
                 setLiveAvailableSeatCount(nextAvailableSeatCount);
@@ -806,11 +888,36 @@ export default function WorkshopClient({
         }
     };
 
+    const communityOfferUrl = sanitizeWhatsAppCommunityUrl(communityUrl);
+    const renderOffersPanel = (idPrefix: string) => (
+        <WorkshopOffers
+            rows={pricing.rows}
+            nowMs={nowMs}
+            communityUrl={communityOfferUrl}
+            appliedCode={appliedCodeText}
+            codeStatus={pricing.code.status}
+            codeRejectionText={codeRejectionText}
+            applyingCode={workshopCode.applyingCode}
+            codeError={workshopCode.error}
+            retryCode={workshopCode.retryCode}
+            signInHref={workshopCode.pendingCode ? loginRedirectHref : null}
+            guests={guests}
+            appliedOfferLabel={pricing.couponLabel}
+            appliedOfferSaves={pricing.quote.couponDiscount}
+            onApplyCode={handleApplyCode}
+            onRemoveCode={workshopCode.remove}
+            onCommunityClick={handleCommunityOfferClick}
+            idPrefix={idPrefix}
+        />
+    );
+
     return (
-        // Room for the fixed booking bar (about 94px, sitting on the bottom nav, whose height
-        // <main> already reserves). It was a flat 176px, also on past workshops that have no
-        // bar, which left a large empty band under the footer on phones.
-        <div className={`min-h-full min-[900px]:pb-0 ${isPastWorkshop ? "" : "pb-24"}`}>
+        // Room for the fixed booking bar, sitting on the bottom nav (whose height <main> already
+        // reserves). The bar publishes its real height: it grows past 6rem on a 360px phone
+        // (the price wraps) and would cover the footer. Past workshops have no bar.
+        <div
+            className={`min-h-full min-[900px]:pb-0 ${isPastWorkshop ? "" : "pb-[var(--workshop-booking-bar-height,6rem)]"}`}
+        >
             <div className="pt-20 sm:pt-24">
                 <div className="section-padding mb-4">
                     <motion.nav
@@ -936,9 +1043,9 @@ export default function WorkshopClient({
                                     </div>
                                     <span
                                         className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-inter font-semibold uppercase tracking-wider border ${
-                                            isPastWorkshop
+                                            isPastWorkshop || bookingsClosed
                                                 ? "bg-gray-100 text-dark-muted border-gray-200"
-                                                : isSoldOut
+                                                : isSoldOut || isBookingClosed
                                                   ? "bg-red-100 text-red-700 border-red-200"
                                                   : availableSeatCount <= 5
                                                     ? "bg-terracotta/10 text-terracotta border-terracotta/20"
@@ -953,19 +1060,16 @@ export default function WorkshopClient({
                                         <p className="text-[10px] font-inter font-bold uppercase tracking-[0.18em] text-dark-muted">
                                             Price
                                         </p>
-                                        <div className="mt-1 flex items-baseline gap-1.5">
-                                            <span className="font-playfair text-2xl font-bold text-dark">
-                                                {formatCurrency(currentPricePerGuest)}
-                                            </span>
-                                            <span className="text-xs font-inter text-dark-muted">
-                                                / person, incl. GST
-                                            </span>
+                                        <div className="mt-1">
+                                            <WorkshopHeadlinePrice
+                                                workshopPrice={workshop.price}
+                                                headline={bookingsClosed ? null : headline}
+                                                size="md"
+                                            />
                                         </div>
-                                        {isEbEligible && (
-                                            <p className="mt-1 text-[11px] font-inter text-emerald-700">
-                                                Was {formatCurrency(workshop.price)}
-                                            </p>
-                                        )}
+                                        <p className="mt-1 text-[11px] font-inter text-dark-muted">
+                                            {bookingsClosed ? BOOKINGS_CLOSED_LABEL : "Incl. GST"}
+                                        </p>
                                     </div>
                                     <div className="rounded-2xl border border-clay/40 bg-white/95 px-4 py-3 shadow-soft">
                                         <p className="flex items-center gap-1.5 text-[10px] font-inter font-bold uppercase tracking-[0.18em] text-dark-muted">
@@ -998,18 +1102,54 @@ export default function WorkshopClient({
                                         </p>
                                         <p
                                             className={`mt-1 text-sm font-inter font-semibold ${
-                                                isSoldOut || isBookingClosed
-                                                    ? "text-red-700"
-                                                    : "text-emerald-700"
+                                                bookingsClosed
+                                                    ? "text-dark-secondary"
+                                                    : isSoldOut || isBookingClosed
+                                                      ? "text-red-700"
+                                                      : "text-emerald-700"
                                             }`}
                                         >
                                             {seatAvailabilityLabel}
                                         </p>
                                     </div>
                                 </div>
+                                {!isPastWorkshop && canBookNow && (
+                                    // Phones: the guests, the price as checkout charges it and
+                                    // the offers (the sidebar holds them from 900px up).
+                                    <div className="mt-4 space-y-4 rounded-2xl border border-clay/40 bg-white/95 px-4 py-4 shadow-soft min-[900px]:hidden">
+                                        <WorkshopGuestStepper
+                                            guests={guests}
+                                            setGuests={setGuests}
+                                            availableSeatCount={availableSeatCount}
+                                            idPrefix="mobile"
+                                        />
+                                        <WorkshopPriceBreakdown
+                                            quote={quote}
+                                            earlyBirdLabel={earlyBirdOffer?.label ?? null}
+                                            couponLabel={pricing.couponLabel}
+                                            codeInPrice={pricing.codeInPrice}
+                                            onRemoveCode={workshopCode.remove}
+                                        />
+                                        <div className="border-t border-dashed border-clay/50 pt-4">
+                                            {renderOffersPanel("mobile")}
+                                        </div>
+                                    </div>
+                                )}
                                 {!isPastWorkshop && (
                                     <div className="mt-4 min-[900px]:hidden">
-                                        {isBookingClosed ? (
+                                        {bookingsClosed ? (
+                                            <div
+                                                role="status"
+                                                className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 font-inter"
+                                            >
+                                                <p className="text-sm font-semibold text-dark">
+                                                    {BOOKINGS_CLOSED_LABEL}
+                                                </p>
+                                                <p className="mt-0.5 text-xs text-dark-muted">
+                                                    {BOOKINGS_CLOSED_NOTE}
+                                                </p>
+                                            </div>
+                                        ) : isBookingClosed ? (
                                             <button
                                                 type="button"
                                                 disabled
@@ -1105,8 +1245,14 @@ export default function WorkshopClient({
                                         title={workshop.title}
                                         date={formatDate(workshop.date)}
                                         city={workshop.city}
-                                        seatsRemaining={availableSeatCount}
-                                        url={isMounted ? window.location.href : ""}
+                                        // No "Only N spots left!" for a workshop nobody can book.
+                                        seatsRemaining={bookingsClosed ? 0 : availableSeatCount}
+                                        // Never the address bar: it may carry the visitor's ?coupon=.
+                                        url={
+                                            isMounted
+                                                ? `${window.location.origin}${workshopPath}`
+                                                : ""
+                                        }
                                     />
                                 </div>
                             </motion.div>
@@ -1309,7 +1455,7 @@ export default function WorkshopClient({
                                             src={mapEmbedUrl}
                                             className="w-full h-72 border-0"
                                             loading="lazy"
-                                            referrerPolicy="no-referrer-when-downgrade"
+                                            referrerPolicy="strict-origin-when-cross-origin"
                                         />
                                         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
                                         <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-3 rounded-xl bg-white/95 p-3 shadow-soft">
@@ -1387,7 +1533,7 @@ export default function WorkshopClient({
                             ) : (
                                 <WorkshopBookingSidebar
                                     workshopPrice={workshop.price}
-                                    currentPricePerGuest={currentPricePerGuest}
+                                    headline={headline}
                                     workshopDate={workshop.date}
                                     formattedWorkshopTime={formattedWorkshopTime}
                                     workshopLocation={venueOrArea}
@@ -1398,21 +1544,13 @@ export default function WorkshopClient({
                                     seatAvailabilityLabel={seatAvailabilityLabel}
                                     isSoldOut={isSoldOut}
                                     isBookingClosed={isBookingClosed}
-                                    isEbEligible={isEbEligible}
-                                    subtotal={subtotal}
-                                    serviceFee={serviceFee}
-                                    total={total}
-                                    appliedCoupon={appliedCoupon}
-                                    couponDiscountAmount={couponDiscountAmount}
-                                    couponCode={couponCode}
-                                    setCouponCode={setCouponCode}
-                                    couponError={couponError}
-                                    setCouponError={setCouponError}
-                                    showCouponInput={showCouponInput}
-                                    setShowCouponInput={setShowCouponInput}
-                                    isApplyingCoupon={isApplyingCoupon}
-                                    onApplyCoupon={() => void handleApplyCoupon()}
-                                    onRemoveCoupon={handleRemoveCoupon}
+                                    bookingsClosed={bookingsClosed}
+                                    quote={quote}
+                                    earlyBirdLabel={earlyBirdOffer?.label ?? null}
+                                    couponLabel={pricing.couponLabel}
+                                    codeInPrice={pricing.codeInPrice}
+                                    onRemoveCode={workshopCode.remove}
+                                    offers={renderOffersPanel("sidebar")}
                                     user={user}
                                     bookingLoading={bookingLoading}
                                     holdError={holdError}
@@ -1471,8 +1609,7 @@ export default function WorkshopClient({
                                             {formatDate(suggestion.date)} &bull; {suggestion.time}
                                         </p>
                                         <p className="mt-2 text-xs font-inter text-emerald-700">
-                                            {suggestion.seatsRemaining} seat
-                                            {suggestion.seatsRemaining === 1 ? "" : "s"} available
+                                            Seats available
                                         </p>
                                     </Link>
                                 ))}
@@ -1545,6 +1682,8 @@ export default function WorkshopClient({
                                     todayIso={todayIso}
                                     index={idx}
                                     animateOnScroll
+                                    offer={similarWorkshopOffers[ws.id] ?? null}
+                                    bookingsClosed={closedSimilarIds.includes(ws.id)}
                                 />
                             ))}
                         </div>
@@ -1585,10 +1724,10 @@ export default function WorkshopClient({
             <WorkshopMobileBookingBar
                 isPastWorkshop={isPastWorkshop}
                 isBookingClosed={isBookingClosed}
+                bookingsClosed={bookingsClosed}
                 isSoldOut={isSoldOut}
-                isEbEligible={isEbEligible}
                 workshopPrice={workshop.price}
-                currentPricePerGuest={currentPricePerGuest}
+                headline={headline}
                 workshopDate={workshop.date}
                 formattedWorkshopTime={formattedWorkshopTime}
                 seatAvailabilityLabel={seatAvailabilityLabel}

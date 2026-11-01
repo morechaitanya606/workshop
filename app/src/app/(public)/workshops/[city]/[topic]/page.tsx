@@ -26,7 +26,12 @@ import {
     workshopOgTitle,
 } from "@/lib/seo";
 import { SEO_TOPICS, getSeoTopicBySlug, topicPagePath } from "@/lib/seo-topics";
-import { loadCityWorkshops } from "@/lib/workshop-page-data";
+import {
+    failRenderOnDataError,
+    loadCardPricing,
+    loadCityWorkshops,
+    workshopCardExtras,
+} from "@/lib/workshop-page-data";
 
 /*
  * Evergreen activity page (/workshops/pune/chocolate-making): one stable URL per activity that
@@ -98,14 +103,25 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 }
 
 export default async function TopicWorkshopsPage({ params }: Params) {
-    const [data, settings] = await Promise.all([
+    const [data, settings, cardPricing] = await Promise.all([
         loadTopicPage(params),
         getCachedPlatformSettings(),
+        loadCardPricing(),
     ]);
     if (!data) notFound();
 
     const { city, topic, upcoming, past, group } = data;
+    // Keeps the last good page instead of caching an empty topic page for five minutes.
+    failRenderOnDataError(data.source, topicPagePath(city, topic));
     const todayIso = getIstTodayIso();
+    const { cardOffers, closedWorkshopIds } = workshopCardExtras(
+        group.upcoming,
+        cardPricing,
+        todayIso
+    );
+    const closed = new Set(closedWorkshopIds);
+    const offerFor = (workshopId: string) =>
+        Object.hasOwn(cardOffers, workshopId) ? cardOffers[workshopId] : null;
     const whatsappUrl = settings.whatsapp_community_url?.trim() || undefined;
     const recentPast = group.past.slice(0, 12);
     const areaSentence = topicAreaSentence(group.upcoming, group.past);
@@ -232,6 +248,8 @@ export default async function TopicWorkshopsPage({ params }: Params) {
                                     workshop={workshop}
                                     todayIso={todayIso}
                                     index={index}
+                                    offer={offerFor(workshop.id)}
+                                    bookingsClosed={closed.has(workshop.id)}
                                 />
                             ))}
                         </div>

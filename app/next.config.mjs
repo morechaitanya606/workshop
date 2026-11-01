@@ -23,6 +23,20 @@ const baseSecurityHeaders = [
     },
 ];
 
+// A day fresh, then a week served stale while it revalidates: safe even when a file is replaced
+// in place under the same name.
+const publicAssetCacheHeaders = [
+    {
+        key: "Cache-Control",
+        value: "public, max-age=86400, stale-while-revalidate=604800",
+    },
+];
+
+// Folders under public/ that hold only static media. /_next/* is left alone: Next already
+// serves its build output as immutable. chatbot.js is left out too: sites that embed it should
+// pick up a new version with the deploy that ships it.
+const PUBLIC_ASSET_SOURCES = ["/images/:path*", "/special-pages/:path*", "/uploads/:path*"];
+
 const strictTransportSecurityHeader = isProduction
     ? [
           {
@@ -60,6 +74,8 @@ function getDevDistDir() {
 /** @type {import('next').NextConfig} */
 const baseConfig = {
     allowedDevOrigins: ["localhost:3000", "127.0.0.1:3000"],
+    // No "X-Powered-By: Next.js" on every response: it tells visitors and scanners nothing useful.
+    poweredByHeader: false,
     images: {
         // AVIF first: about 30% smaller than WebP for these photos. Keep formats and the default
         // deviceSizes stable: changing either gives every image new URLs, so all cached variants
@@ -110,13 +126,11 @@ const baseConfig = {
                 // Hero clips (several MB each) were served with max-age=0, so every visit
                 // re-validated them. A day of caching is safe even if a file is re-encoded in place.
                 source: "/videos/:file*",
-                headers: [
-                    {
-                        key: "Cache-Control",
-                        value: "public, max-age=86400, stale-while-revalidate=604800",
-                    },
-                ],
+                headers: publicAssetCacheHeaders,
             },
+            // Logo, icon, social preview images and the retreat page's files were also served
+            // with max-age=0, so every page view re-validated them.
+            ...PUBLIC_ASSET_SOURCES.map((source) => ({ source, headers: publicAssetCacheHeaders })),
             {
                 source: "/chatbot/embed",
                 headers: [...baseSecurityHeaders, ...strictTransportSecurityHeader],

@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-import * as Sentry from "@sentry/nextjs";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { retryAfterError } from "@/lib/chunk-load-recovery";
+import { reportError } from "@/lib/sentry-client";
 
 export default function BookingError({
     error,
@@ -13,12 +14,7 @@ export default function BookingError({
     reset: () => void;
 }) {
     useEffect(() => {
-        Sentry.captureException(error, {
-            tags: {
-                route: "booking_page",
-                layer: "web",
-            },
-        });
+        reportError(error, { route: "booking_page", layer: "web" });
     }, [error]);
 
     return (
@@ -31,7 +27,10 @@ export default function BookingError({
                         Your booking has not been confirmed from this screen. Please retry the page
                         before attempting payment again.
                     </p>
-                    <button onClick={reset} className="btn-primary mt-8">
+                    <button
+                        onClick={() => retryAfterError(error, reset)}
+                        className="btn-primary mt-8"
+                    >
                         Try again
                     </button>
                 </div>

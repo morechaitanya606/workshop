@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Armchair, Loader2, Lock, Pencil } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { BookingFormData } from "./types";
+import type { PriceChange } from "./useBookingWorkflow";
 
 function ReviewRow({
     title,
@@ -46,7 +48,10 @@ export default function BookingReview({
     isRazorpayReady,
     submitting,
     awaitingConfirmation,
+    confirmBusy,
     total,
+    priceChange,
+    notice,
 }: {
     guests: number;
     formData: BookingFormData;
@@ -57,10 +62,32 @@ export default function BookingReview({
     isRazorpayReady: boolean;
     submitting: boolean;
     awaitingConfirmation: boolean;
-    total: number;
+    /** A paid order is being confirmed right now (else it is waiting for a connection or a login). */
+    confirmBusy: boolean;
+    /** Null while the service fee is unknown. */
+    total: number | null;
+    /** The server priced the order differently from what was shown: a fresh tap pays it. */
+    priceChange: PriceChange | null;
+    /** A non-error note about the price (a coupon code that was removed). */
+    notice: string | null;
 }) {
     const fullName = `${formData.firstName} ${formData.lastName}`.trim();
     const shownChairs = Math.min(guests, 8);
+
+    // The fixed bar's Pay button is what was tapped, so the review card may be off screen: bring
+    // the new total into view instead of letting it pass unnoticed.
+    const changeAlertRef = useRef<HTMLDivElement>(null);
+    const changeKey = priceChange
+        ? `${priceChange.previousTotal ?? ""}>${priceChange.newTotal}`
+        : "";
+    useEffect(() => {
+        if (!changeKey) return;
+        const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+        changeAlertRef.current?.scrollIntoView?.({
+            block: "center",
+            behavior: reduceMotion ? "auto" : "smooth",
+        });
+    }, [changeKey]);
 
     return (
         <div className="space-y-5">
@@ -120,13 +147,52 @@ export default function BookingReview({
                 </dl>
             </ReviewRow>
 
+            {priceChange && (
+                <div
+                    ref={changeAlertRef}
+                    role="alert"
+                    className="scroll-mt-24 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-inter text-amber-950"
+                >
+                    <p className="font-semibold">
+                        Your total is now {formatCurrency(priceChange.newTotal)}
+                        {priceChange.previousTotal !== null &&
+                            priceChange.previousTotal !== priceChange.newTotal && (
+                                <> (was {formatCurrency(priceChange.previousTotal)})</>
+                            )}
+                        .
+                    </p>
+                    {priceChange.reason && <p className="mt-0.5">{priceChange.reason}</p>}
+                    <p className="mt-1 text-xs text-amber-900">
+                        Nothing has been charged. Check the order summary, then tap Pay to continue
+                        at this amount.
+                    </p>
+                </div>
+            )}
+            {notice && !priceChange && (
+                <p
+                    role="status"
+                    className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-inter text-amber-950"
+                >
+                    {notice}
+                </p>
+            )}
+
             <button
                 type="button"
                 onClick={onPay}
                 disabled={isCheckoutDisabled}
                 className="btn-primary hidden w-full !py-3.5 disabled:cursor-not-allowed disabled:opacity-50 lg:inline-flex"
             >
-                {submitting ? (
+                {awaitingConfirmation ? (
+                    confirmBusy ? (
+                        <>
+                            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                            Confirming your booking...
+                        </>
+                    ) : (
+                        <>Payment received</>
+                    )
+                ) : submitting ? (
                     <>
                         <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
                         Processing...
@@ -139,9 +205,7 @@ export default function BookingReview({
                 ) : (
                     <>
                         <Lock className="h-4 w-4" aria-hidden="true" />
-                        {awaitingConfirmation
-                            ? "Retry confirmation"
-                            : `Pay ${formatCurrency(total)}`}
+                        {total === null ? "Pay now" : `Pay ${formatCurrency(total)}`}
                     </>
                 )}
             </button>

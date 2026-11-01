@@ -18,6 +18,7 @@ import {
     Banknote,
     Images,
     ChevronDown,
+    Tag,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { useAuth } from "@/lib/auth-context";
@@ -32,6 +33,7 @@ const navItems = [
     { href: "/admin/applications", label: "Applications", icon: Users },
     { href: "/admin/payouts", label: "Payouts", icon: Banknote },
     { href: "/admin/workshops", label: "Workshops", icon: Calendar },
+    { href: "/admin/offers", label: "Offers", icon: Tag },
     { href: "/admin/community-photos", label: "Photos", icon: Images },
     { href: "/admin/faqs", label: "FAQs", icon: HelpCircle },
     { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
